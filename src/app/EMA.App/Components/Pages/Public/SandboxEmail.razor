@@ -1,0 +1,350 @@
+@page "/explore-ema-instantly/test-email"
+
+@attribute [AllowAnonymous]
+
+@inject ISandboxService SandboxService
+@inject NavigationManager Navigation
+
+<PageTitle>Sandbox Test eTransfer Email - EMA</PageTitle>
+
+<section class="sandbox-email-page">
+    <div class="sandbox-email-card">
+        <header class="sandbox-email-header">
+            <span>EMA Sandbox</span>
+
+            <h1>Tweak Your Test Interac Email</h1>
+
+            <p>
+                Change the sample details below, then send the message into your sandbox
+                to test EMA's eTransfer automation.
+            </p>
+        </header>
+
+        @if (IsLoading)
+        {
+            <div class="sandbox-email-loading"
+                 role="status">
+                Loading the test email...
+            </div>
+        }
+        else if (!HasLoadedDraft)
+        {
+            @if (!string.IsNullOrWhiteSpace(StatusMessage))
+            {
+                <div class="sandbox-email-status sandbox-email-error"
+                     role="alert">
+                    @StatusMessage
+                </div>
+            }
+
+            <div class="sandbox-email-actions">
+                <button type="button"
+                        class="sandbox-email-back-button"
+                        @onclick="GoBack">
+                    Back to Sandbox Details
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="sandbox-email-envelope">
+                <div class="sandbox-email-row">
+                    <label for="sandbox-email-to">
+                        To:
+                    </label>
+
+                    <input id="sandbox-email-to"
+                           value="@Draft.SandboxEmailAddress"
+                           disabled />
+                </div>
+
+                <div class="sandbox-email-row">
+                    <label for="sandbox-email-from-name">
+                        Sender name:
+                    </label>
+
+                    <input id="sandbox-email-from-name"
+                           @bind="Draft.SenderName"
+                           @bind:event="oninput"
+                           disabled="@IsSending" />
+                </div>
+
+                <div class="sandbox-email-row">
+                    <label for="sandbox-email-from-address">
+                        Sender email:
+                    </label>
+
+                    <input id="sandbox-email-from-address"
+                           type="email"
+                           @bind="Draft.SenderEmailAddress"
+                           @bind:event="oninput"
+                           disabled="@IsSending" />
+                </div>
+
+                <div class="sandbox-email-row">
+                    <label for="sandbox-email-amount">
+                        Amount:
+                    </label>
+
+                    <div class="sandbox-email-money-input">
+                        <span>$</span>
+
+                        <input id="sandbox-email-amount"
+                               type="number"
+                               min="0.01"
+                               step="0.01"
+                               @bind="Draft.Amount"
+                               disabled="@IsSending" />
+                    </div>
+                </div>
+
+                <div class="sandbox-email-row">
+                    <label for="sandbox-email-reference">
+                        Reference:
+                    </label>
+
+                    <input id="sandbox-email-reference"
+                           @bind="Draft.ReferenceNumber"
+                           @bind:event="oninput"
+                           disabled="@IsSending" />
+                </div>
+
+                <div class="sandbox-email-row sandbox-email-message-row">
+                    <label for="sandbox-email-message">
+                        Message:
+                    </label>
+
+                    <textarea id="sandbox-email-message"
+                              rows="4"
+                              @bind="Draft.Message"
+                              @bind:event="oninput"
+                              disabled="@IsSending"></textarea>
+                </div>
+            </div>
+
+            <div class="sandbox-email-preview">
+                <div class="sandbox-email-preview-title">
+                    INTERAC e-Transfer: @Draft.SenderName sent you money.
+                </div>
+
+                <div class="sandbox-email-preview-body">
+                    <p>
+                        @Draft.SenderName sent you an INTERAC e-Transfer.
+                    </p>
+
+                    <p class="sandbox-email-preview-amount">
+                        @Draft.Amount.ToString("C")
+                    </p>
+
+                    <dl>
+                        <div>
+                            <dt>Reference Number</dt>
+                            <dd>@Draft.ReferenceNumber</dd>
+                        </div>
+
+                        <div>
+                            <dt>Message</dt>
+                            <dd>@Draft.Message</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(StatusMessage))
+            {
+                <div class="sandbox-email-status @(IsError ? "sandbox-email-error" : "sandbox-email-success")"
+                     role="status">
+                    @StatusMessage
+                </div>
+            }
+
+            <div class="sandbox-email-actions">
+                <button type="button"
+                        class="sandbox-email-back-button"
+                        @onclick="GoBack">
+                    Back to Sandbox Details
+                </button>
+
+                <button type="button"
+                        class="sandbox-email-send-button"
+                        @onclick="SendEmailAsync"
+                        disabled="@IsSending">
+                    @(IsSending
+                        ? "Processing Test Email..."
+                        : "Send Test Email to EMA")
+                </button>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    [SupplyParameterFromQuery(
+        Name = "organizationId")]
+    public int OrganizationID { get; set; }
+
+    private SandboxTestEmailDraft Draft =
+        new();
+
+    private bool IsLoading = true;
+
+    private bool HasLoadedDraft;
+
+    private bool IsSending;
+
+    private bool IsError;
+
+    private string StatusMessage =
+        string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        HasLoadedDraft = false;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage =
+                "A sandbox organization was not supplied. Return to the sandbox page and try again.";
+
+            IsLoading = false;
+            return;
+        }
+
+        try
+        {
+            var result =
+                await SandboxService
+                    .GetTestEmailDraftAsync(
+                        OrganizationID);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "The sandbox test email could not be loaded."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            Draft = result.Value;
+            HasLoadedDraft = true;
+        }
+        catch
+        {
+            IsError = true;
+            StatusMessage =
+                "The sandbox test email could not be loaded.";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task SendEmailAsync()
+    {
+        StatusMessage = string.Empty;
+        IsError = false;
+
+        if (!ValidateDraft())
+        {
+            return;
+        }
+
+        IsSending = true;
+
+        try
+        {
+            var result =
+                await SandboxService.SendTestEmailAsync(
+                    new SendSandboxTestEmailRequest
+                    {
+                        SandboxOrganizationID =
+                            Draft.SandboxOrganizationID,
+
+                        SenderName =
+                            Draft.SenderName.Trim(),
+
+                        SenderEmailAddress =
+                            Draft.SenderEmailAddress.Trim(),
+
+                        Amount =
+                            Draft.Amount,
+
+                        ReferenceNumber =
+                            Draft.ReferenceNumber.Trim(),
+
+                        Message =
+                            Draft.Message.Trim()
+                    });
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "The test email could not be processed."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            StatusMessage =
+                string.IsNullOrWhiteSpace(
+                    result.Value.Message)
+                    ? "The test donation was created in your sandbox."
+                    : result.Value.Message;
+        }
+        catch
+        {
+            IsError = true;
+            StatusMessage =
+                "The test email could not be processed.";
+        }
+        finally
+        {
+            IsSending = false;
+        }
+    }
+
+    private bool ValidateDraft()
+    {
+        if (string.IsNullOrWhiteSpace(
+                Draft.SenderName) ||
+            string.IsNullOrWhiteSpace(
+                Draft.SenderEmailAddress) ||
+            !Draft.SenderEmailAddress.Contains(
+                '@') ||
+            Draft.Amount <= 0 ||
+            string.IsNullOrWhiteSpace(
+                Draft.ReferenceNumber))
+        {
+            IsError = true;
+
+            StatusMessage =
+                "Please enter a sender name, valid sender email, amount, and reference number.";
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo(
+            "/explore-ema-instantly");
+    }
+}

@@ -1,0 +1,95 @@
+@page "/referral-program"
+@page "/organization/referral-program"
+@attribute [Authorize]
+@inject NavigationManager Navigation
+@inject IUserSessionStateService SessionState
+
+<PageTitle>EMA's Referral Program - Email Money App</PageTitle>
+
+<div class="ema-page-container referral-cover-page">
+    <div class="referrals-shell">
+        <!-- Top Shell Header -->
+        <div class="shell-header">
+            <div class="shell-title-group">
+                <span class="shell-org-name">@(_sessionOrgName)</span>
+                <h1 class="shell-title">EMA's Referral Program</h1>
+            </div>
+        </div>
+
+        <div class="shell-body">
+            <!-- Section 1: Overview -->
+            <div class="cover-section">
+                <p class="lead-text">
+                    The EMA Referral Program allows nonprofits and community organizations to share EMA with peers.
+                    The program is designed to encourage collaboration among community organizations while keeping
+                    the process respectful, simple, and privacy-first. By using our referral service, both the referrer
+                    and the recipient will receive credits towards their billings.
+                </p>
+            </div>
+
+            <!-- Section 2: Registration & Reporting -->
+            <div class="cover-section highlight-box">
+                <p>
+                    If you received a referring email, and the sender did not ask your permission before sending the email,
+                    the registration process gives the opportunity to report the sender to us, and we’ll revoke any credits
+                    already received, stop them from receiving any more credits, as well as stop them from sending any more
+                    referrals. You will not be penalized. You will receive a full credit on your next invoice.
+                </p>
+                <div class="cta-wrap">
+                    <button type="button"
+                            class="btn btn-referral-cta"
+                            @onclick='() => Navigation.NavigateTo("/accept-referral")'>
+                        Click Here to Register Your Referral
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 3: Sending Referrals & Eligibility -->
+            <div class="cover-section">
+                <p>
+                    If you have been using EMA to process donations for at least two weeks, and you’ve already fallen in love,
+                    we encourage you to pay it forward by telling others, while helping yourself to billing credits if they use the system.
+                </p>
+                <p>
+                    There is no limit on the number of referrals you can make, and you can come back here anytime to make more referrals.
+                    If you receive a credit to every invoice for the next year, we couldn’t be happier!
+                </p>
+                <p class="notice-text">
+                    <strong>Important:</strong> Please ensure you have permission from each organization before sending an email.
+                    Failure to do so will result in the forfeiture of your referral credits.
+                </p>
+                <div class="cta-wrap">
+                    <button type="button"
+                            class="btn btn-referral-cta"
+                            @onclick='() => Navigation.NavigateTo("/send-referrals")'>
+                        Click Here to Refer EMA to Others
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 4: Progress Tracking -->
+            <div class="cover-section track-section">
+                <p>
+                    If you have already made referrals, and want to see how you’re doing, you can
+                </p>
+                <div class="cta-wrap">
+                    <button type="button"
+                            class="btn btn-referral-cta"
+                            @onclick='() => Navigation.NavigateTo("/referral-details")'>
+                        Click Here to Track Your Progress
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _sessionOrgName = "Organization";
+
+    protected override void OnInitialized()
+    {
+        var orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        _sessionOrgName = SessionState.CurrentSession?.OrganizationName ?? "Your Organization";
+    }
+}

@@ -1,0 +1,36 @@
+@using EMA.App.Models
+<div class="email-section-title"><u>Fund Allocation:</u></div>
+<div class="email-dist-wrapper">
+<div class="email-dist-header">
+    @if (ShowCampus) { <span class="email-dist-campus"><strong>Campus</strong></span> }
+    <span class="email-dist-fund"><strong>Fund</strong></span>
+    <span class="email-dist-amount"><strong>Amount</strong></span>
+</div>
+@foreach (var row in Distributions)
+{
+    <div class="email-dist-row">
+        @if (ShowCampus) { <input class="email-input email-dist-campus" value="@row.CampusName" disabled="@ReadOnly"
+               @oninput='e => row.CampusName = e.Value?.ToString()' /> }
+        <input class="email-input email-dist-fund" value="@row.FundName" disabled="@ReadOnly"
+               @oninput='e => row.FundName = e.Value?.ToString()' />
+        <input class="email-input email-dist-amount" type="@(ReadOnly ? "text" : "number")"
+               value="@(ReadOnly ? row.DistributionAmount.ToString("C") : row.DistributionAmount.ToString("F2"))"
+               disabled="@ReadOnly"
+               @oninput='e => { if (decimal.TryParse(e.Value?.ToString(), out var v)) { row.DistributionAmount = v; OnAmountChanged.InvokeAsync(); } }' />
+    </div>
+}
+</div>
+@code {
+    [Parameter] public List<DistributionDisplayRow> Distributions { get; set; } = new();
+    [Parameter] public bool ReadOnly { get; set; } = true;
+    [Parameter] public bool ShowCampus { get; set; } = true;
+    [Parameter] public bool IsTemplate { get; set; } = false;
+    [Parameter] public EventCallback<bool> OnIsTemplateChanged { get; set; }
+    [Parameter] public EventCallback OnAmountChanged { get; set; }
+    public class DistributionDisplayRow
+    {
+        public string CampusName { get; set; } = string.Empty;
+        public string FundName { get; set; } = string.Empty;
+        public decimal DistributionAmount { get; set; }
+    }
+}

@@ -1,0 +1,872 @@
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IOrganizationService OrganizationService
+@inject IBlobService BlobService
+@inject IJSRuntime JS
+
+<FloatingPanel IsOpen="@IsOpen"
+               Title="Menu Item Resources"
+               IconClass="bi bi-collection-play"
+               Size="wide"
+               NonModal="false"
+               Resizable="false"
+               OnClose="CloseAsync">
+    <div class="menu-item-resources-overlay">
+        <h2 class="menu-item-resources-title">@DisplayMenuItemName</h2>
+
+        <div class="menu-item-resources-toolbar">
+            <button type="button"
+                    class="menu-item-resource-add"
+                    disabled="@(!CanAddResource)"
+                    @onclick="AddResource">
+                Add
+            </button>
+
+            <div class="menu-item-resource-save-state" aria-live="polite">
+                @if (_isSaving)
+                {
+                    <span>Saving...</span>
+                }
+                else if (!string.IsNullOrWhiteSpace(_saveMessage))
+                {
+                    <span class="menu-item-resource-save-success">@_saveMessage</span>
+                }
+                else if (!string.IsNullOrWhiteSpace(_validationMessage))
+                {
+                    <span class="menu-item-resource-save-error">@_validationMessage</span>
+                }
+            </div>
+        </div>
+
+        @if (_resources.Count == 0)
+        {
+            <div class="menu-item-resources-empty">
+                No resources are configured for this MenuItem. Select <strong>Add</strong> to create one.
+            </div>
+        }
+        else
+        {
+            <div class="menu-item-resources-table-wrap">
+                <table class="menu-item-resources-table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Seq</th>
+                            <th>Resource Description</th>
+                            <th>Audio/Video Blob</th>
+                            <th class="menu-item-resource-delete-column"><span class="visually-hidden">Delete</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var resourceIndex = 0; resourceIndex < _resources.Count; resourceIndex++)
+                        {
+                            var index = resourceIndex;
+                            var resource = _resources[index];
+                            var typeID = GetResourceTypeID(resource);
+
+                            <tr class="@(index == _selectedIndex ? "is-selected" : string.Empty)"
+                                @onclick="() => SelectResource(index)">
+                                <td>
+                                    <select class="menu-item-resource-cell-input"
+                                            value="@resource.MenuItemResourceTypeID"
+                                            aria-label="Resource type"
+                                            @onchange="args => ChangeResourceTypeAsync(index, args.Value?.ToString())">
+                                        @foreach (var resourceType in ResourceTypes)
+                                        {
+                                            <option value="@resourceType.MenuItemResourceTypeID">@resourceType.Description</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <input class="menu-item-resource-cell-input menu-item-resource-seq-input"
+                                           type="number"
+                                           min="0"
+                                           max="32767"
+                                           value="@resource.Sequence"
+                                           aria-label="Resource sequence"
+                                           @onchange="args => ChangeResourceSequenceAsync(index, args.Value?.ToString())" />
+                                </td>
+                                <td>
+                                    <input class="menu-item-resource-cell-input"
+                                           type="text"
+                                           maxlength="256"
+                                           value="@resource.Description"
+                                           aria-label="Resource description"
+                                           @onchange="args => ChangeResourceDescriptionAsync(index, args.Value?.ToString())" />
+                                </td>
+                                <td>
+                                    @if (typeID == "W")
+                                    {
+                                        <div class="menu-item-resource-not-applicable" title="Setup/Screen resources use the URL field below">—</div>
+                                    }
+                                    else
+                                    {
+                                        <input class="menu-item-resource-cell-input"
+                                               type="text"
+                                               maxlength="36"
+                                               value="@resource.AudioVideoBlob"
+                                               aria-label="Audio or video blob ID"
+                                               placeholder="EMA Blob ID"
+                                               @onchange="args => ChangeResourceBlobAsync(index, args.Value?.ToString())" />
+                                    }
+                                </td>
+                                <td class="menu-item-resource-delete-column">
+                                    <button type="button"
+                                            class="menu-item-resource-delete"
+                                            title="Remove resource"
+                                            aria-label="Remove resource"
+                                            @onclick="() => RemoveResourceAsync(index)"
+                                            @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash" aria-hidden="true"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (SelectedResource is not null)
+            {
+                <div class="menu-item-resource-detail">
+                    <div class="menu-item-resource-url-row">
+                        <div class="menu-item-resource-detail-label">URL:</div>
+
+                        @if (SelectedResourceTypeID == "W")
+                        {
+                            <input class="menu-item-resource-detail-input"
+                                   type="text"
+                                   maxlength="256"
+                                   value="@SelectedResource.ScreenURL"
+                                   placeholder="/screen-setup"
+                                   aria-label="Setup screen URL"
+                                   @oninput="UpdateSelectedScreenUrl"
+                                   @onblur="SaveSelectedResourceOnBlurAsync" />
+                            <span class="menu-item-resource-edit-hint">Type to edit - lose focus to save</span>
+                        }
+                        else
+                        {
+                            <div class="menu-item-resource-detail-disabled">
+                                URL is used for Setup/Screen resources.
+                            </div>
+                        }
+                    </div>
+
+                    <div class="menu-item-resource-script-heading">
+                        <div class="menu-item-resource-script-label">Audio Script</div>
+                        <button type="button"
+                                class="menu-item-resource-generate"
+                                disabled="@(!CanGenerateRecording)"
+                                title="Generate production recording with Google Cloud Text-to-Speech"
+                                @onclick="GenerateProductionRecordingAsync">
+                            @if (_isGeneratingAudio)
+                            {
+                                <span>Generating...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                                <span>@(string.IsNullOrWhiteSpace(SelectedResource?.AudioVideoBlob) ? "Generate Recording" : "Regenerate Recording")</span>
+                            }
+                        </button>
+                        <button type="button"
+                                class="menu-item-resource-script-play"
+                                disabled="@(SelectedResourceTypeID != "A" || string.IsNullOrWhiteSpace(SelectedResource.AudioScript))"
+                                title="Play Live"
+                                aria-label="Play Audio Script live"
+                                @onclick="PreviewAudioScriptAsync">
+                            <i class="bi bi-play-circle" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    @if (SelectedResourceTypeID == "A")
+                    {
+                        <div class="menu-item-resource-script-editor">
+                            <div class="menu-item-resource-edit-hint">
+                                Click to edit - lose focus to save - shrinks to one line if empty
+                            </div>
+                            <textarea class="menu-item-resource-script-textarea"
+                                      rows="@AudioScriptRows"
+                                      value="@SelectedResource.AudioScript"
+                                      aria-label="Audio Script"
+                                      @oninput="UpdateSelectedAudioScript"
+                                      @onblur="SaveSelectedResourceOnBlurAsync"></textarea>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="menu-item-resource-script-empty">
+                            Audio Script is available for Audio resources.
+                        </div>
+                    }
+
+                    @if (SelectedResourceTypeID == "A")
+                    {
+                        <div class="menu-item-resource-production">
+                            <div class="menu-item-resource-production-label">Production Recording</div>
+
+                            @if (_productionAudioLoading)
+                            {
+                                <div class="menu-item-resource-production-state">Loading recording...</div>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(_productionAudioSource))
+                            {
+                                <audio class="menu-item-resource-production-player"
+                                       src="@_productionAudioSource"
+                                       controls
+                                       preload="metadata">
+                                    Your browser does not support HTML audio playback.
+                                </audio>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(SelectedResource.AudioVideoBlob))
+                            {
+                                <div class="menu-item-resource-production-state">
+                                    Recording saved as EMA Blob @(SelectedResource.AudioVideoBlob).
+                                    @if (!string.IsNullOrWhiteSpace(_productionAudioError))
+                                    {
+                                        <span>@_productionAudioError</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="menu-item-resource-production-state">
+                                    No production recording has been generated yet.
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</FloatingPanel>
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public MenuItemDto? MenuItem { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<MenuItemResourceTypeDto> ResourceTypes { get; set; } =
+        Array.Empty<MenuItemResourceTypeDto>();
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<List<MenuItemResourceDto>> OnResourcesSaved { get; set; }
+
+    private readonly List<MenuItemResourceDto> _resources = new();
+    private int _selectedIndex = -1;
+    private int? _loadedMenuItemID;
+    private bool _wasOpen;
+    private bool _isSaving;
+    private bool _isGeneratingAudio;
+    private bool _productionAudioLoading;
+    private int? _productionPreviewRowID;
+    private string? _productionAudioSource;
+    private string? _productionAudioError;
+    private string _validationMessage = string.Empty;
+    private string _saveMessage = string.Empty;
+
+    private string DisplayMenuItemName =>
+        string.IsNullOrWhiteSpace(MenuItem?.MenuName)
+            ? MenuItem?.ScreenTitle ?? string.Empty
+            : MenuItem.MenuName;
+
+    private bool CanAddResource =>
+        !_isSaving &&
+        MenuItem is { MenuItemID: > 0 } &&
+        ResourceTypes.Count > 0 &&
+        string.IsNullOrWhiteSpace(ValidateResources(allowIncompleteDraft: false));
+
+    private MenuItemResourceDto? SelectedResource =>
+        _selectedIndex >= 0 && _selectedIndex < _resources.Count
+            ? _resources[_selectedIndex]
+            : null;
+
+    private bool CanGenerateRecording =>
+        !_isSaving &&
+        !_isGeneratingAudio &&
+        SelectedResourceTypeID == "A" &&
+        SelectedResource is { MenuItemRowID: > 0 } &&
+        !string.IsNullOrWhiteSpace(SelectedResource.AudioScript);
+
+    private string SelectedResourceTypeID =>
+        SelectedResource is null
+            ? string.Empty
+            : GetResourceTypeID(SelectedResource);
+
+    private int AudioScriptRows =>
+        string.IsNullOrWhiteSpace(SelectedResource?.AudioScript)
+            ? 1
+            : 10;
+
+    protected override void OnParametersSet()
+    {
+        var menuItemID = MenuItem?.MenuItemID;
+
+        if (IsOpen &&
+            (!_wasOpen || _loadedMenuItemID != menuItemID))
+        {
+            LoadResourcesFromParameter();
+        }
+
+        _wasOpen = IsOpen;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsOpen ||
+            SelectedResourceTypeID != "A" ||
+            SelectedResource is null ||
+            string.IsNullOrWhiteSpace(SelectedResource.AudioVideoBlob) ||
+            _productionAudioLoading ||
+            _productionPreviewRowID == SelectedResource.MenuItemRowID)
+        {
+            return;
+        }
+
+        await LoadProductionPreviewAsync();
+        StateHasChanged();
+    }
+
+    private void LoadResourcesFromParameter()
+    {
+        _resources.Clear();
+
+        if (MenuItem is not null)
+        {
+            _resources.AddRange(
+                MenuItem.Resources
+                    .OrderBy(resource => resource.Sequence)
+                    .ThenBy(resource => resource.MenuItemRowID)
+                    .Select(CloneResource));
+        }
+
+        _loadedMenuItemID = MenuItem?.MenuItemID;
+        _selectedIndex = _resources.Count > 0 ? 0 : -1;
+        _validationMessage = string.Empty;
+        _saveMessage = string.Empty;
+        ResetProductionPreview();
+    }
+
+    private void SelectResource(int index)
+    {
+        if (index < 0 || index >= _resources.Count)
+        {
+            return;
+        }
+
+        _selectedIndex = index;
+        _validationMessage = string.Empty;
+        _saveMessage = string.Empty;
+        ResetProductionPreview();
+    }
+
+    private void AddResource()
+    {
+        if (!CanAddResource)
+        {
+            return;
+        }
+
+        var preferredType =
+            ResourceTypes.FirstOrDefault(type =>
+                type.MenuItemResourceTypeID.Equals(
+                    "V",
+                    StringComparison.OrdinalIgnoreCase))
+            ?? ResourceTypes[0];
+
+        var nextSequence =
+            _resources.Count == 0
+                ? 10
+                : Math.Min(
+                    short.MaxValue,
+                    _resources.Max(resource => resource.Sequence) + 10);
+
+        _resources.Add(new MenuItemResourceDto
+        {
+            MenuItemID = MenuItem!.MenuItemID,
+            MenuItemResourceTypeID = preferredType.MenuItemResourceTypeID,
+            Sequence = nextSequence,
+            ResourceTypeDescription = preferredType.Description,
+            ResourceTypeName = preferredType.Name,
+            RawSVG = preferredType.RawSVG
+        });
+
+        _selectedIndex = _resources.Count - 1;
+        _saveMessage = string.Empty;
+        _validationMessage =
+            "Complete the new resource. Changes save when you leave an edited field.";
+    }
+
+    private async Task ChangeResourceTypeAsync(
+        int index,
+        string? value)
+    {
+        if (!TryGetResource(index, out var resource))
+        {
+            return;
+        }
+
+        resource.MenuItemResourceTypeID = value?.Trim() ?? string.Empty;
+        ApplyResourceTypeMetadata(resource);
+        _selectedIndex = index;
+        await SaveResourcesAsync();
+    }
+
+    private async Task ChangeResourceSequenceAsync(
+        int index,
+        string? value)
+    {
+        if (!TryGetResource(index, out var resource))
+        {
+            return;
+        }
+
+        if (!int.TryParse(value, out var sequence))
+        {
+            _validationMessage = "Sequence must be a whole number from 0 to 32767.";
+            _saveMessage = string.Empty;
+            return;
+        }
+
+        resource.Sequence = sequence;
+        _selectedIndex = index;
+        await SaveResourcesAsync();
+    }
+
+    private async Task ChangeResourceDescriptionAsync(
+        int index,
+        string? value)
+    {
+        if (!TryGetResource(index, out var resource))
+        {
+            return;
+        }
+
+        resource.Description = value ?? string.Empty;
+        _selectedIndex = index;
+        await SaveResourcesAsync();
+    }
+
+    private async Task ChangeResourceBlobAsync(
+        int index,
+        string? value)
+    {
+        if (!TryGetResource(index, out var resource))
+        {
+            return;
+        }
+
+        resource.AudioVideoBlob =
+            string.IsNullOrWhiteSpace(value)
+                ? null
+                : value.Trim();
+        _selectedIndex = index;
+        await SaveResourcesAsync();
+    }
+
+    private void UpdateSelectedScreenUrl(ChangeEventArgs args)
+    {
+        if (SelectedResource is null)
+        {
+            return;
+        }
+
+        SelectedResource.ScreenURL = args.Value?.ToString();
+        _saveMessage = string.Empty;
+    }
+
+    private void UpdateSelectedAudioScript(ChangeEventArgs args)
+    {
+        if (SelectedResource is null)
+        {
+            return;
+        }
+
+        SelectedResource.AudioScript = args.Value?.ToString();
+        _saveMessage = string.Empty;
+    }
+
+    private async Task SaveSelectedResourceOnBlurAsync(FocusEventArgs _)
+    {
+        await SaveResourcesAsync();
+    }
+
+    private async Task RemoveResourceAsync(int index)
+    {
+        if (!TryGetResource(index, out var resource))
+        {
+            return;
+        }
+
+        var removedResource = CloneResource(resource);
+        _resources.RemoveAt(index);
+
+        if (_resources.Count == 0)
+        {
+            _selectedIndex = -1;
+        }
+        else
+        {
+            _selectedIndex = Math.Min(index, _resources.Count - 1);
+        }
+
+        if (!await SaveResourcesAsync())
+        {
+            _resources.Insert(index, removedResource);
+            _selectedIndex = index;
+        }
+    }
+
+    private async Task<bool> SaveResourcesAsync()
+    {
+        if (_isSaving || MenuItem is not { MenuItemID: > 0 })
+        {
+            return false;
+        }
+
+        var validation = ValidateResources(allowIncompleteDraft: false);
+        if (!string.IsNullOrWhiteSpace(validation))
+        {
+            _validationMessage = validation;
+            _saveMessage = string.Empty;
+            return false;
+        }
+
+        _isSaving = true;
+        _validationMessage = string.Empty;
+        _saveMessage = string.Empty;
+
+        try
+        {
+            var savedResources =
+                await OrganizationService.SaveMenuItemResourcesAsync(
+                    MenuItem.MenuItemID,
+                    _resources);
+
+            if (savedResources is null)
+            {
+                _validationMessage =
+                    "Unable to save Menu Item Resources.";
+                return false;
+            }
+
+            var selectedIdentity =
+                SelectedResource is null
+                    ? null
+                    : BuildSelectionIdentity(SelectedResource);
+
+            _resources.Clear();
+            _resources.AddRange(
+                savedResources
+                    .OrderBy(resource => resource.Sequence)
+                    .ThenBy(resource => resource.MenuItemRowID)
+                    .Select(resource =>
+                    {
+                        var clone = CloneResource(resource);
+                        ApplyResourceTypeMetadata(clone);
+                        return clone;
+                    }));
+
+            _selectedIndex = FindSelectedIndex(selectedIdentity);
+            _saveMessage = "Saved.";
+
+            await OnResourcesSaved.InvokeAsync(
+                _resources.Select(CloneResource).ToList());
+
+            return true;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task GenerateProductionRecordingAsync()
+    {
+        if (_isGeneratingAudio || SelectedResourceTypeID != "A" || SelectedResource is null)
+        {
+            return;
+        }
+
+        // Save the latest script first. SaveMenuItemResources replaces the collection
+        // and returns fresh MenuItemRowIDs, so generate only after that round-trip.
+        if (!await SaveResourcesAsync())
+        {
+            return;
+        }
+
+        var resource = SelectedResource;
+
+        if (resource is null ||
+            resource.MenuItemRowID <= 0 ||
+            string.IsNullOrWhiteSpace(resource.AudioScript) ||
+            MenuItem is not { MenuItemID: > 0 })
+        {
+            _validationMessage =
+                "Save a valid Audio Script before generating the production recording.";
+            return;
+        }
+
+        _isGeneratingAudio = true;
+        _validationMessage = string.Empty;
+        _saveMessage = string.Empty;
+        _productionAudioError = null;
+
+        try
+        {
+            var result = await OrganizationService.GenerateMenuItemAudioAsync(
+                MenuItem.MenuItemID,
+                resource.MenuItemRowID);
+
+            if (!result.Success || string.IsNullOrWhiteSpace(result.BlobID))
+            {
+                _validationMessage =
+                    string.IsNullOrWhiteSpace(result.Message)
+                        ? "Unable to generate the production recording."
+                        : result.Message;
+                return;
+            }
+
+            resource.AudioVideoBlob = result.BlobID.Trim();
+            _saveMessage = "Production recording generated.";
+            ResetProductionPreview();
+
+            await OnResourcesSaved.InvokeAsync(
+                _resources.Select(CloneResource).ToList());
+
+            await LoadProductionPreviewAsync();
+        }
+        finally
+        {
+            _isGeneratingAudio = false;
+        }
+    }
+
+    private async Task LoadProductionPreviewAsync()
+    {
+        var resource = SelectedResource;
+
+        if (resource is null ||
+            GetResourceTypeID(resource) != "A" ||
+            string.IsNullOrWhiteSpace(resource.AudioVideoBlob))
+        {
+            ResetProductionPreview();
+            return;
+        }
+
+        _productionAudioLoading = true;
+        _productionAudioError = null;
+        _productionAudioSource = null;
+        _productionPreviewRowID = resource.MenuItemRowID;
+
+        try
+        {
+            _productionAudioSource =
+                await BlobService.BlobGetDataUrlAsync(
+                    resource.AudioVideoBlob);
+
+            if (string.IsNullOrWhiteSpace(_productionAudioSource))
+            {
+                _productionAudioError =
+                    "The production recording could not be loaded.";
+            }
+        }
+        catch
+        {
+            _productionAudioError =
+                "The production recording could not be loaded.";
+        }
+        finally
+        {
+            _productionAudioLoading = false;
+        }
+    }
+
+    private void ResetProductionPreview()
+    {
+        _productionPreviewRowID = null;
+        _productionAudioSource = null;
+        _productionAudioError = null;
+        _productionAudioLoading = false;
+    }
+
+    private async Task PreviewAudioScriptAsync()
+    {
+        if (SelectedResourceTypeID != "A" ||
+            string.IsNullOrWhiteSpace(SelectedResource?.AudioScript))
+        {
+            return;
+        }
+
+        try
+        {
+            var started =
+                await JS.InvokeAsync<bool>(
+                    "emaUi.speechStart",
+                    SelectedResource.AudioScript);
+
+            if (!started)
+            {
+                _validationMessage =
+                    "This browser does not support Audio Script playback.";
+            }
+        }
+        catch
+        {
+            _validationMessage =
+                "Unable to preview the Audio Script.";
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("emaUi.speechCancel");
+        }
+        catch
+        {
+            // Closing resource maintenance should not fail because preview cleanup failed.
+        }
+
+        ResetProductionPreview();
+        _wasOpen = false;
+        await OnClose.InvokeAsync();
+    }
+
+    private string ValidateResources(bool allowIncompleteDraft)
+    {
+        foreach (var resource in _resources)
+        {
+            var typeID = GetResourceTypeID(resource);
+
+            if (string.IsNullOrWhiteSpace(typeID) ||
+                resource.Sequence < 0 ||
+                resource.Sequence > short.MaxValue ||
+                string.IsNullOrWhiteSpace(resource.Description))
+            {
+                return allowIncompleteDraft
+                    ? string.Empty
+                    : "Each resource needs a type, sequence, and description before it can be saved.";
+            }
+
+            if (resource.Description.Trim().Length > 256)
+            {
+                return "Resource descriptions cannot exceed 256 characters.";
+            }
+
+            if (typeID == "A" &&
+                string.IsNullOrWhiteSpace(resource.AudioVideoBlob) &&
+                string.IsNullOrWhiteSpace(resource.AudioScript))
+            {
+                return allowIncompleteDraft
+                    ? string.Empty
+                    : "Audio resources require either an EMA Blob ID or an Audio Script.";
+            }
+
+            if (typeID == "V" &&
+                string.IsNullOrWhiteSpace(resource.AudioVideoBlob))
+            {
+                return allowIncompleteDraft
+                    ? string.Empty
+                    : "Video resources require an EMA Blob ID.";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private bool TryGetResource(
+        int index,
+        out MenuItemResourceDto resource)
+    {
+        if (index < 0 || index >= _resources.Count)
+        {
+            resource = null!;
+            return false;
+        }
+
+        resource = _resources[index];
+        return true;
+    }
+
+    private void ApplyResourceTypeMetadata(MenuItemResourceDto resource)
+    {
+        var type =
+            ResourceTypes.FirstOrDefault(candidate =>
+                candidate.MenuItemResourceTypeID.Equals(
+                    resource.MenuItemResourceTypeID,
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (type is null)
+        {
+            return;
+        }
+
+        resource.ResourceTypeDescription = type.Description;
+        resource.ResourceTypeName = type.Name;
+        resource.RawSVG = type.RawSVG;
+    }
+
+    private int FindSelectedIndex(string? selectionIdentity)
+    {
+        if (_resources.Count == 0)
+        {
+            return -1;
+        }
+
+        if (string.IsNullOrWhiteSpace(selectionIdentity))
+        {
+            return Math.Clamp(_selectedIndex, 0, _resources.Count - 1);
+        }
+
+        for (var index = 0; index < _resources.Count; index++)
+        {
+            if (BuildSelectionIdentity(_resources[index]) == selectionIdentity)
+            {
+                return index;
+            }
+        }
+
+        return Math.Clamp(_selectedIndex, 0, _resources.Count - 1);
+    }
+
+    private static string BuildSelectionIdentity(MenuItemResourceDto resource)
+    {
+        return $"{GetResourceTypeID(resource)}|{resource.Sequence}|{resource.Description}";
+    }
+
+    private static string GetResourceTypeID(MenuItemResourceDto resource)
+    {
+        return resource.MenuItemResourceTypeID
+            ?.Trim()
+            .ToUpperInvariant()
+            ?? string.Empty;
+    }
+
+    private static MenuItemResourceDto CloneResource(MenuItemResourceDto resource)
+    {
+        return new MenuItemResourceDto
+        {
+            MenuItemRowID = resource.MenuItemRowID,
+            MenuItemID = resource.MenuItemID,
+            MenuItemResourceTypeID = resource.MenuItemResourceTypeID,
+            Sequence = resource.Sequence,
+            Description = resource.Description,
+            AudioScript = resource.AudioScript,
+            AudioVideoBlob = resource.AudioVideoBlob,
+            ScreenURL = resource.ScreenURL,
+            ResourceTypeDescription = resource.ResourceTypeDescription,
+            ResourceTypeName = resource.ResourceTypeName,
+            RawSVG = resource.RawSVG
+        };
+    }
+}

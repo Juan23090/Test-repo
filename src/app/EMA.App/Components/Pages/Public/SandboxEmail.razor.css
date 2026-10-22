@@ -1,0 +1,260 @@
+.sandbox-email-page {
+    width: 100%;
+    padding: 1.5rem 1rem 3rem;
+}
+
+.sandbox-email-card {
+    width: min(900px, 100%);
+    margin: 0 auto;
+    padding: clamp(1.1rem, 3vw, 2rem);
+    border: 1px solid #b8b8b8;
+    border-radius: 12px;
+    background: #f3f3f3;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+    color: #111111;
+}
+
+.sandbox-email-header {
+    text-align: center;
+}
+
+    .sandbox-email-header > span {
+        color: #2447c7;
+        font-size: 0.82rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+
+    .sandbox-email-header h1 {
+        margin: 0.35rem 0 0.55rem;
+        font-size: clamp(1.8rem, 4vw, 2.6rem);
+        line-height: 1.1;
+    }
+
+    .sandbox-email-header p {
+        max-width: 700px;
+        margin: 0 auto;
+        line-height: 1.5;
+    }
+
+.sandbox-email-envelope {
+    display: grid;
+    gap: 0.7rem;
+    margin-top: 1.25rem;
+    padding: 1.1rem;
+    border: 1px solid #c9c9c9;
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+.sandbox-email-row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+    .sandbox-email-row label {
+        font-weight: 800;
+        text-align: right;
+    }
+
+    .sandbox-email-row input,
+    .sandbox-email-row textarea {
+        width: 100%;
+        padding: 0.55rem 0.65rem;
+        border: 1px solid #9b9b9b;
+        border-radius: 4px;
+        background: #ffffff;
+        color: #000000;
+        font: inherit;
+    }
+
+        .sandbox-email-row input:focus,
+        .sandbox-email-row textarea:focus {
+            outline: 2px solid rgba(36, 71, 199, 0.2);
+            border-color: #2447c7;
+        }
+
+        .sandbox-email-row input:disabled {
+            background: #eeeeee;
+            color: #555555;
+        }
+
+.sandbox-email-message-row {
+    align-items: start;
+}
+
+    .sandbox-email-message-row label {
+        padding-top: 0.55rem;
+    }
+
+.sandbox-email-money-input {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    border: 1px solid #9b9b9b;
+    border-radius: 4px;
+    background: #ffffff;
+}
+
+    .sandbox-email-money-input span {
+        padding-left: 0.65rem;
+        font-weight: 800;
+    }
+
+    .sandbox-email-money-input input {
+        border: 0;
+    }
+
+.sandbox-email-preview {
+    margin-top: 1.25rem;
+    overflow: hidden;
+    border: 1px solid #b9b9b9;
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+.sandbox-email-preview-title {
+    padding: 0.75rem 1rem;
+    background: #ececec;
+    font-weight: 800;
+}
+
+.sandbox-email-preview-body {
+    padding: 1.15rem;
+}
+
+.sandbox-email-preview-amount {
+    margin: 0.85rem 0;
+    color: #1d5f31;
+    font-size: 2rem;
+    font-weight: 900;
+}
+
+.sandbox-email-preview dl {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+}
+
+    .sandbox-email-preview dl div {
+        display: grid;
+        grid-template-columns: 170px 1fr;
+        gap: 0.7rem;
+    }
+
+.sandbox-email-preview dt {
+    font-weight: 800;
+}
+
+.sandbox-email-preview dd {
+    margin: 0;
+}
+
+.sandbox-email-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin-top: 1.2rem;
+}
+
+.sandbox-email-back-button,
+.sandbox-email-send-button {
+    min-height: 44px;
+    padding: 0.65rem 1.1rem;
+    border-radius: 5px;
+    font: inherit;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.sandbox-email-back-button {
+    border: 1px solid #777777;
+    background: #e6e6e6;
+    color: #000000;
+}
+
+.sandbox-email-send-button {
+    border: 1px solid #0000aa;
+    background: #0000ff;
+    color: #ffffff;
+}
+
+    .sandbox-email-send-button:hover:not(:disabled) {
+        background: #1d4cff;
+    }
+
+    .sandbox-email-send-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+.sandbox-email-status,
+.sandbox-email-preview-note {
+    margin-top: 1rem;
+    padding: 0.8rem 0.95rem;
+    border-radius: 7px;
+    text-align: center;
+}
+
+.sandbox-email-success {
+    border: 1px solid #81b58d;
+    background: #edf9f0;
+    color: #1d5f31;
+}
+
+.sandbox-email-error {
+    border: 1px solid #d29a9a;
+    background: #fff0f0;
+    color: #8b0000;
+    font-weight: 700;
+}
+
+.sandbox-email-preview-note {
+    border: 1px dashed #8a8a8a;
+    background: #fffbe6;
+    color: #555555;
+    font-size: 0.82rem;
+}
+
+.sandbox-email-loading {
+    min-height: 220px;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+}
+
+@media (max-width: 650px) {
+    .sandbox-email-page {
+        padding: 0.75rem 0.6rem 2rem;
+    }
+
+    .sandbox-email-row {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+
+        .sandbox-email-row label {
+            text-align: left;
+        }
+
+    .sandbox-email-message-row label {
+        padding-top: 0;
+    }
+
+    .sandbox-email-preview dl div {
+        grid-template-columns: 1fr;
+        gap: 0.15rem;
+    }
+
+    .sandbox-email-actions {
+        flex-direction: column;
+    }
+
+    .sandbox-email-back-button,
+    .sandbox-email-send-button {
+        width: 100%;
+    }
+}

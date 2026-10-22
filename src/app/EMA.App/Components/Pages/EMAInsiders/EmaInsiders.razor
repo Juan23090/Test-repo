@@ -1,0 +1,131 @@
+@page "/ema-insiders"
+
+@using System.Text.Json
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>EMA Insiders - EMA</PageTitle>
+
+<div class="kpis-container">
+
+<!-- ── Header: title ────────────────────────────────────────────────────── -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <h4 class="mb-0">EMA Insiders</h4>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-warning py-2 mb-3" role="alert">
+        <small>@_error</small>
+    </div>
+}
+
+<!-- ── Metric toggle — never persisted, always resets to Number. ──────────── -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div class="toggle-btn-group" role="group" aria-label="Metric selector">
+        <button type="button" class="toggle-btn @(_mode == "N" ? "selected" : "")"
+                @onclick='() => OnModeClicked("N")'>Number</button>
+        <button type="button" class="toggle-btn @(_mode == "V" ? "selected" : "")"
+                @onclick='() => OnModeClicked("V")'>Value</button>
+    </div>
+</div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <p class="fw-semibold mb-2 text-muted" style="font-size:1rem;">@GraphTitle</p>
+                    <div style="height: 300px;">
+                        @if (_trendLoading)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading chart data...</small></div>
+                        }
+                        <canvas id="trendChart" @key="_chartRefreshKey" style="@(_trendLoading ? "display:none" : "")"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private record MonthlyData(List<MonthlyEntry> Months);
+    private record MonthlyEntry(DateTime MonthStartDate, decimal TotalDonations, int DonationCount, decimal AverageGiftSize);
+
+    private int OrgID;
+    private string _mode = "N";   // Number by default — never persisted, always resets on reload
+
+    private string GraphTitle => _mode == "N" ? "Number by Month" : "Value by Month";
+    private bool _trendLoading = true;
+    private bool _trendChartInitialised = false;
+    private int _chartRefreshKey = 0;
+    private string? _error;
+
+    private MonthlyData? _monthly;
+    private string[][] _trendLabels = [];
+    private decimal[] _trendValues = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (SessionState.CurrentSession is not { } session)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        OrgID = session.EMAOrganizationID;
+        await FetchMonthlyAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_trendLoading && !_trendChartInitialised)
+        {
+            _trendChartInitialised = true;
+            await JS.InvokeVoidAsync("initTrendChart", _trendLabels, _trendValues, _mode == "N");
+        }
+    }
+
+    private void OnModeClicked(string mode)
+    {
+        if (mode == _mode) return;
+
+        // No API call — this toggle is intentionally not persisted.
+        _mode = mode;
+        _chartRefreshKey++;
+        _trendChartInitialised = false;
+        MapValues();
+    }
+
+    private async Task FetchMonthlyAsync()
+    {
+        try
+        {
+            _monthly = await Http.GetFromJsonAsync<MonthlyData>($"/api/dashboard/donations-by-month/{OrgID}");
+            MapValues();
+        }
+        catch (Exception)
+        {
+            _error = "Could not reach the API. Ensure the Azure Functions host is running at localhost:7071.";
+        }
+        finally
+        {
+            _trendLoading = false;
+        }
+    }
+
+    private void MapValues()
+    {
+        if (_monthly?.Months is not { Count: > 0 } months) return;
+
+        _trendLabels = [.. months.Select(m => new[] { m.MonthStartDate.ToString("MMM"), m.MonthStartDate.Year.ToString() })];
+        _trendValues = _mode == "N"
+            ? [.. months.Select(m => (decimal)m.DonationCount)]
+            : [.. months.Select(m => m.TotalDonations)];
+    }
+}

@@ -1,0 +1,211 @@
+@page "/ww-tickets"
+
+@inject IScreenFeedbackService ScreenFeedbackService
+@inject IOrganizationStateService OrganizationStateService
+
+<PageTitle>Work With Support Tickets - EMA</PageTitle>
+
+<section class="task39-admin-page">
+    <h1>Work with Support Tickets</h1>
+
+    <div class="task39-admin-filters">
+        <label>Start Date Reported
+            <input type="date" @bind="_startDate" />
+        </label>
+        <label>Status
+            <select @bind="_statusFilter">
+                <option value="">All</option>
+                @foreach (var status in _statuses)
+                {
+                    <option value="@status.SupportTicketStatusID">@status.Description</option>
+                }
+            </select>
+        </label>
+        <label class="task39-admin-search">Find Ticket
+            <input type="search"
+                   placeholder="Start typing or leave blank"
+                   @bind="_search"
+                   @bind:event="oninput" />
+        </label>
+    </div>
+
+    @if (_loading)
+    {
+        <p>Loading...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="task39-message task39-error" role="alert">@_error</div>
+    }
+    else
+    {
+        <div class="task39-admin-browser">
+            <div class="task39-admin-list">
+                @foreach (var item in FilteredItems)
+                {
+                    <button type="button"
+                            class="@(item.SupportTicketID == _selected?.SupportTicketID ? "is-selected" : string.Empty)"
+                            @onclick="@(() => Select(item))">
+                        <span>@item.Title</span>
+                        <small>@item.StatusDescription · @item.ScreenTitle</small>
+                    </button>
+                }
+            </div>
+
+            <div class="task39-admin-detail">
+                @if (_selected is null)
+                {
+                    <p>Select a support ticket to work with it.</p>
+                }
+                else
+                {
+                    <div class="task39-meta-grid">
+                        <strong>Organization</strong><span>@DisplayOrganization(_selected.OrganizationName, _selected.OrganizationID)</span>
+                        <strong>User</strong><span>@DisplayUser(_selected.RequestedByUserName, _selected.RequestedByUserID)</span>
+                        <strong>Screen</strong><span>@_selected.ScreenTitle (@_selected.MenuItemID)</span>
+                        <strong>Reported</strong><span>@FormatDateTime(_selected.DateTimeEntered)</span>
+                    </div>
+
+                    <label>Title
+                        <input maxlength="256" @bind="_selected.Title" />
+                    </label>
+                    <label>Description
+                        <textarea rows="7" @bind="_selected.Description"></textarea>
+                    </label>
+                    <label>EMA Comments <small>(private)</small>
+                        <textarea rows="5" @bind="_selected.EMAComments"></textarea>
+                    </label>
+                    <label>Status
+                        <select @bind="_selected.SupportTicketStatusID">
+                            @foreach (var status in _statuses)
+                            {
+                                <option value="@status.SupportTicketStatusID">@status.Description</option>
+                            }
+                        </select>
+                    </label>
+
+                    <div class="task39-meta-grid task39-meta-grid-bottom">
+                        <strong>Updated By</strong><span>@DisplayUser(_selected.UpdatedByUserName, _selected.UpdatedByEMAUserID)</span>
+                        <strong>Updated</strong><span>@FormatDateTime(_selected.DateTimeUpdated)</span>
+                    </div>
+
+                    <div class="task39-admin-actions">
+                        <button type="button" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Saving..." : "Save Ticket")</button>
+                        @if (!string.IsNullOrWhiteSpace(_message))
+                        {
+                            <span role="status">@_message</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private List<SupportTicketAdminItem> _items = new();
+    private List<SupportTicketStatus> _statuses = new();
+    private SupportTicketAdminItem? _selected;
+    private string _statusFilter = string.Empty;
+    private DateTime? _startDate;
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _message;
+
+    private IEnumerable<SupportTicketAdminItem> FilteredItems =>
+        _items.Where(item =>
+            (string.IsNullOrWhiteSpace(_statusFilter) || item.SupportTicketStatusID.ToString() == _statusFilter) &&
+            IsAfterStartDate(item.DateTimeEntered) &&
+            MatchesSearch(item.Title, item.Description, item.ScreenTitle));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var response = await ScreenFeedbackService.GetSupportTicketAdminAsync();
+            _items = response.Items;
+            _statuses = response.Statuses;
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Select(SupportTicketAdminItem item)
+    {
+        _selected = item;
+        _message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selected is null) return;
+        var id = _selected.SupportTicketID;
+        _saving = true;
+        _message = null;
+        try
+        {
+            await ScreenFeedbackService.UpdateSupportTicketAsync(
+                id,
+                new UpdateSupportTicketAdminRequest
+                {
+                    Title = _selected.Title,
+                    Description = _selected.Description,
+                    EMAComments = _selected.EMAComments,
+                    SupportTicketStatusID = _selected.SupportTicketStatusID
+                });
+            _message = "Saved.";
+            await LoadAsync();
+            _selected = _items.FirstOrDefault(item => item.SupportTicketID == id);
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool IsAfterStartDate(DateTime value) =>
+        !_startDate.HasValue || AsLocal(value).Date >= _startDate.Value.Date;
+
+    private bool MatchesSearch(params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return values.Any(value => value?.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static string DisplayOrganization(string name, int? id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id?.ToString() ?? "Unknown";
+
+    private static string DisplayUser(string name, int id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id.ToString();
+
+    private string FormatDateTime(DateTime value)
+    {
+        var localValue = AsLocal(value);
+        var date = EMA.App.Utilities.OrgDateFormat.Format(
+            localValue,
+            OrganizationStateService.CurrentOrganization?.DateFormatID);
+        return $"{date} {localValue:HH:mm}";
+    }
+
+    private static DateTime AsLocal(DateTime value) =>
+        (value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        .ToLocalTime();
+}

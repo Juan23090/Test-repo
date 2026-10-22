@@ -1,0 +1,180 @@
+@using EMA.App.Services
+@inject HttpClient Http
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop show" style="display: block; background: rgba(0, 0, 0, 0.5);"></div>
+    <div class="modal show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 12px; overflow: hidden;">
+                <div class="modal-header bg-light border-bottom d-flex justify-content-between align-items-center px-4 py-3">
+                    <h5 class="modal-title font-weight-bold mb-0 text-dark">Select Official Donor for "@PADDonorName"</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="form-group mb-4">
+                        <label class="form-label font-weight-bold text-secondary">Search Existing Donors:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" @bind="SearchQuery" @bind:event="oninput" placeholder="Search by name, email, or envelope..." @onkeyup="HandleKeyUp" />
+                            <button class="btn btn-primary px-4" type="button" @onclick="PerformSearch">Search</button>
+                        </div>
+                    </div>
+
+                    @if (_isSearching)
+                    {
+                        <div class="text-center my-4 py-2">
+                            <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                            <span class="ms-2 text-muted">Searching donor directory...</span>
+                        </div>
+                    }
+                    else if (_searchResults != null)
+                    {
+                        <div class="mb-4">
+                            <h6 class="text-secondary font-weight-bold mb-2">Search Results (@_searchResults.Count):</h6>
+                            @if (_searchResults.Count == 0)
+                            {
+                                <p class="text-muted italic py-2">No donors found matching "@SearchQuery". Click + Create New Donor below to add them.</p>
+                            }
+                            else
+                            {
+                                <div class="list-group shadow-sm pad-picker-list-group">
+                                    @foreach (var donor in _searchResults)
+                                    {
+                                        <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" @onclick="() => SelectDonor(donor.EMADonorID, donor.FullName)">
+                                            <div>
+                                                <strong class="text-primary font-weight-bold fs-6">@donor.FullName</strong>
+                                                @if (!string.IsNullOrEmpty(donor.Email))
+                                                {
+                                                    <span class="text-muted ms-2">(@donor.Email)</span>
+                                                }
+                                            </div>
+                                            <span class="btn btn-sm btn-outline-primary">Select</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (CandidateDonors != null && CandidateDonors.Count > 0)
+                    {
+                        <div class="mb-4">
+                            <h6 class="text-secondary font-weight-bold mb-2">Top Suggested Candidates:</h6>
+                            <div class="list-group shadow-sm pad-picker-list-group">
+                                @foreach (var candidate in CandidateDonors)
+                                {
+                                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3" @onclick="() => SelectDonor(candidate.EMADonorID, candidate.FullName)">
+                                        <div>
+                                            <strong class="text-primary font-weight-bold fs-6">@candidate.FullName</strong>
+                                            @if (!string.IsNullOrEmpty(candidate.Email))
+                                            {
+                                                <span class="text-muted ms-2">(@candidate.Email)</span>
+                                            }
+                                            @if (!string.IsNullOrEmpty(candidate.EnvelopeNumber))
+                                            {
+                                                <span class="badge bg-secondary ms-2">Env: @candidate.EnvelopeNumber</span>
+                                            }
+                                        </div>
+                                        <span class="badge bg-primary rounded-pill px-3 py-2">Score: @candidate.MatchScore</span>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+                        <a href="/donor-maintenance" class="btn btn-outline-primary btn-sm">
+                            + Create New Donor
+                        </a>
+                        <button type="button" class="btn btn-secondary px-4" @onclick="CloseModal">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public int LineID { get; set; }
+    [Parameter] public string PADDonorName { get; set; } = "";
+    [Parameter] public int OrganizationID { get; set; }
+    [Parameter] public List<CandidateDonorUI> CandidateDonors { get; set; } = new();
+    [Parameter] public EventCallback<(int LineID, int DonorID, string DonorName)> OnDonorSelected { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string SearchQuery { get; set; } = "";
+    private bool _isSearching = false;
+    private List<SearchResultUI>? _searchResults;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen)
+        {
+            SearchQuery = PADDonorName;
+            _searchResults = null;
+        }
+    }
+
+    private async Task HandleKeyUp(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await PerformSearch();
+        }
+    }
+
+    private async Task PerformSearch()
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery)) return;
+
+        _isSearching = true;
+        _searchResults = null;
+
+        try
+        {
+            var results = await Http.GetFromJsonAsync<List<DonorSearchApiDto>>($"/api/donors/search/{OrganizationID}?q={Uri.EscapeDataString(SearchQuery)}");
+            if (results != null)
+            {
+                _searchResults = results.Select(r => new SearchResultUI
+                {
+                    EMADonorID = r.EMADonorID,
+                    FullName = r.OfficialDonorName,
+                    Email = r.EmailAddress
+                }).ToList();
+            }
+        }
+        catch
+        {
+            _searchResults = new List<SearchResultUI>();
+        }
+        finally
+        {
+            _isSearching = false;
+        }
+    }
+
+    private async Task SelectDonor(int donorId, string donorName)
+    {
+        await OnDonorSelected.InvokeAsync((LineID, donorId, donorName));
+        await CloseModal();
+    }
+
+    private async Task CloseModal()
+    {
+        await OnClose.InvokeAsync();
+    }
+
+    public class DonorSearchApiDto
+    {
+        public int EMADonorID { get; set; }
+        public string OfficialDonorName { get; set; } = "";
+        public string EmailAddress { get; set; } = "";
+    }
+
+    public class SearchResultUI
+    {
+        public int EMADonorID { get; set; }
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+    }
+}

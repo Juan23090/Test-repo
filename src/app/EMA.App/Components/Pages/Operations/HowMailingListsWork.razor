@@ -1,0 +1,137 @@
+@page "/mailing-lists-how-it-works"
+
+<PageTitle>How Mailing Lists Work - EMA</PageTitle>
+
+<div class="container my-4" style="max-width: 900px; font-family: Arial, sans-serif;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold" style="color: #000;">How Mailing Lists Works</h2>
+    </div>
+
+    <div class="mb-4">
+        <h5 class="fw-bold text-decoration-underline">Three lists are looked at in order to come up with the send list:</h5>
+        <ol class="ps-3">
+            <li class="mb-1"><strong>Donors selected because of their giving history</strong> (e.g. A donor who gave $1,000+ last year, but nothing this year).</li>
+            <li class="mb-1"><strong>Donors who may not give but want to be included</strong> (e.g. Grandparents with kids on an international mission trip).</li>
+            <li class="mb-1"><strong>Donors who don’t want to be on the list</strong> (e.g. they are a business who wants to give to the school, but not interested in receiving a newsletter).</li>
+        </ol>
+    </div>
+
+    <div class="mb-4">
+        <h5 class="fw-bold text-decoration-underline">The programming selects donors based on several steps:</h5>
+        <ol type="a" class="ps-3">
+            <li class="mb-1">Cleans up the Opt-in list by removing those the Opt-Ins that are on the Opt-Out list.</li>
+            <li class="mb-1">Running the selection criteria against historical giving</li>
+            <li class="mb-1">Adding the Opt-In Donors</li>
+            <li class="mb-1">Removing the Opt-Out Donors</li>
+        </ol>
+    </div>
+
+    <div class="mb-4">
+        <h5 class="fw-bold text-decoration-underline">Lastly, the list is tweaked based on how it is to be send out:</h5>
+        <ul class="ps-3">
+            <li class="mb-1">If it is going out by postal mail, it must have a proper mailing address</li>
+            <li class="mb-1">If it is going out by email, it must have an email address</li>
+        </ul>
+    </div>
+
+    <div class="mb-4">
+        <h5 class="fw-bold text-decoration-underline">You can then spot check the send list to make sure it looks right:</h5>
+        <ol type="a" class="ps-3">
+            <li class="mb-1">Make sure that a generous donor made the send list.</li>
+            <li class="mb-1">Make sure that the grandparent who called is on the mailing list.</li>
+            <li class="mb-1">Make sure that the business that opted out is not on the list.</li>
+        </ol>
+    </div>
+
+    <div class="card shadow-sm border-secondary my-4">
+        <div class="card-header bg-secondary text-white fw-bold text-center fs-5">
+            How Donors Make the Send List
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle text-center mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Donor</th>
+                        <th>Selected</th>
+                        <th>Opted In</th>
+                        <th>Opted Out</th>
+                        <th>Send List</th>
+                        <th>Why</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="fw-bold">Alex</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Opted Out Overrides Everything</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Bob</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td>No</td>
+                        <td class="fw-bold text-success">Yes</td>
+                        <td class="text-start">Both Selected & Opted In</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Carla</td>
+                        <td>Yes</td>
+                        <td>No</td>
+                        <td>Yes</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Opted Out Overrides Everything</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Don</td>
+                        <td>Yes</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Selected Based on Donation Criteria</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Edward</td>
+                        <td>No</td>
+                        <td>Yes</td>
+                        <td>Yes</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Opted Out Overrides Everything</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Fred</td>
+                        <td>No</td>
+                        <td>Yes</td>
+                        <td>No</td>
+                        <td class="fw-bold text-success">Yes</td>
+                        <td class="text-start">Opt In Means Doesn’t Need to Be Selected</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">George</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>Yes</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Not Selected or Opted In & Also Opted Out</td>
+                    </tr>
+                    <tr>
+                        <td class="fw-bold">Harry</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td>No</td>
+                        <td class="fw-bold text-danger">No</td>
+                        <td class="text-start">Not Selected & Not Opted In</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="text-center mt-5 mb-3">
+        <a href="/mailing-lists-index" class="btn btn-primary btn-lg px-5 py-3 fs-4 shadow-sm fw-bold rounded-0 border border-dark">
+            Click Here to Get Started
+        </a>
+    </div>
+</div>

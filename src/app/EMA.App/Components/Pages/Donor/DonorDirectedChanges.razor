@@ -1,0 +1,1373 @@
+@page "/donor-directed-changes/{DonationID:long}"
+
+@using System.Net
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Microsoft.AspNetCore.Authorization
+
+@attribute [AllowAnonymous]
+
+@inject IHttpClientFactory HttpClientFactory
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Donor Directed Changes - EMA</PageTitle>
+
+@if (IsLoading)
+{
+    <div class="donors-container donations-container">
+        <div class="donors-form donations-form">
+            <div class="alert text-center">
+                Loading your donation...
+            </div>
+        </div>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+{
+    <div class="donors-container donations-container">
+        <div class="donors-form donations-form">
+            <div class="alert alert-danger text-center">
+                @ErrorMessage
+            </div>
+        </div>
+    </div>
+}
+else if (ShowConfirmation)
+{
+    <div class="donors-container donations-container">
+        <div class="donors-form donations-form">
+            <h1 class="text-center">
+                Donor Directed Changes
+            </h1>
+
+            @if (SessionState.CurrentSession is null)
+            {
+                <div class="org-banner">
+                    <strong>@Model.OrganizationName</strong>
+                </div>
+            }
+
+            <div class="alert alert-success text-center">
+                <strong>Your changes have been recorded.</strong>
+                <div>
+                    We will send you an email with the revised information.
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="donors-container donations-container">
+        <div class="donors-form donations-form">
+            <h1 class="text-center">
+                Donor Directed Changes
+            </h1>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>CRA Name:</strong>
+                </label>
+
+                <input class="form-input"
+                       @bind="Model.Donor.OfficialDonorName"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>eTransfer Name:</strong>
+                </label>
+
+                <input class="form-input"
+                       value="@Model.Donor.InteracDonorName"
+                       disabled />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Address:</strong>
+                </label>
+
+                <input class="form-input"
+                       @bind="Model.Donor.Address"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>City/Town:</strong>
+                </label>
+
+                <input class="form-input"
+                       @bind="Model.Donor.City"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Province:</strong>
+                </label>
+
+                <input class="form-input province-input"
+                       @bind="Model.Donor.ProvinceStateCode"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+
+                <div class="postal-wrapper">
+                    <label class="postal-label">
+                        <strong>Postal:</strong>
+                    </label>
+
+                    <input class="form-input postal-input"
+                           @bind="Model.Donor.PostalCode"
+                           disabled="@(IsAuditView || IsAnonymous)" />
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Country:</strong>
+                </label>
+
+                <input class="form-input"
+                       @bind="Model.Donor.Country"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Email:</strong>
+                </label>
+
+                <input class="form-input"
+                       value="@Model.Donor.EmailAddress"
+                       placeholder="Can't be changed"
+                       disabled />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Phone:</strong>
+                </label>
+
+                <input class="form-input"
+                       @bind="Model.Donor.PhoneNumber"
+                       disabled="@(IsAuditView || IsAnonymous)" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Date:</strong>
+                </label>
+
+                <input class="form-input"
+                       value="@FormatDate(Model.Donation.DateTimeReceived)"
+                       disabled />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Reference:</strong>
+                </label>
+
+                <input class="form-input"
+                       value="@Model.Donation.ReferenceNumber"
+                       disabled />
+            </div>
+
+            <div class="form-row label-top">
+                <label class="form-label">
+                    <strong>Comments:</strong>
+                </label>
+
+                <textarea class="form-input form-textarea hover-expand @(CommentsExpanded ? "form-textarea-expanded" : "")"
+                          @bind="Model.Donation.Comments"
+                          disabled="@IsAuditView">
+                </textarea>
+
+                <button class="btn-magnify"
+                        title="Expand comments"
+                        @onclick="() => CommentsExpanded = !CommentsExpanded">
+                    &#128269;
+                </button>
+            </div>
+
+            @if (Model.UseTributeTypes)
+            {
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Tribute:</strong>
+                    </label>
+
+                    <select class="form-input tribute-type-select"
+                            @bind="Model.Donation.EMATributeTypeID"
+                            disabled="@IsAuditView"
+                            style="flex: 0 0 auto; width: 150px;">
+                        <option value="">-- Select --</option>
+
+                        @foreach (var tributeType in Model.TributeTypes)
+                        {
+                            <option value="@tributeType.ID">
+                                @tributeType.Description
+                            </option>
+                        }
+                    </select>
+
+                    <textarea class="form-input @(TributeExpanded ? "form-textarea-expanded" : "")"
+                              style="min-height: 34px; height: 34px;"
+                              @bind="Model.Donation.TributeText"
+                              placeholder="@(Model.Donation.EMATributeTypeID.HasValue ? string.Empty : "Please pick your tribute type first")"
+                              disabled="@(IsAuditView || !Model.Donation.EMATributeTypeID.HasValue)">
+                    </textarea>
+
+                    <button class="btn-magnify"
+                            title="Expand tribute"
+                            @onclick="() => TributeExpanded = !TributeExpanded">
+                        &#128269;
+                    </button>
+                </div>
+            }
+
+            @if (Model.UseAnonymous)
+            {
+                @if (!Model.AnonymousDonorID.HasValue ||
+                     Model.AnonymousDonorID.Value <= 0)
+                {
+                    <div class="form-row">
+                        <label class="form-label">
+                            <strong>Anonymous:</strong>
+                        </label>
+
+                        <span class="anon-not-setup">
+                            Call your church office to set up the anon donor
+                        </span>
+                    </div>
+                }
+                else
+                {
+                    <div class="form-row label-top">
+                        <label class="form-label">
+                            <strong>Anonymous:</strong>
+                        </label>
+
+                        <input type="checkbox"
+                               class="anon-checkbox"
+                               @key="AnonymousCheckboxKey"
+                               checked="@IsAnonymous"
+                               @onchange="OnAnonymousChanged"
+                               disabled="@(IsAuditView || IsAnonymous)" />
+
+                        <textarea class="form-input form-textarea anon-message-box"
+                                  readonly>@AnonymousMessage</textarea>
+                    </div>
+                }
+            }
+
+            <div class="distribution-grid">
+                <div class="dist-header">
+                    @if (Model.UseCampuses)
+                    {
+                        <span class="dist-col-campus">
+                            <strong><u>Campus</u></strong>
+                        </span>
+                    }
+
+                    @if (Model.UseFunds)
+                    {
+                        <span class="dist-col-fund">
+                            <strong><u>Fund</u></strong>
+                        </span>
+                    }
+
+                    <span class="dist-col-amount">
+                        <strong><u>Amount</u></strong>
+                    </span>
+                </div>
+
+                @foreach (var distribution in Model.Distributions)
+                {
+                    <div class="dist-row"
+                         @key="distribution">
+                        @if (Model.UseCampuses)
+                        {
+                            <div class="dist-col-campus">
+                                <select class="form-input"
+                                        @bind="distribution.EMACampusID"
+                                        disabled="@IsAuditView">
+                                    <option value="">-- Select --</option>
+
+                                    @foreach (var campus in Model.Campuses)
+                                    {
+                                        <option value="@campus.ID">
+                                            @campus.Description
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        }
+
+                        @if (Model.UseFunds)
+                        {
+                            <div class="dist-col-fund">
+                                <select class="form-input"
+                                        @bind="distribution.EMAFundID"
+                                        disabled="@IsAuditView">
+                                    <option value="">-- Select --</option>
+
+                                    @foreach (var fund in Model.Funds)
+                                    {
+                                        <option value="@fund.ID">
+                                            @fund.Description
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        }
+
+                        <div class="dist-col-amount">
+                            <input class="form-input"
+                                   type="text"
+                                   inputmode="decimal"
+                                   value="@(distribution.DistributionAmount == 0 ? string.Empty : distribution.DistributionAmount.ToString("C"))"
+                                   onfocus="this.select()"
+                                   @onchange="eventArgs => OnDistributionAmountChanged(distribution, eventArgs)"
+                                   disabled="@IsAuditView" />
+                        </div>
+
+                        @if (!IsAuditView)
+                        {
+                            <button class="steps-overlay-close"
+                                    title="Remove allocation"
+                                    aria-label="Remove allocation"
+                                    @onclick="() => RemoveDistribution(distribution)"
+                                    disabled="@(Model.Distributions.Count <= 1)">
+                                &times;
+                            </button>
+                        }
+                    </div>
+                }
+
+                @if (!IsAuditView)
+                {
+                    <button class="btn-create"
+                            @onclick="AddDistribution">
+                        Add Allocation
+                    </button>
+                }
+
+                <div class="dist-total-row">
+                    <span class="dist-total-label">
+                        <strong><u>Unallocated:</u></strong>
+                    </span>
+
+                    <span class="dist-total-value @(UnallocatedAmount != 0 ? "dist-unallocated-nonzero" : string.Empty)">
+                        @UnallocatedAmount.ToString("C")
+                    </span>
+                </div>
+
+                <div class="dist-total-row">
+                    <span class="dist-total-label">
+                        <strong><u>Total:</u></strong>
+                    </span>
+
+                    <span class="dist-total-value">
+                        @Model.Donation.DonationAmount.ToString("C")
+                    </span>
+                </div>
+
+                <div class="dist-default-row">
+                    <span class="dist-default-label">
+                        <strong><u>Default:</u></strong>
+                    </span>
+
+                    <span class="dist-default-box">
+                        <input type="checkbox"
+                               @bind="Model.Donation.IsTemplate"
+                               disabled="@IsAuditView" />
+                    </span>
+                </div>
+            </div>
+
+            @if (Model.IsPastDeadline)
+            {
+                <div class="alert alert-danger">
+                    You may change your contact information, but you have missed the
+                    @FormatDateTime(Model.LockDateTime) deadline to make donation changes online.
+                    Please contact the @Model.OrganizationName office
+                    @if (!string.IsNullOrWhiteSpace(Model.AdminPhone))
+                    {
+                        <span>at @Model.AdminPhone</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.AdminEmail))
+                    {
+                        <span>
+                            or <a href="mailto:@Model.AdminEmail">@Model.AdminEmail</a>
+                        </span>
+                    }.
+                </div>
+            }
+
+            <div class="form-actions-row">
+                <div class="nav-section">
+                    <div class="arrow-buttons">
+                        <button class="btn-arrow"
+                                @onclick="GoOlder"
+                                disabled="@(!CanGoOlder)">
+                            &#9664; Older
+                        </button>
+
+                        <button class="btn-arrow"
+                                @onclick="GoNewer"
+                                disabled="@(!CanGoNewer)">
+                            Newer &#9654;
+                        </button>
+                    </div>
+
+                    <div class="audit-info">
+                        <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">
+                            @(IsAuditView ? AuditDateTime : "Date & Time")
+                        </div>
+
+                        <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">
+                            @(IsAuditView ? AuditUserName : "User Name")
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn-steps"
+                        title="Steps taken with this donation"
+                        @onclick="() => StepsOverlayVisible = true">
+                    <svg viewBox="0 0 40 40"
+                         xmlns="http://www.w3.org/2000/svg"
+                         width="44"
+                         height="44"
+                         aria-hidden="true">
+                        <polyline points="4,36 12,36 12,28 20,28 20,20 28,20 28,12 36,12"
+                                  stroke="#888"
+                                  stroke-width="2.5"
+                                  fill="none" />
+                        <line x1="4" y1="21" x2="14" y2="11"
+                              stroke="#888" stroke-width="2" />
+                        <line x1="14" y1="11" x2="7" y2="11"
+                              stroke="#888" stroke-width="2" />
+                        <line x1="14" y1="11" x2="14" y2="18"
+                              stroke="#888" stroke-width="2" />
+                    </svg>
+                </button>
+
+                <span class="save-btn-wrap"
+                      title="@SaveBlockReason">
+                    <button class="btn-save btn-save-donations"
+                            @onclick="SaveChanges"
+                            disabled="@(IsAuditView || IsSaving || SaveBlockReason is not null)">
+                        <strong>
+                            @(IsSaving
+                                ? "Saving..."
+                                : Model.IsPastDeadline
+                                    ? "Send Changes for Approval"
+                                    : "Click Here to Save")
+                        </strong>
+                    </button>
+                </span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+            {
+                <div class="validation-message">
+                    @ValidationMessage
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (ShowAnonymousConfirmation)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CancelAnonymous">
+        <div class="steps-overlay-panel anon-confirm-panel"
+             @onclick:stopPropagation="true">
+            <p>
+                <strong>
+                    Are you sure you want to change this donation to Anonymous?
+                </strong>
+            </p>
+
+            <p class="anon-confirm-warning">
+                This can't be undone.
+            </p>
+
+            <div class="anon-confirm-buttons">
+                <button class="btn-create"
+                        @onclick="ConfirmAnonymous">
+                    Yes, make Anonymous
+                </button>
+
+                <button class="btn-create"
+                        @onclick="CancelAnonymous">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (StepsOverlayVisible)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="() => StepsOverlayVisible = false">
+        <div class="steps-overlay-panel"
+             @onclick:stopPropagation="true">
+            <div class="steps-overlay-header">
+                <span>Steps Taken With Your Donation</span>
+
+                <button class="steps-overlay-close"
+                        @onclick="() => StepsOverlayVisible = false">
+                    &times;
+                </button>
+            </div>
+
+            @if (Model.Steps.Count == 0)
+            {
+                <p class="steps-overlay-empty">
+                    No steps have been logged for this donation.
+                </p>
+            }
+            else
+            {
+                <table class="steps-table">
+                    <thead>
+                        <tr>
+                            <th>Date / Time</th>
+                            <th>Step ID</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var step in Model.Steps)
+                        {
+                            <tr>
+                                <td>@FormatDateTime(step.DateTimeLogged)</td>
+                                <td>@step.DonationStepID</td>
+                                <td>@step.Description</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public long DonationID { get; set; }
+
+    private readonly JsonSerializerOptions JsonOptions =
+        new()
+        {
+            PropertyNameCaseInsensitive =
+                true
+        };
+
+    private DonorDirectedChangesResponse Model =
+        new();
+
+    private DonorDirectedChangesResponse LiveModel =
+        new();
+
+    private string? AccessToken;
+    private string? ErrorMessage;
+    private string? ValidationMessage;
+    private string AuditDateTime = string.Empty;
+    private string AuditUserName = string.Empty;
+
+    private bool HasInitialized;
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsAuditView;
+    private bool IsAnonymous;
+    private bool ShowAnonymousConfirmation;
+    private bool ShowConfirmation;
+    private bool StepsOverlayVisible;
+    private bool CommentsExpanded;
+    private bool TributeExpanded;
+
+    private int AuditIndex = -1;
+    private int AnonymousCheckboxKey;
+
+    private string AnonymousMessage =>
+        string.IsNullOrWhiteSpace(
+            Model.AnonymousMessage)
+            ? "Your name and contact information will not be shown with this donation."
+            : Model.AnonymousMessage;
+
+    private decimal DistributionTotal =>
+        Model.Distributions.Sum(
+            distribution =>
+                distribution.DistributionAmount);
+
+    private decimal UnallocatedAmount =>
+        decimal.Round(
+            Model.Donation.DonationAmount -
+            DistributionTotal,
+            2,
+            MidpointRounding.AwayFromZero);
+
+    private bool CanGoOlder =>
+        AuditIndex <
+        Model.Audits.Count - 1;
+
+    private bool CanGoNewer =>
+        AuditIndex >= 0;
+
+    private string? SaveBlockReason
+    {
+        get
+        {
+            if (IsAuditView)
+            {
+                return null;
+            }
+
+            if (Model.Distributions.Count == 0 ||
+                Model.Distributions.All(
+                    distribution =>
+                        distribution.DistributionAmount <= 0))
+            {
+                return "Please enter at least one fund allocation.";
+            }
+
+            foreach (var distribution in
+                     Model.Distributions)
+            {
+                if (distribution.DistributionAmount <= 0)
+                {
+                    return "Please enter an amount for each allocation.";
+                }
+
+                if (Model.UseCampuses &&
+                    !distribution.EMACampusID.HasValue)
+                {
+                    return "Please select a campus for each allocation.";
+                }
+
+                if (Model.UseFunds &&
+                    !distribution.EMAFundID.HasValue)
+                {
+                    return "Please select a fund for each allocation.";
+                }
+            }
+
+            if (UnallocatedAmount != 0)
+            {
+                return $"The fund allocations must add up to the donation total. {UnallocatedAmount:C} is still unallocated.";
+            }
+
+            return null;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (HasInitialized)
+        {
+            return;
+        }
+
+        HasInitialized =
+            true;
+
+        AccessToken =
+            GetFragmentToken();
+
+        if (string.IsNullOrWhiteSpace(
+                AccessToken))
+        {
+            SetError(
+                "This donation-change link is invalid or expired.");
+
+            return;
+        }
+
+        await LoadAsync();
+
+        Navigation.NavigateTo(
+            $"/donor-directed-changes/{DonationID}",
+            replace: true);
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            var http =
+                HttpClientFactory.CreateClient(
+                    "DonorHistoryApi");
+
+            using var request =
+                new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"api/donor-directed-changes/{DonationID}");
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue(
+                    "Bearer",
+                    AccessToken);
+
+            using var response =
+                await http.SendAsync(
+                    request);
+
+            if (response.StatusCode ==
+                HttpStatusCode.Unauthorized)
+            {
+                SetError(
+                    "This donation-change link is invalid or expired.");
+
+                return;
+            }
+
+            if (response.StatusCode ==
+                HttpStatusCode.NotFound)
+            {
+                SetError(
+                    "The donation could not be found.");
+
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                SetError(
+                    "Unable to load the donation.");
+
+                return;
+            }
+
+            var result =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        DonorDirectedChangesResponse>(
+                        JsonOptions);
+
+            if (result is null)
+            {
+                SetError(
+                    "Unable to load the donation.");
+
+                return;
+            }
+
+            Model =
+                result;
+
+            if (Model.Distributions.Count == 0)
+            {
+                Model.Distributions.Add(
+                    new DistributionResponse
+                    {
+                        DistributionAmount =
+                            Model.Donation.DonationAmount
+                    });
+            }
+
+            IsAnonymous =
+                Model.IsAnonymous;
+
+            LiveModel =
+                CloneModel(
+                    Model);
+        }
+        catch
+        {
+            SetError(
+                "Unable to load the donation.");
+        }
+        finally
+        {
+            IsLoading =
+                false;
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        if (SaveBlockReason is not null ||
+            IsSaving ||
+            string.IsNullOrWhiteSpace(
+                AccessToken))
+        {
+            return;
+        }
+
+        IsSaving =
+            true;
+
+        ValidationMessage =
+            null;
+
+        try
+        {
+            var payload =
+                new DonorDirectedChangesSaveRequest
+                {
+                    OfficialDonorName =
+                        Model.Donor.OfficialDonorName,
+
+                    Address =
+                        Model.Donor.Address,
+
+                    City =
+                        Model.Donor.City,
+
+                    ProvinceStateCode =
+                        Model.Donor.ProvinceStateCode,
+
+                    PostalCode =
+                        Model.Donor.PostalCode,
+
+                    Country =
+                        Model.Donor.Country,
+
+                    PhoneNumber =
+                        Model.Donor.PhoneNumber,
+
+                    Comments =
+                        Model.Donation.Comments,
+
+                    EMATributeTypeID =
+                        Model.Donation.EMATributeTypeID,
+
+                    TributeText =
+                        Model.Donation.EMATributeTypeID.HasValue
+                            ? Model.Donation.TributeText
+                            : null,
+
+                    IsTemplate =
+                        Model.Donation.IsTemplate,
+
+                    MakeAnonymous =
+                        IsAnonymous,
+
+                    Distributions =
+                        Model.Distributions
+                            .Where(
+                                distribution =>
+                                    distribution.DistributionAmount > 0)
+                            .Select(
+                                CloneDistribution)
+                            .ToList()
+                };
+
+            var http =
+                HttpClientFactory.CreateClient(
+                    "DonorHistoryApi");
+
+            using var request =
+                new HttpRequestMessage(
+                    HttpMethod.Post,
+                    $"api/donor-directed-changes/{DonationID}")
+                {
+                    Content =
+                        JsonContent.Create(
+                            payload)
+                };
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue(
+                    "Bearer",
+                    AccessToken);
+
+            using var response =
+                await http.SendAsync(
+                    request);
+
+            if (response.StatusCode ==
+                HttpStatusCode.Unauthorized)
+            {
+                ValidationMessage =
+                    "This donation-change link is invalid or expired.";
+
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error =
+                    await response.Content
+                        .ReadFromJsonAsync<
+                            ApiErrorResponse>(
+                            JsonOptions);
+
+                ValidationMessage =
+                    error?.Message
+                    ?? "Unable to save the donation changes.";
+
+                return;
+            }
+
+            ShowConfirmation =
+                true;
+        }
+        catch
+        {
+            ValidationMessage =
+                "Unable to save the donation changes.";
+        }
+        finally
+        {
+            IsSaving =
+                false;
+        }
+    }
+
+    private void OnAnonymousChanged(
+        ChangeEventArgs eventArgs)
+    {
+        if (eventArgs.Value is bool isChecked &&
+            isChecked &&
+            !IsAnonymous)
+        {
+            ShowAnonymousConfirmation =
+                true;
+        }
+    }
+
+    private void ConfirmAnonymous()
+    {
+        ShowAnonymousConfirmation =
+            false;
+
+        IsAnonymous =
+            true;
+
+        Model.IsAnonymous =
+            true;
+
+        Model.Donor.OfficialDonorName =
+            "Hidden - Anonymous";
+
+        Model.Donor.InteracDonorName =
+            "Hidden - Anonymous";
+
+        Model.Donor.Address =
+            string.Empty;
+
+        Model.Donor.City =
+            string.Empty;
+
+        Model.Donor.ProvinceStateCode =
+            string.Empty;
+
+        Model.Donor.PostalCode =
+            string.Empty;
+
+        Model.Donor.Country =
+            string.Empty;
+
+        Model.Donor.EmailAddress =
+            string.Empty;
+
+        Model.Donor.PhoneNumber =
+            string.Empty;
+    }
+
+    private void CancelAnonymous()
+    {
+        ShowAnonymousConfirmation =
+            false;
+
+        AnonymousCheckboxKey++;
+    }
+
+    private void AddDistribution()
+    {
+        Model.Distributions.Add(
+            new DistributionResponse());
+    }
+
+    private void RemoveDistribution(
+        DistributionResponse distribution)
+    {
+        if (Model.Distributions.Count <= 1)
+        {
+            return;
+        }
+
+        Model.Distributions.Remove(
+            distribution);
+    }
+
+    private static void OnDistributionAmountChanged(
+        DistributionResponse distribution,
+        ChangeEventArgs eventArgs)
+    {
+        var amount =
+            decimal.TryParse(
+                eventArgs.Value?.ToString(),
+                System.Globalization.NumberStyles.Currency,
+                System.Globalization.CultureInfo.CurrentCulture,
+                out var parsed)
+                ? parsed
+                : 0;
+
+        distribution.DistributionAmount =
+            Math.Clamp(
+                amount,
+                0,
+                99_999_999.99m);
+    }
+
+    private void GoOlder()
+    {
+        if (!CanGoOlder)
+        {
+            return;
+        }
+
+        AuditIndex++;
+
+        LoadAudit(
+            Model.Audits[
+                AuditIndex]);
+    }
+
+    private void GoNewer()
+    {
+        if (!CanGoNewer)
+        {
+            return;
+        }
+
+        if (AuditIndex == 0)
+        {
+            AuditIndex =
+                -1;
+
+            IsAuditView =
+                false;
+
+            AuditDateTime =
+                string.Empty;
+
+            AuditUserName =
+                string.Empty;
+
+            Model =
+                CloneModel(
+                    LiveModel);
+
+            IsAnonymous =
+                Model.IsAnonymous;
+
+            return;
+        }
+
+        AuditIndex--;
+
+        LoadAudit(
+            Model.Audits[
+                AuditIndex]);
+    }
+
+    private void LoadAudit(
+        AuditResponse audit)
+    {
+        IsAuditView =
+            true;
+
+        AuditDateTime =
+            FormatDateTime(
+                audit.DateTimeCreated);
+
+        AuditUserName =
+            string.IsNullOrWhiteSpace(
+                audit.UserName)
+                ? "Donor"
+                : audit.UserName;
+
+        if (string.IsNullOrWhiteSpace(
+                audit.Payload))
+        {
+            return;
+        }
+
+        try
+        {
+            var snapshot =
+                JsonSerializer.Deserialize<
+                    AuditSnapshot>(
+                    audit.Payload,
+                    JsonOptions);
+
+            if (snapshot?.Donor is not null)
+            {
+                Model.Donor =
+                    snapshot.Donor;
+            }
+
+            if (snapshot?.Donation is not null)
+            {
+                Model.Donation =
+                    snapshot.Donation;
+            }
+
+            if (snapshot?.Distributions is
+                { Count: > 0 })
+            {
+                Model.Distributions =
+                    snapshot.Distributions;
+            }
+        }
+        catch (JsonException)
+        {
+            // Older audit payloads may not contain a full editable snapshot.
+        }
+    }
+
+    private string? GetFragmentToken()
+    {
+        var fragment =
+            new Uri(
+                Navigation.Uri)
+                .Fragment;
+
+        const string prefix =
+            "#token=";
+
+        if (!fragment.StartsWith(
+                prefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Uri.UnescapeDataString(
+                fragment[
+                    prefix.Length..]);
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    private string FormatDateTime(
+        DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var dateFormat =
+            string.IsNullOrWhiteSpace(
+                Model.DateFormat)
+                ? "yyyy-MM-dd"
+                : Model.DateFormat;
+
+        try
+        {
+            return value.Value.ToString(
+                $"{dateFormat} HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            return value.Value.ToString(
+                "yyyy-MM-dd HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private string FormatDate(
+        DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var dateFormat =
+            string.IsNullOrWhiteSpace(
+                Model.DateFormat)
+                ? "yyyy-MM-dd"
+                : Model.DateFormat;
+
+        try
+        {
+            return value.Value.ToString(
+                dateFormat,
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            return value.Value.ToString(
+                "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private void SetError(
+        string message)
+    {
+        ErrorMessage =
+            message;
+
+        IsLoading =
+            false;
+    }
+
+    private DonorDirectedChangesResponse CloneModel(
+        DonorDirectedChangesResponse source)
+    {
+        return JsonSerializer.Deserialize<
+                   DonorDirectedChangesResponse>(
+                   JsonSerializer.Serialize(
+                       source,
+                       JsonOptions),
+                   JsonOptions)
+               ?? new DonorDirectedChangesResponse();
+    }
+
+    private static DistributionResponse CloneDistribution(
+        DistributionResponse source)
+    {
+        return new DistributionResponse
+        {
+            EMACampusID =
+                source.EMACampusID,
+
+            EMAFundID =
+                source.EMAFundID,
+
+            DistributionAmount =
+                source.DistributionAmount
+        };
+    }
+
+    private sealed class DonorDirectedChangesSaveRequest
+    {
+        public string? OfficialDonorName { get; set; }
+        public string? Address { get; set; }
+        public string? City { get; set; }
+        public string? ProvinceStateCode { get; set; }
+        public string? PostalCode { get; set; }
+        public string? Country { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Comments { get; set; }
+        public int? EMATributeTypeID { get; set; }
+        public string? TributeText { get; set; }
+        public bool IsTemplate { get; set; }
+        public bool MakeAnonymous { get; set; }
+
+        public List<DistributionResponse> Distributions { get; set; } =
+            [];
+    }
+
+    private sealed class DonorDirectedChangesResponse
+    {
+        public string OrganizationName { get; set; } =
+            string.Empty;
+
+        public string? AdminEmail { get; set; }
+        public string? AdminPhone { get; set; }
+        public bool UseCampuses { get; set; }
+        public bool UseFunds { get; set; }
+        public bool UseTributeTypes { get; set; }
+        public bool UseAnonymous { get; set; }
+        public int? AnonymousDonorID { get; set; }
+        public string AnonymousMessage { get; set; } =
+            string.Empty;
+
+        public string DateFormat { get; set; } =
+            "yyyy-MM-dd";
+
+        public bool IsAnonymous { get; set; }
+        public bool IsPastDeadline { get; set; }
+        public DateTime? LockDateTime { get; set; }
+        public DonorResponse Donor { get; set; } = new();
+        public DonationResponse Donation { get; set; } = new();
+        public List<LookupResponse> TributeTypes { get; set; } = [];
+        public List<LookupResponse> Campuses { get; set; } = [];
+        public List<LookupResponse> Funds { get; set; } = [];
+        public List<DistributionResponse> Distributions { get; set; } = [];
+        public List<StepResponse> Steps { get; set; } = [];
+        public List<AuditResponse> Audits { get; set; } = [];
+    }
+
+    private sealed class DonorResponse
+    {
+        public int EMADonorID { get; set; }
+        public string? OfficialDonorName { get; set; }
+        public string? InteracDonorName { get; set; }
+        public string? EmailAddress { get; set; }
+        public string? Address { get; set; }
+        public string? City { get; set; }
+        public string? ProvinceStateCode { get; set; }
+        public string? PostalCode { get; set; }
+        public string? Country { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+
+    private sealed class DonationResponse
+    {
+        public string? ReferenceNumber { get; set; }
+        public DateTime? DateTimeReceived { get; set; }
+        public string? Comments { get; set; }
+        public string? TributeText { get; set; }
+        public int? EMATributeTypeID { get; set; }
+        public decimal DonationAmount { get; set; }
+        public bool IsTemplate { get; set; }
+    }
+
+    private sealed class LookupResponse
+    {
+        public int ID { get; set; }
+        public string Description { get; set; } =
+            string.Empty;
+    }
+
+    private sealed class DistributionResponse
+    {
+        public int? EMACampusID { get; set; }
+        public int? EMAFundID { get; set; }
+        public decimal DistributionAmount { get; set; }
+    }
+
+    private sealed class StepResponse
+    {
+        public int DonationStepID { get; set; }
+        public string Description { get; set; } =
+            string.Empty;
+
+        public DateTime? DateTimeLogged { get; set; }
+    }
+
+    private sealed class AuditResponse
+    {
+        public DateTime? DateTimeCreated { get; set; }
+        public string UserName { get; set; } =
+            string.Empty;
+
+        public string? Payload { get; set; }
+    }
+
+    private sealed class AuditSnapshot
+    {
+        public DonorResponse? Donor { get; set; }
+        public DonationResponse? Donation { get; set; }
+        public List<DistributionResponse>? Distributions { get; set; }
+    }
+
+    private sealed class ApiErrorResponse
+    {
+        public string? Message { get; set; }
+    }
+}

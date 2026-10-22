@@ -1,0 +1,375 @@
+@implements IDisposable
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject IScreenActionUiState ScreenActionUiState
+@inject NavigationManager Navigation
+
+@if (SessionState.CurrentSession is not null)
+{
+    @if (_isOpen)
+    {
+        <div class="category-switcher-dismiss-layer"
+             aria-hidden="true"
+             @onclick="CloseMenu"></div>
+    }
+
+    <div class="category-switcher">
+        <button type="button"
+                class="category-switcher-toggle"
+                title="Open menu"
+                aria-label="Open menu"
+                aria-haspopup="menu"
+                aria-expanded="@_isOpen"
+                @onclick="ToggleMenu">
+
+            <i class="bi bi-list category-switcher-icon"
+               aria-hidden="true"></i>
+        </button>
+
+        @if (_isOpen)
+        {
+            <div class="category-switcher-dropdown"
+                 role="menu"
+                 aria-label="User menu">
+
+                @if (CanEnterScreenActions)
+                {
+                    <div class="category-switcher-heading">
+                        Enter
+                    </div>
+
+                    <button type="button"
+                            class="category-switcher-option"
+                            role="menuitem"
+                            @onclick="@(() => OpenEntry(ScreenEntryKind.Faq))">
+                        Your Own FAQ
+                    </button>
+                    <button type="button"
+                            class="category-switcher-option"
+                            role="menuitem"
+                            @onclick="@(() => OpenEntry(ScreenEntryKind.Enhancement))">
+                        An Enhancement Request
+                    </button>
+                    <button type="button"
+                            class="category-switcher-option"
+                            role="menuitem"
+                            @onclick="@(() => OpenEntry(ScreenEntryKind.Support))">
+                        A Support Request
+                    </button>
+
+                    <div class="category-switcher-divider"></div>
+                }
+
+                @if (OtherCategories.Count > 0)
+                {
+                    <div class="category-switcher-heading">
+                        Switch to
+                    </div>
+
+                    @foreach (var category in OtherCategories)
+                    {
+                        <button type="button"
+                                class="category-switcher-option"
+                                role="menuitem"
+                                @onclick="@(() => SwitchCategoryAsync(category.CategoryID))">
+
+                            @category.CategoryName
+                        </button>
+                    }
+
+                    <div class="category-switcher-divider"></div>
+                }
+
+                <button type="button"
+                        class="category-switcher-option category-switcher-logout"
+                        role="menuitem"
+                        @onclick="LogOutAsync">
+                    Log out
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public MenuItemDto? CurrentMenuItem { get; set; }
+
+    private readonly Dictionary<int, string>
+        _categoryNames = new();
+
+    private bool _isOpen;
+    private bool _disposed;
+    private int _categoryLoadVersion;
+
+    private bool CanEnterScreenActions =>
+        SessionState.CurrentSession is { IsDonorSession: false } &&
+        CurrentMenuItem?.MenuItemID > 0;
+
+    private IReadOnlyList<CategoryOption> OtherCategories
+    {
+        get
+        {
+            var session =
+                SessionState.CurrentSession;
+
+            if (session is null)
+            {
+                return Array.Empty<CategoryOption>();
+            }
+
+            return session
+                .AllowedCategoryIDs
+                .Distinct()
+                .Where(categoryID =>
+                    categoryID != session.CurrentCategoryID)
+                .Select(categoryID =>
+                    new CategoryOption(
+                        categoryID,
+                        GetLoadedCategoryName(
+                            categoryID)))
+                .OrderBy(category =>
+                    category.CategoryID)
+                .ToList();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        SessionState.OnChange +=
+            HandleSessionChanged;
+
+        _ = LoadCategoryNamesAsync();
+    }
+
+    private void ToggleMenu()
+    {
+        _isOpen =
+            !_isOpen;
+    }
+
+    private void CloseMenu()
+    {
+        _isOpen = false;
+    }
+
+    private void OpenEntry(ScreenEntryKind kind)
+    {
+        var menuItemID =
+            CurrentMenuItem?.MenuItemID ?? 0;
+
+        _isOpen = false;
+
+        if (menuItemID > 0)
+        {
+            ScreenActionUiState.RequestEntry(
+                kind,
+                menuItemID);
+        }
+    }
+
+    private async Task SwitchCategoryAsync(
+        int categoryID)
+    {
+        var switched =
+            await SessionState
+                .TrySwitchCategoryAsync(
+                    categoryID);
+
+        if (!switched)
+        {
+            return;
+        }
+
+        _isOpen = false;
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            Navigation.NavigateTo(
+                "/login",
+                replace: true);
+
+            return;
+        }
+
+        var landingPage =
+            session.IsDonorSession
+                ? await CategoryLandingPageService
+                    .GetDonorLandingPageAsync(
+                        session.EMAOrganizationID,
+                        session.ActorID,
+                        categoryID)
+                : await CategoryLandingPageService
+                    .GetLandingPageAsync(
+                        session.EMAOrganizationID,
+                        session.UserID,
+                        categoryID);
+
+        StoreCategoryName(
+            landingPage);
+
+        if (!IsUnavailableLandingUrl(
+                landingPage.Url))
+        {
+            Navigation.NavigateTo(
+                landingPage.Url,
+                replace: true);
+        }
+    }
+
+    private async Task LoadCategoryNamesAsync()
+    {
+        var loadVersion =
+            ++_categoryLoadVersion;
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            _categoryNames.Clear();
+
+            if (!_disposed)
+            {
+                await InvokeAsync(
+                    StateHasChanged);
+            }
+
+            return;
+        }
+
+        var loadedNames =
+            new Dictionary<int, string>();
+
+        foreach (var categoryID in session
+                     .AllowedCategoryIDs
+                     .Distinct())
+        {
+            var landingPage =
+                session.IsDonorSession
+                    ? await CategoryLandingPageService
+                        .GetDonorLandingPageAsync(
+                            session.EMAOrganizationID,
+                            session.ActorID,
+                            categoryID)
+                    : await CategoryLandingPageService
+                        .GetLandingPageAsync(
+                            session.EMAOrganizationID,
+                            session.UserID,
+                            categoryID);
+
+            if (!string.IsNullOrWhiteSpace(
+                    landingPage.CategoryName))
+            {
+                loadedNames[categoryID] =
+                    landingPage.CategoryName.Trim();
+            }
+        }
+
+        if (_disposed ||
+            loadVersion != _categoryLoadVersion)
+        {
+            return;
+        }
+
+        _categoryNames.Clear();
+
+        foreach (var item in loadedNames)
+        {
+            _categoryNames[item.Key] =
+                item.Value;
+        }
+
+        await InvokeAsync(
+            StateHasChanged);
+    }
+
+    private void StoreCategoryName(
+        CategoryLandingPageResult landingPage)
+    {
+        if (string.IsNullOrWhiteSpace(
+                landingPage.CategoryName))
+        {
+            return;
+        }
+
+        _categoryNames[landingPage.CategoryID] =
+            landingPage.CategoryName.Trim();
+    }
+
+    private string GetLoadedCategoryName(
+        int categoryID)
+    {
+        return _categoryNames.TryGetValue(
+            categoryID,
+            out var categoryName)
+                ? categoryName
+                : $"Category {categoryID}";
+    }
+
+    private static bool IsUnavailableLandingUrl(
+        string? landingUrl)
+    {
+        if (string.IsNullOrWhiteSpace(
+                landingUrl))
+        {
+            return true;
+        }
+
+        var normalized =
+            landingUrl.Trim().TrimEnd('/');
+
+        return normalized.Equals(
+                   "/access-denied",
+                   StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals(
+                   "/app",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LogOutAsync()
+    {
+        _isOpen = false;
+
+        // Move to the public landing page before clearing the session.
+        // This prevents a protected-route guard from racing the logout.
+        Navigation.NavigateTo(
+            "/about",
+            replace: true);
+
+        await Task.Yield();
+
+        OrganizationState.Clear();
+
+        await SessionState
+            .SignOutAsync();
+    }
+
+    private void HandleSessionChanged()
+    {
+        _isOpen = false;
+
+        _ = LoadCategoryNamesAsync();
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _categoryLoadVersion++;
+
+        SessionState.OnChange -=
+            HandleSessionChanged;
+    }
+
+    private sealed record CategoryOption(
+        int CategoryID,
+        string CategoryName);
+}

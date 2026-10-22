@@ -1,0 +1,1123 @@
+@page "/banks"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@implements IDisposable
+@inject IBanksService BanksService
+
+<PageTitle>Banks - EMA</PageTitle>
+
+<div class="container-fluid px-4 py-2 banks-container">
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+            <div>@_error</div>
+            <button type="button" class="btn-close" @onclick="() => _error = null" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-content-center align-items-center my-5 py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-3 text-muted">Loading bank configuration data...</span>
+        </div>
+    }
+    else
+    {
+        <div class="banks-vertical-stack d-flex flex-column gap-4">
+            <!-- Section 1: Banks List -->
+            <div class="card banks-card">
+                <div class="banks-card-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="banks-card-title">1. Banks</span>
+                        <span class="badge bg-secondary">
+                            @(string.IsNullOrWhiteSpace(_bankSearchText) ? $"{_lookups.Banks.Count}" : $"{FilteredBanks.Count} of {_lookups.Banks.Count}")
+                        </span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 banks-header-controls">
+                        <div class="banks-search-wrap">
+                            <input class="form-control form-control-sm banks-search-input" 
+                                   type="text" 
+                                   placeholder="Search banks..." 
+                                   value="@_bankSearchText" 
+                                   @oninput="(e) => _bankSearchText = e.Value?.ToString() ?? string.Empty" />
+                            @if (!string.IsNullOrWhiteSpace(_bankSearchText))
+                            {
+                                <button type="button" class="banks-search-clear-btn" @onclick="() => _bankSearchText = string.Empty">&times;</button>
+                            }
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary banks-add-btn text-nowrap" @onclick="OpenAddBank" disabled="@_savingBank">
+                            + Add Bank
+                        </button>
+                    </div>
+                </div>
+
+                @if (_showAddBank)
+                {
+                    <div class="banks-add-panel">
+                        <h6 class="fw-bold mb-2">Add New Bank</h6>
+                        @if (!string.IsNullOrWhiteSpace(_addBankError))
+                        {
+                            <div class="alert alert-danger py-2 mb-2"><small>@_addBankError</small></div>
+                        }
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm mb-1">Bank ID <span class="text-danger">*</span></label>
+                            <input class="form-control form-control-sm" maxlength="6" placeholder="e.g. TD" @bind="_newBank.BankID" />
+                            <small class="text-muted">Max 6 characters.</small>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label form-label-sm mb-1">Bank Name <span class="text-danger">*</span></label>
+                            <input class="form-control form-control-sm" maxlength="50" placeholder="e.g. TD Canada Trust" @bind="_newBank.Name" />
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input banks-checkbox" type="checkbox" id="addBankActive" @bind="_newBank.IsActive" />
+                            <label class="form-check-label ms-1" for="addBankActive">Active</label>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-primary" @onclick="SaveBankAsync" disabled="@_savingBank">
+                                @(_savingBank ? "Saving..." : "Save")
+                            </button>
+                            <button class="btn btn-sm btn-secondary" @onclick="() => _showAddBank = false" disabled="@_savingBank">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                }
+
+                <div class="card-body p-0">
+                    <div class="banks-table-scroll">
+                        <table class="banks-table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%;">Bank ID</th>
+                                    <th>Name</th>
+                                    <th style="width: 12%;" class="text-center">Active</th>
+                                    <th style="width: 15%;" class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (FilteredBanks.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="4" class="text-muted text-center py-4">
+                                            @if (!string.IsNullOrWhiteSpace(_bankSearchText))
+                                            {
+                                                <span>No banks match "@_bankSearchText". <button type="button" class="btn btn-link p-0 align-baseline" @onclick="() => _bankSearchText = string.Empty">Clear search</button></span>
+                                            }
+                                            else
+                                            {
+                                                <span>No banks configured.</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    @foreach (var bank in FilteredBanks)
+                                    {
+                                        var isSelected = bank.BankID == _selectedBank?.BankID;
+                                        var isEditing = _editingBankId == bank.BankID;
+                                        <tr class="@(isSelected ? "banks-row-selected" : "")" 
+                                            style="cursor: pointer;" 
+                                            @onclick="() => SelectBank(bank)">
+                                            <td class="fw-semibold">@bank.BankID</td>
+                                            <td>
+                                                @if (isEditing)
+                                                {
+                                                    <div @onclick:stopPropagation="true">
+                                                        <input class="form-control form-control-sm" maxlength="50" @bind="_editBankName" />
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span>@bank.Name</span>
+                                                }
+                                            </td>
+                                            <td class="text-center" @onclick:stopPropagation="true">
+                                                <input type="checkbox" 
+                                                       class="form-check-input banks-checkbox"
+                                                       checked="@bank.IsActive"
+                                                       disabled="@_isMutating"
+                                                       @onchange="(e) => ToggleBankActiveAsync(bank, e)" />
+                                            </td>
+                                            <td class="text-center" @onclick:stopPropagation="true">
+                                                @if (isEditing)
+                                                {
+                                                    <div class="d-flex justify-content-center gap-1">
+                                                        <button class="btn btn-sm btn-primary py-0 px-2" @onclick="() => SaveEditBankAsync(bank)" disabled="@_isSavingEdit">
+                                                            @(_isSavingEdit ? "..." : "Save")
+                                                        </button>
+                                                        <button class="btn btn-sm btn-secondary py-0 px-2" @onclick="CancelEditBank" disabled="@_isSavingEdit">
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="() => StartEditBank(bank)" disabled="@_isMutating">
+                                                        Edit
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Bank Transaction Types -->
+            <div class="card banks-card">
+                <div class="banks-card-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (_selectedBank == null)
+                        {
+                            <span class="banks-card-title">2. Transaction Types</span>
+                        }
+                        else
+                        {
+                            <span class="banks-card-title">2. Transaction Types for <strong>@_selectedBank.Name (@_selectedBank.BankID)</strong></span>
+                            <span class="badge bg-secondary">
+                                @(string.IsNullOrWhiteSpace(_typeSearchText) 
+                                    ? $"{_lookups.BankTransactionTypes.Count(t => t.BankId == _selectedBank.BankID)}" 
+                                    : $"{FilteredBankTransactionTypes.Count} of {_lookups.BankTransactionTypes.Count(t => t.BankId == _selectedBank.BankID)}")
+                            </span>
+                        }
+                    </div>
+                    @if (_selectedBank != null)
+                    {
+                        <div class="d-flex align-items-center gap-2 banks-header-controls">
+                            <div class="banks-search-wrap">
+                                <input class="form-control form-control-sm banks-search-input" 
+                                       type="text" 
+                                       placeholder="Search types..." 
+                                       value="@_typeSearchText" 
+                                       @oninput="(e) => _typeSearchText = e.Value?.ToString() ?? string.Empty" />
+                                @if (!string.IsNullOrWhiteSpace(_typeSearchText))
+                                {
+                                    <button type="button" class="banks-search-clear-btn" @onclick="() => _typeSearchText = string.Empty">&times;</button>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary banks-add-btn text-nowrap" @onclick="OpenAddType" disabled="@_savingType">
+                                + Add Type
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                @if (_selectedBank == null)
+                {
+                    <div class="banks-prompt-panel p-4 text-center text-muted">
+                        Select a bank from Section 1 above to view its transaction types.
+                    </div>
+                }
+                else
+                {
+                    @if (_showAddType)
+                    {
+                        <div class="banks-add-panel">
+                            <h6 class="fw-bold mb-2">Add Transaction Type for @_selectedBank.Name</h6>
+                            @if (!string.IsNullOrWhiteSpace(_addTypeError))
+                            {
+                                <div class="alert alert-danger py-2 mb-2"><small>@_addTypeError</small></div>
+                            }
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1">Bank</label>
+                                <input class="form-control form-control-sm" value="@($"{_selectedBank.BankID} ({_selectedBank.Name})")" disabled />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1">Transaction Type <span class="text-danger">*</span></label>
+                                <select class="form-select form-select-sm" @bind="_newType.TransactionTypeID">
+                                    <option value="">-- Select Type --</option>
+                                    @foreach (var tt in _lookups.TransactionTypes)
+                                    {
+                                        <option value="@tt.TransactionTypeID">@tt.TransactionTypeID (@tt.Description)</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1">Instructions URL</label>
+                                <input class="form-control form-control-sm" maxlength="256" placeholder="https://..." @bind="_newType.InstructionsURL" />
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input banks-checkbox" type="checkbox" id="addTypeActive" @bind="_newType.IsActive" />
+                                <label class="form-check-label ms-1" for="addTypeActive">Active</label>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-primary" @onclick="SaveTransactionTypeAsync" disabled="@_savingType">
+                                    @(_savingType ? "Saving..." : "Save")
+                                </button>
+                                <button class="btn btn-sm btn-secondary" @onclick="() => _showAddType = false" disabled="@_savingType">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card-body p-0">
+                        <div class="banks-table-scroll">
+                            <table class="banks-table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 15%;">Bank</th>
+                                        <th style="width: 15%;">Type</th>
+                                        <th>Instructions URL</th>
+                                        <th style="width: 12%;" class="text-center">Active</th>
+                                        <th style="width: 15%;" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (FilteredBankTransactionTypes.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-muted text-center py-4">
+                                                @if (!string.IsNullOrWhiteSpace(_typeSearchText))
+                                                {
+                                                    <span>No transaction types match "@_typeSearchText". <button type="button" class="btn btn-link p-0 align-baseline" @onclick="() => _typeSearchText = string.Empty">Clear search</button></span>
+                                                }
+                                                else
+                                                {
+                                                    <span>No transaction types configured for @_selectedBank.Name. Click "+ Add Type" to add one.</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var item in FilteredBankTransactionTypes)
+                                        {
+                                            var isSelected = item.BankTransactionTypeID == _selectedType?.BankTransactionTypeID;
+                                            var isEditing = _editingTypeId == item.BankTransactionTypeID;
+                                            <tr class="@(isSelected ? "banks-row-selected" : "")"
+                                                style="cursor: pointer;"
+                                                @onclick="() => SelectType(item)">
+                                                <td class="fw-semibold">@item.BankId</td>
+                                                <td>
+                                                    <span class="banks-badge banks-badge-type">
+                                                        @item.TransactionTypeID
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    @if (isEditing)
+                                                    {
+                                                        <div @onclick:stopPropagation="true">
+                                                            <input class="form-control form-control-sm" maxlength="256" placeholder="https://..." @bind="_editTypeUrl" />
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        @if (!string.IsNullOrWhiteSpace(item.InstructionsURL))
+                                                        {
+                                                            <a href="@item.InstructionsURL" target="_blank" rel="noopener noreferrer" class="text-truncate d-inline-block text-decoration-none" style="max-width: 240px;" title="@item.InstructionsURL" @onclick:stopPropagation="true">
+                                                                @item.InstructionsURL
+                                                            </a>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">—</span>
+                                                        }
+                                                    }
+                                                </td>
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    <input type="checkbox" 
+                                                           class="form-check-input banks-checkbox"
+                                                           checked="@item.IsActive"
+                                                           disabled="@_isMutating"
+                                                           @onchange="(e) => ToggleTypeActiveAsync(item, e)" />
+                                                </td>
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    @if (isEditing)
+                                                    {
+                                                        <div class="d-flex justify-content-center gap-1">
+                                                            <button class="btn btn-sm btn-primary py-0 px-2" @onclick="() => SaveEditTypeAsync(item)" disabled="@_isSavingEdit">
+                                                                @(_isSavingEdit ? "..." : "Save")
+                                                            </button>
+                                                            <button class="btn btn-sm btn-secondary py-0 px-2" @onclick="CancelEditType" disabled="@_isSavingEdit">
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="() => StartEditType(item)" disabled="@_isMutating">
+                                                            Edit
+                                                        </button>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Section 3: Bank Key Phrases -->
+            <div class="card banks-card">
+                <div class="banks-card-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        @if (_selectedType == null)
+                        {
+                            <span class="banks-card-title">3. Statement Key Phrases</span>
+                        }
+                        else
+                        {
+                            <span class="banks-card-title">3. Statement Key Phrases for <strong>@_selectedBank?.BankID - @_selectedType.TransactionTypeID</strong></span>
+                            <span class="badge bg-secondary">
+                                @(string.IsNullOrWhiteSpace(_phraseSearchText)
+                                    ? $"{_lookups.KeyPhrases.Count(p => p.BankTransactionTypeID == _selectedType.BankTransactionTypeID)}"
+                                    : $"{FilteredKeyPhrases.Count} of {_lookups.KeyPhrases.Count(p => p.BankTransactionTypeID == _selectedType.BankTransactionTypeID)}")
+                            </span>
+                        }
+                    </div>
+                    @if (_selectedType != null)
+                    {
+                        <div class="d-flex align-items-center gap-2 banks-header-controls">
+                            <div class="banks-search-wrap">
+                                <input class="form-control form-control-sm banks-search-input" 
+                                       type="text" 
+                                       placeholder="Search key phrases..." 
+                                       value="@_phraseSearchText" 
+                                       @oninput="(e) => _phraseSearchText = e.Value?.ToString() ?? string.Empty" />
+                                @if (!string.IsNullOrWhiteSpace(_phraseSearchText))
+                                {
+                                    <button type="button" class="banks-search-clear-btn" @onclick="() => _phraseSearchText = string.Empty">&times;</button>
+                                }
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary banks-add-btn text-nowrap" @onclick="OpenAddKeyPhrase" disabled="@_savingKeyPhrase">
+                                + Add Key Phrase
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                @if (_selectedType == null)
+                {
+                    <div class="banks-prompt-panel p-4 text-center text-muted">
+                        Select a transaction type from Section 2 above to view its statement key phrases.
+                    </div>
+                }
+                else
+                {
+                    @if (_showAddKeyPhrase)
+                    {
+                        <div class="banks-add-panel">
+                            <h6 class="fw-bold mb-2">Add Key Phrase for @_selectedBank?.BankID - @_selectedType.TransactionTypeID</h6>
+                            @if (!string.IsNullOrWhiteSpace(_addKeyPhraseError))
+                            {
+                                <div class="alert alert-danger py-2 mb-2"><small>@_addKeyPhraseError</small></div>
+                            }
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1">Bank Transaction Type</label>
+                                <input class="form-control form-control-sm" value="@($"{_selectedBank?.BankID} - {_selectedType.TransactionTypeID}")" disabled />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1">Key Phrase <span class="text-danger">*</span></label>
+                                <input class="form-control form-control-sm" maxlength="100" placeholder="e.g. ONLINE TRANSFER RECEIVED" @bind="_newPhrase.KeyPhrase" />
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input banks-checkbox" type="checkbox" id="addPhraseActive" @bind="_newPhrase.IsActive" />
+                                <label class="form-check-label ms-1" for="addPhraseActive">Active</label>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-primary" @onclick="SaveKeyPhraseAsync" disabled="@_savingKeyPhrase">
+                                    @(_savingKeyPhrase ? "Saving..." : "Save")
+                                </button>
+                                <button class="btn btn-sm btn-secondary" @onclick="() => _showAddKeyPhrase = false" disabled="@_savingKeyPhrase">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card-body p-0">
+                        <div class="banks-table-scroll">
+                            <table class="banks-table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 15%;">Bank</th>
+                                        <th style="width: 15%;">Type</th>
+                                        <th>Key Phrase</th>
+                                        <th style="width: 12%;" class="text-center">Active</th>
+                                        <th style="width: 15%;" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (FilteredKeyPhrases.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-muted text-center py-4">
+                                                @if (!string.IsNullOrWhiteSpace(_phraseSearchText))
+                                                {
+                                                    <span>No key phrases match "@_phraseSearchText". <button type="button" class="btn btn-link p-0 align-baseline" @onclick="() => _phraseSearchText = string.Empty">Clear search</button></span>
+                                                }
+                                                else
+                                                {
+                                                    <span>No key phrases configured for this transaction type yet. Click "+ Add Key Phrase" to add one.</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var phrase in FilteredKeyPhrases)
+                                        {
+                                            var isEditing = _editingPhraseId == phrase.BankTransactionTypeKeyPhraseID;
+                                            <tr>
+                                                <td class="fw-semibold">@phrase.BankId</td>
+                                                <td>
+                                                    <span class="banks-badge banks-badge-type">
+                                                        @phrase.TransactionTypeID
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    @if (isEditing)
+                                                    {
+                                                        <div @onclick:stopPropagation="true">
+                                                            <input class="form-control form-control-sm" maxlength="100" @bind="_editPhraseText" />
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="banks-keyphrase-code">@phrase.KeyPhrase</span>
+                                                    }
+                                                </td>
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    <input type="checkbox" 
+                                                           class="form-check-input banks-checkbox"
+                                                           checked="@phrase.IsActive"
+                                                           disabled="@_isMutating"
+                                                           @onchange="(e) => ToggleKeyPhraseActiveAsync(phrase, e)" />
+                                                </td>
+                                                <td class="text-center" @onclick:stopPropagation="true">
+                                                    @if (isEditing)
+                                                    {
+                                                        <div class="d-flex justify-content-center gap-1">
+                                                            <button class="btn btn-sm btn-primary py-0 px-2" @onclick="() => SaveEditPhraseAsync(phrase)" disabled="@_isSavingEdit">
+                                                                @(_isSavingEdit ? "..." : "Save")
+                                                            </button>
+                                                            <button class="btn btn-sm btn-secondary py-0 px-2" @onclick="CancelEditPhrase" disabled="@_isSavingEdit">
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="() => StartEditPhrase(phrase)" disabled="@_isMutating">
+                                                            Edit
+                                                        </button>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private BankLookupsModel _lookups = new();
+    private bool _loading = true;
+    private bool _isMutating;
+    private string? _error;
+
+    private BankModel? _selectedBank;
+    private BankTransactionTypeModel? _selectedType;
+
+    private string? _editingBankId;
+    private string _editBankName = string.Empty;
+
+    private int? _editingTypeId;
+    private string _editTypeUrl = string.Empty;
+
+    private int? _editingPhraseId;
+    private string _editPhraseText = string.Empty;
+
+    private bool _isSavingEdit;
+
+    private string _bankSearchText = string.Empty;
+    private string _typeSearchText = string.Empty;
+    private string _phraseSearchText = string.Empty;
+
+    private List<BankModel> FilteredBanks
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_bankSearchText))
+            {
+                return _lookups.Banks;
+            }
+
+            var query = _bankSearchText.Trim();
+            return _lookups.Banks.Where(b =>
+                b.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                b.BankID.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                BankHasMatchingPhrase(b.BankID, query)
+            ).ToList();
+        }
+    }
+
+    private List<BankTransactionTypeModel> FilteredBankTransactionTypes
+    {
+        get
+        {
+            if (_selectedBank == null)
+            {
+                return new List<BankTransactionTypeModel>();
+            }
+
+            var types = _lookups.BankTransactionTypes.Where(t => t.BankId == _selectedBank.BankID);
+
+            if (!string.IsNullOrWhiteSpace(_typeSearchText))
+            {
+                var query = _typeSearchText.Trim();
+                types = types.Where(t =>
+                    t.TransactionTypeID.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    t.TransactionTypeDescription.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    (t.InstructionsURL != null && t.InstructionsURL.Contains(query, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            return types.ToList();
+        }
+    }
+
+    private List<BankKeyPhraseModel> FilteredKeyPhrases
+    {
+        get
+        {
+            if (_selectedType == null)
+            {
+                return new List<BankKeyPhraseModel>();
+            }
+
+            var phrases = _lookups.KeyPhrases.Where(p => p.BankTransactionTypeID == _selectedType.BankTransactionTypeID);
+
+            if (!string.IsNullOrWhiteSpace(_phraseSearchText))
+            {
+                var query = _phraseSearchText.Trim();
+                phrases = phrases.Where(p => p.KeyPhrase.Contains(query, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return phrases.ToList();
+        }
+    }
+
+    private bool BankHasMatchingPhrase(string bankId, string query)
+    {
+        return _lookups.KeyPhrases.Any(p =>
+            string.Equals(p.BankId, bankId, StringComparison.OrdinalIgnoreCase) &&
+            p.KeyPhrase.Contains(query, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // Form states
+    private bool _showAddBank;
+    private bool _savingBank;
+    private string? _addBankError;
+    private CreateBankModel _newBank = new();
+
+    private bool _showAddType;
+    private bool _savingType;
+    private string? _addTypeError;
+    private CreateBankTransactionTypeModel _newType = new();
+
+    private bool _showAddKeyPhrase;
+    private bool _savingKeyPhrase;
+    private string? _addKeyPhraseError;
+    private CreateBankKeyPhraseModel _newPhrase = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        var previousBankId = _selectedBank?.BankID;
+        var previousTypeId = _selectedType?.BankTransactionTypeID;
+
+        try
+        {
+            _lookups = await BanksService.GetBankLookupsAsync(_cts.Token);
+
+            _selectedBank = previousBankId != null
+                ? _lookups.Banks.FirstOrDefault(b => b.BankID == previousBankId)
+                : null;
+
+            _selectedType = previousTypeId != null
+                ? _lookups.BankTransactionTypes.FirstOrDefault(t => t.BankTransactionTypeID == previousTypeId)
+                : null;
+        }
+        catch (Exception)
+        {
+            _error = "Unable to load bank lookup data. Please try again later.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SelectBank(BankModel bank)
+    {
+        if (_selectedBank?.BankID == bank.BankID)
+        {
+            return;
+        }
+
+        _selectedBank = bank;
+        _selectedType = null;
+        _typeSearchText = string.Empty;
+        _phraseSearchText = string.Empty;
+        _showAddType = false;
+        _showAddKeyPhrase = false;
+        CancelEditBank();
+        CancelEditType();
+        CancelEditPhrase();
+    }
+
+    private void SelectType(BankTransactionTypeModel type)
+    {
+        if (_selectedType?.BankTransactionTypeID == type.BankTransactionTypeID)
+        {
+            return;
+        }
+
+        _selectedType = type;
+        _phraseSearchText = string.Empty;
+        _showAddKeyPhrase = false;
+        CancelEditType();
+        CancelEditPhrase();
+    }
+
+    private void StartEditBank(BankModel bank)
+    {
+        _editingBankId = bank.BankID;
+        _editBankName = bank.Name;
+        _editingTypeId = null;
+        _editingPhraseId = null;
+    }
+
+    private void CancelEditBank()
+    {
+        _editingBankId = null;
+        _editBankName = string.Empty;
+    }
+
+    private async Task SaveEditBankAsync(BankModel bank)
+    {
+        if (string.IsNullOrWhiteSpace(_editBankName))
+        {
+            _error = "Bank Name cannot be empty.";
+            return;
+        }
+
+        _isSavingEdit = true;
+        _error = null;
+        try
+        {
+            var updateModel = new UpdateBankModel { Name = _editBankName.Trim(), IsActive = bank.IsActive };
+            var result = await BanksService.UpdateBankAsync(bank.BankID, updateModel, _cts.Token);
+            if (result.Success)
+            {
+                bank.Name = _editBankName.Trim();
+                _editingBankId = null;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update bank name.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isSavingEdit = false;
+        }
+    }
+
+    private void StartEditType(BankTransactionTypeModel item)
+    {
+        _editingTypeId = item.BankTransactionTypeID;
+        _editTypeUrl = item.InstructionsURL ?? string.Empty;
+        _editingBankId = null;
+        _editingPhraseId = null;
+    }
+
+    private void CancelEditType()
+    {
+        _editingTypeId = null;
+        _editTypeUrl = string.Empty;
+    }
+
+    private async Task SaveEditTypeAsync(BankTransactionTypeModel item)
+    {
+        _isSavingEdit = true;
+        _error = null;
+        try
+        {
+            var updateModel = new UpdateBankTransactionTypeModel 
+            { 
+                InstructionsURL = string.IsNullOrWhiteSpace(_editTypeUrl) ? null : _editTypeUrl.Trim(), 
+                IsActive = item.IsActive 
+            };
+            var result = await BanksService.UpdateBankTransactionTypeAsync(item.BankTransactionTypeID, updateModel, _cts.Token);
+            if (result.Success)
+            {
+                item.InstructionsURL = updateModel.InstructionsURL;
+                _editingTypeId = null;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update transaction type instructions URL.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isSavingEdit = false;
+        }
+    }
+
+    private void StartEditPhrase(BankKeyPhraseModel phrase)
+    {
+        _editingPhraseId = phrase.BankTransactionTypeKeyPhraseID;
+        _editPhraseText = phrase.KeyPhrase;
+        _editingBankId = null;
+        _editingTypeId = null;
+    }
+
+    private void CancelEditPhrase()
+    {
+        _editingPhraseId = null;
+        _editPhraseText = string.Empty;
+    }
+
+    private async Task SaveEditPhraseAsync(BankKeyPhraseModel phrase)
+    {
+        if (string.IsNullOrWhiteSpace(_editPhraseText))
+        {
+            _error = "Key Phrase cannot be empty.";
+            return;
+        }
+
+        _isSavingEdit = true;
+        _error = null;
+        try
+        {
+            var updateModel = new UpdateBankKeyPhraseModel 
+            { 
+                KeyPhrase = _editPhraseText.Trim(), 
+                IsActive = phrase.IsActive 
+            };
+            var result = await BanksService.UpdateBankKeyPhraseAsync(phrase.BankTransactionTypeKeyPhraseID, updateModel, _cts.Token);
+            if (result.Success)
+            {
+                phrase.KeyPhrase = updateModel.KeyPhrase;
+                _editingPhraseId = null;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update key phrase text.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isSavingEdit = false;
+        }
+    }
+
+    private void OpenAddBank()
+    {
+        if (_showAddBank)
+        {
+            _showAddBank = false;
+            return;
+        }
+
+        _newBank = new CreateBankModel { IsActive = true };
+        _addBankError = null;
+        _showAddBank = true;
+    }
+
+    private async Task SaveBankAsync()
+    {
+        _addBankError = null;
+
+        if (string.IsNullOrWhiteSpace(_newBank.BankID))
+        {
+            _addBankError = "Bank ID is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newBank.Name))
+        {
+            _addBankError = "Bank Name is required.";
+            return;
+        }
+
+        _savingBank = true;
+        try
+        {
+            _newBank.BankID = _newBank.BankID.Trim().ToUpperInvariant();
+            _newBank.Name = _newBank.Name.Trim();
+
+            var result = await BanksService.CreateBankAsync(_newBank, _cts.Token);
+            if (result.Success)
+            {
+                _showAddBank = false;
+                _selectedBank = new BankModel { BankID = _newBank.BankID, Name = _newBank.Name, IsActive = _newBank.IsActive };
+                await LoadDataAsync();
+            }
+            else
+            {
+                _addBankError = result.ErrorMessage ?? "Failed to save bank.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _addBankError = ex.Message;
+        }
+        finally
+        {
+            _savingBank = false;
+        }
+    }
+
+    private async Task ToggleBankActiveAsync(BankModel bank, ChangeEventArgs e)
+    {
+        var newActive = (bool)(e.Value ?? false);
+        _isMutating = true;
+        _error = null;
+
+        try
+        {
+            var updateModel = new UpdateBankModel { Name = bank.Name, IsActive = newActive };
+            var result = await BanksService.UpdateBankAsync(bank.BankID, updateModel, _cts.Token);
+
+            if (result.Success)
+            {
+                bank.IsActive = newActive;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update bank active status.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isMutating = false;
+        }
+    }
+
+    private void OpenAddType()
+    {
+        if (_showAddType)
+        {
+            _showAddType = false;
+            return;
+        }
+
+        _newType = new CreateBankTransactionTypeModel 
+        { 
+            BankId = _selectedBank?.BankID ?? string.Empty, 
+            IsActive = true 
+        };
+        _addTypeError = null;
+        _showAddType = true;
+    }
+
+    private async Task SaveTransactionTypeAsync()
+    {
+        _addTypeError = null;
+
+        if (string.IsNullOrWhiteSpace(_newType.BankId))
+        {
+            _addTypeError = "Please select a bank.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newType.TransactionTypeID))
+        {
+            _addTypeError = "Please select a transaction type.";
+            return;
+        }
+
+        _savingType = true;
+        try
+        {
+            var result = await BanksService.CreateBankTransactionTypeAsync(_newType, _cts.Token);
+            if (result.Success)
+            {
+                _showAddType = false;
+                await LoadDataAsync();
+            }
+            else
+            {
+                _addTypeError = result.ErrorMessage ?? "Failed to save transaction type.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _addTypeError = ex.Message;
+        }
+        finally
+        {
+            _savingType = false;
+        }
+    }
+
+    private async Task ToggleTypeActiveAsync(BankTransactionTypeModel item, ChangeEventArgs e)
+    {
+        var newActive = (bool)(e.Value ?? false);
+        _isMutating = true;
+        _error = null;
+
+        try
+        {
+            var updateModel = new UpdateBankTransactionTypeModel { InstructionsURL = item.InstructionsURL, IsActive = newActive };
+            var result = await BanksService.UpdateBankTransactionTypeAsync(item.BankTransactionTypeID, updateModel, _cts.Token);
+
+            if (result.Success)
+            {
+                item.IsActive = newActive;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update transaction type status.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isMutating = false;
+        }
+    }
+
+    private void OpenAddKeyPhrase()
+    {
+        if (_showAddKeyPhrase)
+        {
+            _showAddKeyPhrase = false;
+            return;
+        }
+
+        _newPhrase = new CreateBankKeyPhraseModel 
+        { 
+            BankTransactionTypeID = _selectedType?.BankTransactionTypeID ?? 0, 
+            IsActive = true 
+        };
+        _addKeyPhraseError = null;
+        _showAddKeyPhrase = true;
+    }
+
+    private async Task SaveKeyPhraseAsync()
+    {
+        _addKeyPhraseError = null;
+
+        if (_newPhrase.BankTransactionTypeID <= 0)
+        {
+            _addKeyPhraseError = "Please select a Bank Transaction Type.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_newPhrase.KeyPhrase))
+        {
+            _addKeyPhraseError = "Key phrase cannot be empty.";
+            return;
+        }
+
+        _savingKeyPhrase = true;
+        try
+        {
+            _newPhrase.KeyPhrase = _newPhrase.KeyPhrase.Trim();
+            var result = await BanksService.CreateBankKeyPhraseAsync(_newPhrase, _cts.Token);
+
+            if (result.Success)
+            {
+                _showAddKeyPhrase = false;
+                await LoadDataAsync();
+            }
+            else
+            {
+                _addKeyPhraseError = result.ErrorMessage ?? "Failed to save key phrase.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _addKeyPhraseError = ex.Message;
+        }
+        finally
+        {
+            _savingKeyPhrase = false;
+        }
+    }
+
+    private async Task ToggleKeyPhraseActiveAsync(BankKeyPhraseModel phrase, ChangeEventArgs e)
+    {
+        var newActive = (bool)(e.Value ?? false);
+        _isMutating = true;
+        _error = null;
+
+        try
+        {
+            var updateModel = new UpdateBankKeyPhraseModel { KeyPhrase = phrase.KeyPhrase, IsActive = newActive };
+            var result = await BanksService.UpdateBankKeyPhraseAsync(phrase.BankTransactionTypeKeyPhraseID, updateModel, _cts.Token);
+
+            if (result.Success)
+            {
+                phrase.IsActive = newActive;
+            }
+            else
+            {
+                _error = result.ErrorMessage ?? "Failed to update key phrase status.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isMutating = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

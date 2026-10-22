@@ -1,0 +1,40 @@
+@using EMA.App.Models
+
+<div class="email-section-title"><u>Contact Information:</u></div>
+<div class="email-field-row">
+    <label class="email-label">Name:</label>
+    <input class="email-input" value="@Donor.OfficialDonorName" disabled="@ReadOnly"
+           @oninput='e => Donor.OfficialDonorName = e.Value?.ToString()' />
+</div>
+<div class="email-field-row">
+    <label class="email-label">Address:</label>
+    <input class="email-input" value="@Donor.Address" disabled="@ReadOnly"
+           @oninput='e => Donor.Address = e.Value?.ToString()' />
+</div>
+<div class="email-field-row">
+    <label class="email-label">City/Town:</label>
+    <input class="email-input" value="@Donor.City" disabled="@ReadOnly"
+           @oninput='e => Donor.City = e.Value?.ToString()' />
+</div>
+<div class="email-field-row">
+    <label class="email-label">Province:</label>
+    <input class="email-input email-province" value="@Donor.ProvinceStateCode" disabled="@ReadOnly"
+           @oninput='e => Donor.ProvinceStateCode = e.Value?.ToString()' />
+    <label class="email-label"><u>Postal:</u></label>
+    <input class="email-input email-postal" value="@Donor.PostalCode" disabled="@ReadOnly"
+           @oninput='e => Donor.PostalCode = e.Value?.ToString()' />
+</div>
+<div class="email-field-row">
+    <label class="email-label">Email:</label>
+    <input class="email-input email-disabled" value="@Donor.EmailAddress" placeholder="Can't be changed" disabled />
+</div>
+<div class="email-field-row">
+    <label class="email-label">Phone:</label>
+    <input class="email-input" value="@Donor.PhoneNumber" disabled="@ReadOnly"
+           @oninput='e => Donor.PhoneNumber = e.Value?.ToString()' />
+</div>
+
+@code {
+    [Parameter] public DonorItem Donor { get; set; } = new();
+    [Parameter] public bool ReadOnly { get; set; } = true;
+}

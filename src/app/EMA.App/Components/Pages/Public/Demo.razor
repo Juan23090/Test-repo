@@ -1,0 +1,501 @@
+﻿@page "/book-a-demo"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using EMA.App.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using EMA.App.Services
+
+@inject IPublicOnboardingService PublicOnboardingService
+
+<PageTitle>Book a Demo - EMA</PageTitle>
+
+<div class="demo-page">
+
+    @* Task 9 onboarding source banner *@
+    @if (!string.IsNullOrWhiteSpace(OnboardingSource))
+    {
+        <div class="task9-source-banner"
+             role="status">
+            Setup path: @OnboardingSource
+        </div>
+    }
+
+    <h2 class="text-center">
+        Want to see how we automate eTransfers and Pre-Authorized Debits?<br />
+        We'd love to show you!
+    </h2>
+
+    <div class="donors-container">
+        <div class="donors-form">
+
+            <div class="form-row">
+                <label class="form-label"><strong>I want to:</strong></label>
+                <InfoPopover Title="Demo"
+                             Content="Choose what type of demo works best for you" />
+
+                <div class="form-input">
+                    <label>
+                        <input type="radio"
+                               name="demoType"
+                               value="10"
+                               checked="@(NewOrganization.OrganizationStatusID == 10)"
+                               @onchange="@(() => NewOrganization.OrganizationStatusID = 10)" />
+                        Have a demo of your software
+                    </label>
+
+                    <label>
+                        <input type="radio"
+                               name="demoType"
+                               value="30"
+                               checked="@(NewOrganization.OrganizationStatusID == 30)"
+                               @onchange="@(() => NewOrganization.OrganizationStatusID = 30)" />
+                        Create a demo with realistic, but dummy data
+                    </label>
+
+                    <label>
+                        <input type="radio"
+                               name="demoType"
+                               value="40"
+                               checked="@(NewOrganization.OrganizationStatusID == 40)"
+                               @onchange="@(() => NewOrganization.OrganizationStatusID = 40)" />
+                        Production setup on Own
+                    </label>
+
+                    <label>
+                        <input type="radio"
+                               name="demoType"
+                               value="50"
+                               checked="@(NewOrganization.OrganizationStatusID == 50)"
+                               @onchange="@(() => NewOrganization.OrganizationStatusID = 50)" />
+                        Production setup for You
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Organization Name:</strong>
+                </label>
+
+                <InfoPopover Title="OrganizationName"
+                             Content="The registered legal name of the organization." />
+
+                <input class="form-input typeahead"
+                       @bind="NewOrganization.OrganizationName"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Contact Name:</strong>
+                </label>
+
+                <InfoPopover Title="ContactName"
+                             Content="The full name of the primary contact person." />
+
+                <input class="form-input typeahead"
+                       @bind="NewOrganization.AdminName"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Contact Phone #:</strong>
+                </label>
+
+                <InfoPopover Title="AdminPhone"
+                             Content="The contact's phone number including extension if applicable." />
+
+                <input class="form-input typeahead"
+                       @bind="NewOrganization.AdminPhone"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Contact Email:</strong>
+                </label>
+
+                <InfoPopover Title="ContactEmail"
+                             Content="The contact's email address. It must be verified before the request can be submitted." />
+
+                <input class="form-input typeahead"
+                       type="email"
+                       autocomplete="email"
+                       @bind="NewOrganization.AdminEmail"
+                       @bind:event="oninput"
+                       @bind:after="OnAdminEmailChanged" />
+
+                <button class="btn-create @(IsAdminEmailVerified ? "verification-button-verified" : string.Empty)"
+                        type="button"
+                        disabled="@(IsSaving || string.IsNullOrWhiteSpace(NewOrganization.AdminEmail))"
+                        @onclick="OpenAdminEmailVerification">
+                    @(IsAdminEmailVerified ? "Verified" : "Email To Verify")
+                </button>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Address:</strong>
+                </label>
+
+                <InfoPopover Title="Address"
+                             Content="The street address of the organization." />
+
+                <input class="form-input typeahead"
+                       @bind="NewOrganization.Address"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>City/Town:</strong>
+                </label>
+
+                <InfoPopover Title="CityTown"
+                             Content="The city or town where the organization is located." />
+
+                <input class="form-input typeahead"
+                       @bind="NewOrganization.City"
+                       @bind:event="oninput" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Province:</strong>
+                </label>
+
+                <InfoPopover Title="Province"
+                             Content="The two-letter province or territory code, such as AB or ON." />
+
+                <input class="form-input province-input"
+                       maxlength="2"
+                       @bind="NewOrganization.ProvinceStateCode"
+                       @bind:event="oninput" />
+
+                <label class="form-label postal-label">
+                    <strong>Postal Code:</strong>
+                </label>
+
+                <InfoPopover Title="PostalCode"
+                             Content="Canadian postal code in A1A 1A1 format." />
+
+                <input class="form-input postal-input"
+                       autocomplete="postal-code"
+                       @bind="NewOrganization.PostalCode"
+                       @bind:event="oninput" />
+            </div>
+
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Annual Budget:</strong>
+                </label>
+
+                <InfoPopover Title="AnnualBudget"
+                             Content="The organization's annual budget stored as a range." />
+
+                <select class="form-input" @bind="AnnualBudget">
+                    <option value="">Please choose an option</option>
+                    <option value="under-50k">&lt;$50k</option>
+                    <option value="50k-100k">$50k - $100k</option>
+                    <option value="100k-200k">$100k - $200k</option>
+                    <option value="200k-500k">$200k - $500k</option>
+                    <option value="500k-1m">$500k - $1M</option>
+                    <option value="1m+">$1M+</option>
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Current ChMS:</strong>
+                </label>
+
+                <InfoPopover Title="ChMS"
+                             Content="The organization's current ChMS." />
+
+                <select class="form-input" @bind="NewOrganization.ChMSID">
+                    <option value="0">Please choose an option</option>
+
+                    @foreach (var chms in ChMSOptions)
+                    {
+                        <option value="@chms.ChMSID">
+                            @chms.ChMSName
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Current Acct. Software:</strong>
+                </label>
+
+                <InfoPopover Title="AccountingSoftware"
+                             Content="The organization's current accounting software." />
+
+                <select class="form-input"
+                        @bind="NewOrganization.AccountingSoftwareID">
+                    <option value="0">Please choose an option</option>
+
+                    @foreach (var accountingSoftware in AccountingSoftwareOptions)
+                    {
+                        <option value="@accountingSoftware.AccountingSoftwareID">
+                            @accountingSoftware.Name
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-actions-row justify-content-center">
+                <div style="display: flex; flex-flow: column;">
+                    <button class="btn-save btn-save-more"
+                            type="button"
+                            @onclick="RequestDemoAsync"
+                            disabled="@IsSaving">
+                        <strong>
+                            @(IsSaving ? "Submitting..." : "Submit Request")
+                        </strong>
+                    </button>
+
+                    @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+                    {
+                        <label class="m-auto validation-message"
+                               role="status"
+                               aria-live="polite">
+                            <strong>@ValidationMessage</strong>
+                        </label>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<EmailVerificationDialog IsOpen="IsVerificationDialogOpen"
+                         EmailAddress="@(NewOrganization.AdminEmail ?? string.Empty)"
+                         Purpose="EmailVerificationPurpose.NewOrganizationAdminEmail"
+                         ActorID="0"
+                         OnVerified="OnAdminEmailVerified"
+                         OnClose="CloseVerificationDialog" />
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "source")]
+    public string? Task9Source { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "status")]
+    public int? RequestedStatus { get; set; }
+
+    private string? OnboardingSource =>
+        string.IsNullOrWhiteSpace(Task9Source)
+            ? null
+            : Task9Source.Trim();
+
+    private List<PublicChMSOption> ChMSOptions = new();
+    private List<PublicAccountingSoftwareOption> AccountingSoftwareOptions = new();
+
+    private OrganizationSummary NewOrganization = CreateNewOrganization();
+
+    private string AnnualBudget = string.Empty;
+    private string ValidationMessage = string.Empty;
+    private string VerifiedAdminEmail = string.Empty;
+
+    private bool IsSaving;
+    private bool IsVerificationDialogOpen;
+
+    private bool IsAdminEmailVerified =>
+        NewOrganization.AdminEmailVerified == 'Y' &&
+        !string.IsNullOrWhiteSpace(
+            NewOrganization.AdminEmailVerificationToken) &&
+        string.Equals(
+            NormalizeEmail(NewOrganization.AdminEmail),
+            NormalizeEmail(VerifiedAdminEmail),
+            StringComparison.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var lookups = await PublicOnboardingService.GetLookupsAsync();
+
+        if (lookups is null)
+        {
+            ValidationMessage =
+                "The onboarding options could not be loaded. Please try again.";
+
+            return;
+        }
+
+        ChMSOptions = lookups.ChMSOptions;
+        AccountingSoftwareOptions = lookups.AccountingSoftwareOptions;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (RequestedStatus is 10 or 30 or 40 or 50)
+        {
+            NewOrganization.OrganizationStatusID = RequestedStatus;
+        }
+    }
+
+    private async Task RequestDemoAsync()
+    {
+        if (IsSaving || !ValidateDemoRequest())
+        {
+            return;
+        }
+
+        IsSaving = true;
+        ValidationMessage = string.Empty;
+
+        try
+        {
+            NewOrganization.AnnualBudget = AnnualBudget;
+
+            var result =
+                await PublicOnboardingService.SubmitAsync(
+                    new PublicOrganizationRequest
+                    {
+                        OrganizationName = NewOrganization.OrganizationName,
+                        AdminName = NewOrganization.AdminName,
+                        AdminEmail = NewOrganization.AdminEmail,
+                        AdminEmailVerificationToken = NewOrganization.AdminEmailVerificationToken,
+                        AdminPhone = NewOrganization.AdminPhone,
+                        Address = NewOrganization.Address,
+                        City = NewOrganization.City,
+                        ProvinceStateCode = NewOrganization.ProvinceStateCode,
+                        PostalCode = NewOrganization.PostalCode,
+                        AnnualBudget = AnnualBudget,
+                        ChMSID = NewOrganization.ChMSID,
+                        AccountingSoftwareID = NewOrganization.AccountingSoftwareID,
+                        OrganizationStatusID = NewOrganization.OrganizationStatusID
+                    });
+
+            if (!result.Succeeded)
+            {
+                ValidationMessage = result.Message;
+                return;
+            }
+
+            ValidationMessage = result.Message;
+
+            NewOrganization = CreateNewOrganization();
+            if (RequestedStatus is 10 or 30 or 40 or 50)
+            {
+                NewOrganization.OrganizationStatusID = RequestedStatus;
+            }
+
+            VerifiedAdminEmail = string.Empty;
+            AnnualBudget = string.Empty;
+        }
+        catch
+        {
+            ValidationMessage =
+                "The demo request could not be submitted. Please try again.";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private bool ValidateDemoRequest()
+    {
+        if (NewOrganization.OrganizationStatusID is null or <= 0 ||
+            string.IsNullOrWhiteSpace(NewOrganization.OrganizationName) ||
+            string.IsNullOrWhiteSpace(NewOrganization.AdminName) ||
+            string.IsNullOrWhiteSpace(NewOrganization.AdminPhone) ||
+            string.IsNullOrWhiteSpace(NewOrganization.AdminEmail) ||
+            string.IsNullOrWhiteSpace(NewOrganization.Address) ||
+            string.IsNullOrWhiteSpace(NewOrganization.City) ||
+            string.IsNullOrWhiteSpace(
+                NewOrganization.ProvinceStateCode) ||
+            string.IsNullOrWhiteSpace(NewOrganization.PostalCode) ||
+            string.IsNullOrWhiteSpace(AnnualBudget) ||
+            NewOrganization.ChMSID is null or <= 0 ||
+            NewOrganization.AccountingSoftwareID is null or <= 0)
+        {
+            ValidationMessage = "All fields are required.";
+            return false;
+        }
+
+        if (!IsAdminEmailVerified)
+        {
+            ValidationMessage =
+                "Please verify the contact email address.";
+
+            return false;
+        }
+
+        ValidationMessage = string.Empty;
+        return true;
+    }
+
+    private static OrganizationSummary CreateNewOrganization()
+    {
+        return new OrganizationSummary
+        {
+            AdminEmailVerified = 'N',
+            AdminPhoneVerified = 'N',
+            OrganizationStatusID = 10
+        };
+    }
+
+    private void OpenAdminEmailVerification()
+    {
+        ValidationMessage = string.Empty;
+        IsVerificationDialogOpen = true;
+    }
+
+    private void CloseVerificationDialog()
+    {
+        IsVerificationDialogOpen = false;
+    }
+
+    private void OnAdminEmailChanged()
+    {
+        if (string.Equals(
+                NormalizeEmail(NewOrganization.AdminEmail),
+                NormalizeEmail(VerifiedAdminEmail),
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        NewOrganization.AdminEmailVerified = 'N';
+        NewOrganization.AdminEmailVerificationToken = null;
+    }
+
+    private void OnAdminEmailVerified(
+        EmailVerificationCompleted completed)
+    {
+        if (!string.Equals(
+                NormalizeEmail(NewOrganization.AdminEmail),
+                NormalizeEmail(completed.EmailAddress),
+                StringComparison.Ordinal))
+        {
+            ValidationMessage =
+                "The email address changed. Please verify it again.";
+
+            return;
+        }
+
+        VerifiedAdminEmail = completed.EmailAddress;
+
+        NewOrganization.AdminEmailVerificationToken =
+            completed.VerificationToken;
+
+        NewOrganization.AdminEmailVerified = 'Y';
+        ValidationMessage = "Contact email verified.";
+    }
+
+    private static string NormalizeEmail(string? emailAddress)
+    {
+        return emailAddress?.Trim().ToLowerInvariant()
+               ?? string.Empty;
+    }
+}

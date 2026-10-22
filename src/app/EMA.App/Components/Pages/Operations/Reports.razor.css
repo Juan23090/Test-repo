@@ -1,0 +1,305 @@
+.reports-page {
+    min-height: 100vh;
+    background: #dcdcdc;
+    color: #1f1f1f;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.reports-body {
+    padding: 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+}
+
+.report-filters {
+    width: min(100%, 820px);
+    margin: 0 auto 1rem;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 1.8rem;
+    row-gap: 0.9rem;
+}
+
+.field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.field-row label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #5a5a5a;
+    line-height: 1.1;
+    width: 120px;
+    min-width: 120px;
+}
+
+/* JE title block */
+.je-title {
+    text-align: center;
+    margin: 0 0 1.25rem;
+}
+
+.je-title h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0 0 0.2rem;
+}
+
+/* Accounting system name, shown inline after the title. */
+.je-accounting-name {
+    color: #2748d8;
+}
+
+/* Radio filter rows (Summarize by / JE By Date) */
+.radio-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.field-label {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #5a5a5a;
+    line-height: 1.1;
+    width: 120px;
+    min-width: 120px;
+}
+
+.radio-options {
+    display: flex;
+    gap: 1.2rem;
+}
+
+.radio-row .radio-options label {
+    width: auto;
+    min-width: 0;
+    font-weight: 600;
+    color: #1f1f1f;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.radio-options input[type="radio"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    margin: 0;
+    accent-color: #4b84dd;
+}
+
+.field-row input[type="date"],
+.field-row select {
+    height: 2.2rem;
+    border: 1px solid #8a8a8a;
+    background: #efefef;
+    color: #1f1f1f;
+    width: 210px;
+    padding: 0 0.45rem;
+    font-size: 0.95rem;
+}
+
+.field-row select {
+    appearance: auto;
+}
+
+.checkbox-row {
+    display: grid;
+    grid-template-columns: 170px 210px;
+}
+
+.checkbox-row input[type="checkbox"] {
+    width: 1.3rem;
+    height: 1.3rem;
+    margin: 0;
+    accent-color: #4b84dd;
+    justify-self: start;
+}
+
+.journal-panel {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.journal-panel + .journal-panel {
+    margin-top: 1.2rem;
+}
+
+.status-text {
+    text-align: center;
+    font-weight: 600;
+    margin: 0.6rem auto 1rem;
+}
+
+.status-text.error {
+    color: #9a1f1f;
+}
+
+.journal-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid #8a8a8a;
+    border-bottom: 0;
+    background: #d8d8d8;
+    text-align: center;
+    font-size: 1.15rem;
+}
+
+.journal-meta > div {
+    padding: 0.45rem 0.6rem;
+}
+
+.journal-meta > div + div {
+    border-left: 1px solid #8a8a8a;
+}
+
+.journal-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    background: #efefef;
+    border: 1px solid #8a8a8a;
+}
+
+.journal-table th,
+.journal-table td {
+    border: 1px solid #8a8a8a;
+    min-height: 42px;
+    padding: 0.4rem 0.52rem;
+    font-size: 1.02rem;
+    font-weight: 600;
+    text-align: left;
+    background: #efefef;
+}
+
+.journal-table th:nth-child(1),
+.journal-table td:nth-child(1) {
+    width: 38%;
+}
+
+.journal-table th:nth-child(2),
+.journal-table td:nth-child(2),
+.journal-table th:nth-child(3),
+.journal-table td:nth-child(3) {
+    width: 16%;
+    text-align: center;
+}
+
+.journal-table th:nth-child(4),
+.journal-table td:nth-child(4) {
+    width: 30%;
+}
+
+.journal-table th {
+    background: #f4f4f4;
+    font-weight: 400;
+}
+
+.journal-table .amount {
+    text-align: center;
+}
+
+.journal-table tbody tr.totals-row td {
+    font-weight: 400;
+}
+
+.report-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+    width: min(100%, 760px);
+    margin: 2.2rem auto 0;
+}
+
+.report-actions button {
+    min-height: 36px;
+    background: #4b84dd;
+    color: #111;
+    font-size: 0.82rem;
+}
+
+.report-actions button:last-child {
+    white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+    .report-filters {
+        width: min(100%, 620px);
+        grid-template-columns: 1fr;
+    }
+
+    .report-actions {
+        grid-template-columns: 1fr;
+        width: min(100%, 540px);
+    }
+
+    .journal-panel {
+        max-width: 620px;
+    }
+}
+
+@media (max-width: 720px) {
+
+    .app-header {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .user-link {
+        text-align: center;
+    }
+
+    .top-nav,
+    .sub-nav {
+        gap: 0.5rem;
+    }
+
+    .top-nav button,
+    .sub-nav button {
+        min-width: 95px;
+        padding: 0.42rem 0.6rem;
+        font-size: 0.8rem;
+    }
+
+    .report-filters {
+        width: 100%;
+    }
+
+    .field-row {
+        flex-wrap: wrap;
+        gap: 0.45rem;
+    }
+
+    .field-row label {
+        min-width: 100%;
+        font-size: 1rem;
+    }
+
+    .field-row input[type="date"],
+    .field-row select {
+        width: min(100%, 340px);
+    }
+
+    .checkbox-row {
+        display: flex;
+    }
+
+    .journal-meta {
+        grid-template-columns: 1fr;
+        font-size: 1rem;
+    }
+
+    .journal-meta > div + div {
+        border-left: 0;
+        border-top: 1px solid #8a8a8a;
+    }
+
+    .journal-table th,
+    .journal-table td {
+        font-size: 0.92rem;
+        padding: 0.34rem 0.4rem;
+    }
+}

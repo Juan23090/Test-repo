@@ -1,0 +1,435 @@
+@page "/giving-history"
+
+@using System.Net
+@using System.Net.Http.Headers
+@using System.Net.Http.Json
+@using EMA.App.Services
+
+@inject IHttpClientFactory HttpClientFactory
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Giving History - EMA</PageTitle>
+
+<div class="reports-page">
+    <div class="reports-body donor-history-page">
+
+        @if (isLoading)
+        {
+            <p class="status-text">
+                Loading giving history...
+            </p>
+        }
+        else if (!string.IsNullOrWhiteSpace(
+                     errorMessage))
+        {
+            <p class="status-text error">
+                @errorMessage
+            </p>
+
+            @if (showLoginLink)
+            {
+                <p class="status-text">
+                    <a href="/login">
+                        Return to Donor Login
+                    </a>
+                </p>
+            }
+        }
+        else if (donorHistory is not null)
+        {
+            <div class="gift-title donor-history-title">
+                <h2>
+                    @donorHistory.DonorName
+                </h2>
+            </div>
+
+            <div class="gift-filters donor-history-year-row">
+                <div class="gift-field">
+                    <label class="gift-label"
+                           for="yearSelect">
+                        Year:
+                    </label>
+
+                    <select id="yearSelect"
+                            value="@selectedYear"
+                            @onchange="OnYearChanged">
+                        @foreach (var year in
+                            donorHistory.AvailableYears)
+                        {
+                            <option value="@year">
+                                @year
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="gift-grid-wrapper">
+                <table class="gift-grid donor-history-grid">
+                    <thead>
+                        <tr>
+                            <th>DATE</th>
+                            <th>METHOD</th>
+                            <th>FUND</th>
+                            <th class="amount">
+                                AMOUNT
+                            </th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (donorHistory.Donations.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="4">
+                                    No donations found for
+                                    @selectedYear.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var donation in
+                                donorHistory.Donations)
+                            {
+                                <tr>
+                                    <td>
+                                        @donation.DonationDate.ToString("yyyy/MM/dd")
+                                    </td>
+
+                                    <td>
+                                        @donation.Method
+                                    </td>
+
+                                    <td>
+                                        @donation.Fund
+                                    </td>
+
+                                    <td class="amount">
+                                        @donation.Amount.ToString("C")
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+
+                    @if (donorHistory.Donations.Count > 0)
+                    {
+                        <tfoot>
+                            <tr>
+                                <td colspan="3"
+                                    class="donor-history-summary">
+                                    @donorHistory.Donations.Count
+                                    Gifts in @selectedYear Totalling:
+                                </td>
+
+                                <td class="amount">
+                                    @donorHistory.TotalAmount.ToString("C")
+                                </td>
+                            </tr>
+                        </tfoot>
+                    }
+                </table>
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(
+        Name = "token")]
+    public string? EmailAccessToken
+    {
+        get;
+        set;
+    }
+
+    private bool isLoading = true;
+
+    private bool showLoginLink;
+
+    private bool hasInitialized;
+
+    private string? errorMessage;
+
+    private string? accessToken;
+
+    private int selectedYear =
+        DateTime.Now.Year;
+
+    private DonorHistoryResponse?
+        donorHistory;
+
+    protected override async Task
+        OnParametersSetAsync()
+    {
+        if (hasInitialized)
+        {
+            return;
+        }
+
+        hasInitialized = true;
+
+        await SessionState.InitializeAsync();
+
+        var fragmentAccessToken =
+            GetFragmentAccessToken();
+
+        var openedFromEmail =
+            !string.IsNullOrWhiteSpace(
+                fragmentAccessToken) ||
+            !string.IsNullOrWhiteSpace(
+                EmailAccessToken);
+
+        if (openedFromEmail)
+        {
+            accessToken =
+                (
+                    fragmentAccessToken
+                    ?? EmailAccessToken!
+                ).Trim();
+        }
+        else
+        {
+            var session =
+                SessionState.CurrentSession;
+
+            if (session is null)
+            {
+                SetAuthorizationError(
+                    "Please sign in as a donor to view your giving history.");
+
+                return;
+            }
+
+            if (!session.IsDonorSession)
+            {
+                SetAuthorizationError(
+                    "Giving history is only available through a donor login.");
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    session.AccessToken) ||
+                !session.AccessTokenExpiresAtUtc
+                    .HasValue ||
+                session.AccessTokenExpiresAtUtc
+                    .Value <= DateTimeOffset.UtcNow)
+            {
+                SetAuthorizationError(
+                    "Your donor session has expired. Please sign in again.");
+
+                return;
+            }
+
+            accessToken =
+                session.AccessToken;
+        }
+
+        await LoadDonationHistoryAsync(
+            selectedYear);
+
+        if (openedFromEmail)
+        {
+            Navigation.NavigateTo(
+                "/giving-history",
+                replace: true);
+        }
+    }
+
+    private string? GetFragmentAccessToken()
+    {
+        var fragment =
+            new Uri(
+                Navigation.Uri)
+                .Fragment;
+
+        const string tokenPrefix =
+            "#token=";
+
+        if (!fragment.StartsWith(
+                tokenPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var encodedToken =
+            fragment[tokenPrefix.Length..];
+
+        if (string.IsNullOrWhiteSpace(
+                encodedToken))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Uri.UnescapeDataString(
+                encodedToken);
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    private async Task OnYearChanged(
+        ChangeEventArgs eventArgs)
+    {
+        if (int.TryParse(
+                eventArgs.Value?.ToString(),
+                out var year))
+        {
+            selectedYear =
+                year;
+
+            await LoadDonationHistoryAsync(
+                year);
+        }
+    }
+
+    private async Task LoadDonationHistoryAsync(
+        int year)
+    {
+        if (string.IsNullOrWhiteSpace(
+                accessToken))
+        {
+            SetAuthorizationError(
+                "A valid donor login or giving-history link is required.");
+
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            showLoginLink = false;
+
+            var http =
+                HttpClientFactory.CreateClient(
+                    "DonorHistoryApi");
+
+            using var request =
+                new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"api/donor-history?year={year}");
+
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue(
+                    "Bearer",
+                    accessToken);
+
+            using var response =
+                await http.SendAsync(
+                    request);
+
+            if (response.StatusCode ==
+                HttpStatusCode.Unauthorized)
+            {
+                SetAuthorizationError(
+                    "Your donor session or giving-history link is invalid or expired.");
+
+                return;
+            }
+
+            if (response.StatusCode ==
+                HttpStatusCode.NotFound)
+            {
+                errorMessage =
+                    "The donor record could not be found.";
+
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage =
+                    "Unable to load giving history.";
+
+                return;
+            }
+
+            var result =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        DonorHistoryResponse>();
+
+            if (result is null)
+            {
+                errorMessage =
+                    "Unable to load giving history.";
+
+                return;
+            }
+
+            donorHistory =
+                result;
+
+            selectedYear =
+                result.SelectedYear;
+        }
+        catch
+        {
+            errorMessage =
+                "Unable to load giving history.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void SetAuthorizationError(
+        string message)
+    {
+        errorMessage =
+            message;
+
+        showLoginLink =
+            true;
+
+        isLoading =
+            false;
+    }
+
+    public sealed class DonorHistoryResponse
+    {
+        public string DonorName { get; set; } =
+            string.Empty;
+
+        public int SelectedYear { get; set; }
+
+        public List<int> AvailableYears { get; set; } =
+            new();
+
+        public List<DonorDonationHistoryItem>
+            Donations
+        {
+            get;
+            set;
+        } = new();
+
+        public decimal TotalAmount =>
+            Donations.Sum(
+                donation => donation.Amount);
+    }
+
+    public sealed class DonorDonationHistoryItem
+    {
+        public DateTime DonationDate { get; set; }
+
+        public string Method { get; set; } =
+            string.Empty;
+
+        public string Fund { get; set; } =
+            string.Empty;
+
+        public decimal Amount { get; set; }
+    }
+}

@@ -1,0 +1,434 @@
+@page "/organization-login"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using EMA.App.Models
+
+@inject ILoginService LoginService
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+
+<PageTitle>Organization Login - EMA</PageTitle>
+
+<div class="login-page">
+    <section class="login-card">
+        <h1 class="login-title">
+            Organization Login
+        </h1>
+
+        <div class="login-lookup-section">
+            <label class="login-input-label ema-login-phone-label"
+                   for="login-identifier">
+                Please input your 10 digit phone number below:
+            </label>
+
+            <div class="login-input-row ema-login-phone-row">
+                <input id="login-identifier"
+                       class="login-input ema-login-phone-input"
+                       type="text"
+                       autocomplete="tel"
+                       inputmode="numeric"
+                       placeholder="123-456-7890"
+                       @bind="Identifier"
+                       @bind:event="oninput"
+                       disabled="@(IsLookingUp || LookupResult is not null)" />
+
+                <button type="button"
+                        class="login-button"
+                        @onclick="LookupUserAsync"
+                        disabled="@(IsLookingUp || LookupResult is not null)">
+                    @(IsLookingUp
+                        ? "Sending code..."
+                        : "Continue")
+                </button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(
+                ErrorMessage))
+        {
+            <div class="login-error"
+                 role="alert">
+                @ErrorMessage
+            </div>
+        }
+
+        @if (LookupResult is not null)
+        {
+            <section class="login-selection-panel">
+                <div class="login-found-message">
+                    Phone number found
+                </div>
+
+                <div class="login-found-user">
+                    <strong>
+                        @LookupResult.UserName
+                    </strong>
+                </div>
+
+                <p class="login-verification-message">
+                    @LookupResult.VerificationMessage
+                </p>
+
+                @if (LookupResult.Organizations.Count == 0)
+                {
+                    <div class="login-error">
+                        No active organizations were found for this user.
+                    </div>
+                }
+                else
+                {
+                    @if (LookupResult.Organizations.Count > 1)
+                    {
+                        <h2 class="login-organization-heading">
+                            Select the Organization you want to login to:
+                        </h2>
+
+                        <div class="login-organization-list">
+                            @foreach (var organization in LookupResult.Organizations)
+                            {
+                                <label class="login-organization-option">
+                                    <input type="radio"
+                                           name="selected-organization"
+                                           value="@organization.EMAOrganizationID"
+                                           checked="@(SelectedOrganizationID == organization.EMAOrganizationID)"
+                                           @onclick="@(() => SelectOrganization(organization.EMAOrganizationID))" />
+
+                                    <span>
+                                        @organization.OrganizationName
+                                    </span>
+                                </label>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="login-found-user">
+                            Organization:
+                            <strong>
+                                @LookupResult.Organizations[0].OrganizationName
+                            </strong>
+                        </div>
+                    }
+
+                    <label class="login-input-label ema-login-code-label"
+                           for="login-code">
+                        Enter the 6-digit code:
+                    </label>
+
+                    <div class="login-input-row ema-login-code-row">
+                        <input id="login-code"
+                               class="login-input ema-login-code-input"
+                               type="text"
+                               inputmode="numeric"
+                               maxlength="6"
+                               placeholder="123456"
+                               @bind="VerificationCode"
+                               @bind:event="oninput"
+                               disabled="@IsLoggingIn" />
+
+                        <button type="button"
+                                class="login-button"
+                                @onclick="VerifyAndLoginAsync"
+                                disabled="@(!CanVerify)">
+                            @(IsLoggingIn
+                                ? "Verifying..."
+                                : "Verify and Login")
+                        </button>
+                    </div>
+
+                    <button type="button"
+                            class="login-secondary-button"
+                            @onclick="ResetLookup"
+                            disabled="@IsLoggingIn">
+                        Use a different phone number
+                    </button>
+                }
+            </section>
+        }
+    </section>
+</div>
+
+@code {
+    private string _identifier =
+        string.Empty;
+
+    private string Identifier
+    {
+        get => _identifier;
+        set
+        {
+            var candidate =
+                value ?? string.Empty;
+
+            var rawDigits =
+                new string(
+                    candidate
+                        .Where(char.IsDigit)
+                        .ToArray());
+
+            var normalizedDigits =
+                EMA.App.Utilities.LoginPhoneNumber.NormalizeDigits(
+                    candidate);
+
+            _identifier =
+                rawDigits.Length == 11 &&
+                rawDigits.StartsWith(
+                    "1",
+                    StringComparison.Ordinal) &&
+                normalizedDigits.Length == 10
+                    ? EMA.App.Utilities.LoginPhoneNumber.Format(
+                        normalizedDigits)
+                    : candidate;
+        }
+    }
+
+    private string VerificationCode { get; set; } =
+        string.Empty;
+
+    private LoginLookupResponse? LookupResult;
+
+    private int? SelectedOrganizationID;
+
+    private bool IsLookingUp;
+
+    private bool IsLoggingIn;
+
+    private string? ErrorMessage;
+
+    private bool CanVerify =>
+        LookupResult is not null &&
+        SelectedOrganizationID.HasValue &&
+        !string.IsNullOrWhiteSpace(
+            LookupResult.VerificationID) &&
+        GetPhoneDigits(
+            VerificationCode).Length == 6 &&
+        !IsLookingUp &&
+        !IsLoggingIn;
+
+    private async Task LookupUserAsync()
+    {
+        ErrorMessage = null;
+        LookupResult = null;
+        SelectedOrganizationID = null;
+        VerificationCode = string.Empty;
+
+        var trimmedIdentifier =
+            Identifier.Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                trimmedIdentifier))
+        {
+            ErrorMessage =
+                "Please input your 10 digit phone number.";
+
+            return;
+        }
+
+        var phoneDigits =
+            EMA.App.Utilities.LoginPhoneNumber.NormalizeDigits(trimmedIdentifier);
+
+        if (phoneDigits.Length != 10)
+        {
+            ErrorMessage =
+                "Please input a valid 10 digit phone number.";
+
+            return;
+        }
+
+        Identifier =
+            FormatPhoneNumber(
+                phoneDigits);
+
+        IsLookingUp = true;
+
+        try
+        {
+            var lookupServiceResult =
+                await LoginService
+                    .LookupUserAsync(
+                        phoneDigits);
+
+            if (!lookupServiceResult.IsSuccess ||
+                lookupServiceResult.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(
+                        lookupServiceResult.ErrorMessage)
+                        ? "That phone number is not found in our database."
+                        : lookupServiceResult.ErrorMessage;
+
+                return;
+            }
+
+            LookupResult =
+                lookupServiceResult.Value;
+
+            if (LookupResult.Organizations.Count == 1)
+            {
+                SelectedOrganizationID =
+                    LookupResult
+                        .Organizations[0]
+                        .EMAOrganizationID;
+            }
+        }
+        catch
+        {
+            ErrorMessage =
+                "The user lookup could not be completed. Please try again.";
+        }
+        finally
+        {
+            IsLookingUp = false;
+        }
+    }
+
+    private void SelectOrganization(
+        int EMAOrganizationID)
+    {
+        SelectedOrganizationID =
+            EMAOrganizationID;
+
+        ErrorMessage = null;
+    }
+
+    private async Task VerifyAndLoginAsync()
+    {
+        ErrorMessage = null;
+
+        if (LookupResult is null)
+        {
+            ErrorMessage =
+                "Please look up your phone number first.";
+
+            return;
+        }
+
+        if (!SelectedOrganizationID.HasValue)
+        {
+            ErrorMessage =
+                "Please select an organization.";
+
+            return;
+        }
+
+        var codeDigits =
+            GetPhoneDigits(
+                VerificationCode);
+
+        if (codeDigits.Length != 6)
+        {
+            ErrorMessage =
+                "Please enter the 6-digit code.";
+
+            return;
+        }
+
+        IsLoggingIn = true;
+
+        try
+        {
+            var loginServiceResult =
+                await LoginService
+                    .VerifyOrganizationLoginCodeAsync(
+                        SelectedOrganizationID.Value,
+                        LookupResult.UserID,
+                        LookupResult.VerificationID,
+                        codeDigits);
+
+            if (!loginServiceResult.IsSuccess ||
+                loginServiceResult.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(
+                        loginServiceResult.ErrorMessage)
+                        ? "The verification code is invalid or expired."
+                        : loginServiceResult.ErrorMessage;
+
+                return;
+            }
+
+            await CompleteLoginAsync(
+                loginServiceResult.Value);
+        }
+        catch
+        {
+            ErrorMessage =
+                "Login could not be completed. Please try again.";
+        }
+        finally
+        {
+            IsLoggingIn = false;
+        }
+    }
+
+    private async Task CompleteLoginAsync(
+        LoginResponse loginResponse)
+    {
+        await SessionState
+            .SignInAsync(
+                loginResponse);
+
+        var organization =
+            await OrganizationService
+                .GetOrganizationAsync(
+                    loginResponse.EMAOrganizationID);
+
+        if (organization is not null)
+        {
+            OrganizationState
+                .UpdateOrganization(
+                    organization);
+        }
+
+        var session =
+            SessionState.CurrentSession;
+
+        var categoryID =
+            session?.CurrentCategoryID ??
+            loginResponse.DefaultCategoryID;
+
+        var landingUrl =
+            await CategoryLandingPageService
+                .GetLandingUrlAsync(
+                    loginResponse.EMAOrganizationID,
+                    loginResponse.UserID,
+                    categoryID);
+
+        Navigation.NavigateTo(
+            landingUrl,
+            replace: true);
+    }
+
+    private void ResetLookup()
+    {
+        LookupResult = null;
+        SelectedOrganizationID = null;
+        VerificationCode = string.Empty;
+        ErrorMessage = null;
+    }
+
+    private static string GetPhoneDigits(
+        string value)
+    {
+        return new string(
+            value
+                .Where(char.IsDigit)
+                .ToArray());
+    }
+
+    private static string FormatPhoneNumber(
+        string phoneDigits)
+    {
+        if (phoneDigits.Length != 10)
+        {
+            return phoneDigits;
+        }
+
+        return $"{phoneDigits[..3]}-{phoneDigits.Substring(3, 3)}-{phoneDigits.Substring(6, 4)}";
+    }
+}

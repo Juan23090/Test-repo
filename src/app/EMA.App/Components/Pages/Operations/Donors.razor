@@ -1,0 +1,987 @@
+@page "/donor-maintenance"
+@implements IDisposable
+
+@using EMA.App.Models
+@using EMA.App.Services
+@using System.Text.Json
+
+@inject IDonorService DonorService
+@inject ICustomizationService CustomizationService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Donors - EMA</PageTitle>
+
+<div class="donors-container">
+    <div class="donors-form">
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Official Name:</u></strong></label>
+                <input class="form-input typeahead" placeholder="Start typing any part of the donor name" value="@SearchText"
+                       @oninput="OnSearchInput" @onchange="OnNameChange" @onfocus="ShowOfficialNameSearchResults" @onblur="HideOfficialNameSearchResults" disabled="@IsAuditView" />
+                @if (IsOfficialSearchFocused && SearchResults.Any())
+                {
+                    <div class="typeahead-dropdown">
+                        @foreach (var donor in SearchResults)
+                        {
+                            <div class="typeahead-item" @onpointerdown="() => SelectDonor(donor)">
+                                @donor.OfficialDonorName
+                            </div>
+                        }
+                    </div>
+                }
+                <button class="btn-create" @onclick="ClearDonorForm">Create New</button>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>eTransfer Name:</u></strong></label>
+            <input class="form-input typeahead" placeholder="Start typing any part of the donor name" value=@InteracSearchText @oninput="OnInteracSearchInput" @onchange="OnInteracNameChange" @onfocus="ShowInteracNameSearchResults" @onblur="HideInteracNameSearchResults" disabled="@IsAuditView" />
+            @if (IsInteracSearchFocused && InteracSearchResults.Any())
+            {
+                <div class="typeahead-dropdown">
+                    @foreach (var donor in InteracSearchResults)
+                    {
+                        <div class="typeahead-item" @onpointerdown="() => SelectDonor(donor)">
+                            @donor.InteracDonorName
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Address:</u></strong></label>
+            <input class="form-input" @bind="CurrentDonor.Address" @bind:event="oninput" disabled="@IsAuditView" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>City/Town:</u></strong></label>
+            <input class="form-input" @bind="CurrentDonor.City" @bind:event="oninput" disabled="@IsAuditView" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Province:</u></strong></label>
+            <input class="form-input province-input" @bind="CurrentDonor.ProvinceStateCode" @bind:event="oninput"
+                   disabled="@IsAuditView" />
+            <div class="postal-wrapper">
+                <label class="postal-label"><strong><u>Postal:</u></strong></label>
+                <input class="form-input postal-input" @bind="CurrentDonor.PostalCode" @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Country:</u></strong></label>
+            <input class="form-input" @bind="CurrentDonor.Country" @bind:event="oninput" disabled="@IsAuditView" />
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Email:</u></strong></label>
+                <input class="form-input" @bind="CurrentDonor.EmailAddress" @bind:event="oninput" disabled="@IsAuditView" />
+                <button class="btn-create" @onclick="CheckEmailDuplicates">Check Duplicates</button>
+            </div>
+            @if (!string.IsNullOrEmpty(EmailDuplicateMessage))
+            {
+                <div class="@(EmailProceedDespiteDuplicate ? "duplicate-notice" : "duplicate-message")">
+                    @EmailDuplicateMessage
+                </div>
+
+                @if (EmailDuplicateRecord is not null)
+                {
+                    <div class="duplicate-actions">
+                        <button type="button" class="btn-create"
+                                @onclick="() => ProceedWithDuplicate(isEmail: true)">
+                            Create New Anyway
+                        </button>
+                        <button type="button" class="btn-create"
+                                @onclick="() => GoToDuplicateRecord(isEmail: true)">
+                            Go to Existing
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Phone:</u></strong></label>
+                <input class="form-input" @bind="CurrentDonor.PhoneNumber" @bind:event="oninput" disabled="@IsAuditView" />
+                <button class="btn-create" @onclick="CheckPhoneDuplicates">Check Duplicates</button>
+            </div>
+            @if (!string.IsNullOrEmpty(PhoneDuplicateMessage))
+            {
+                <div class="@(PhoneProceedDespiteDuplicate ? "duplicate-notice" : "duplicate-message")">
+                    @PhoneDuplicateMessage
+                </div>
+
+                @if (PhoneDuplicateRecord is not null)
+                {
+                    <div class="duplicate-actions">
+                        <button type="button" class="btn-create"
+                                @onclick="() => ProceedWithDuplicate(isEmail: false)">
+                            Create New Anyway
+                        </button>
+                        <button type="button" class="btn-create"
+                                @onclick="() => GoToDuplicateRecord(isEmail: false)">
+                            Go to Existing
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Pilot eTransfer Ingestion:</u></strong></label>
+            <div class="switch-wrapper">
+                <label class="switch-container">
+                    <input type="checkbox"
+                           class="switch-input"
+                           checked="@(CurrentDonor.IsDonorPilotingEtransfers == "Y")"
+                           @onchange='args => CurrentDonor.IsDonorPilotingEtransfers =
+                                          (bool?)args.Value == true ? "Y" : "N"'
+                           disabled="@IsAuditView" />
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Manual Transaction Acknowledgments:</u></strong></label>
+            <div class="switch-wrapper">
+                <label class="switch-container">
+                    <input type="checkbox"
+                           class="switch-input"
+                           checked="@(CurrentDonor.AcknowledgmentForManualTransactions == "Y")"
+                           @onchange='args => CurrentDonor.AcknowledgmentForManualTransactions =
+                                          (bool?)args.Value == true ? "Y" : "N"'
+                           disabled="@IsAuditView" />
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Automated Transaction Acknowledgments:</u></strong></label>
+            <div class="switch-wrapper">
+                <label class="switch-container">
+                    <input type="checkbox"
+                           class="switch-input"
+                           checked="@(CurrentDonor.AcknowledgementForAutomatedTransactions == "Y")"
+                           @onchange='args => CurrentDonor.AcknowledgementForAutomatedTransactions =
+                                          (bool?)args.Value == true ? "Y" : "N"'
+                           disabled="@IsAuditView" />
+                    <span class="switch-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Status:</u></strong></label>
+            <select class="form-input" @bind="CurrentDonor.DonorStatusID" disabled="@IsAuditView">
+                <option value="">-- Select --</option>
+                @foreach (var status in DonorStatuses)
+                {
+                    <option value="@status.DonorStatusID">@status.Description</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-actions-row">
+            <div class="nav-section">
+                <div class="arrow-buttons">
+                    <button class="btn-arrow older" @onclick="GoOlder" disabled="@(!CanGoOlder)">Older</button>
+                    <button class="btn-arrow newer" @onclick="GoNewer" disabled="@(!CanGoNewer)">Newer</button>
+                </div>
+                <div class="audit-info">
+                    <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">@(IsAuditView ? AuditDateTime : "Date & Time")</div>
+                    <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">@(IsAuditView ? AuditUserName : "User Name")</div>
+                </div>
+            </div>
+
+            @if (!IsAuditView)
+            {
+                <div class="save-buttons">
+                    <button class="btn-save btn-save-more" @onclick="SaveAndEnterMore">
+                        <strong>Save Donor &amp; Enter More Donors</strong>
+                    </button>
+                    <button class="btn-save btn-save-donations" @onclick="SaveAndGoToDonations">
+                        <strong>Save Donor &amp; Enter Donations</strong>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(ValidationMessage))
+        {
+            <div class="validation-message donor-validation-message" role="alert">
+                @ValidationMessage
+            </div>
+        }
+    </div>
+</div>
+
+@if (ShowClearConfirm)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CancelClearDonorForm">
+        <div class="steps-overlay-panel donor-clear-confirm"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="clear-donor-title"
+             @onclick:stopPropagation="true">
+            <p id="clear-donor-title">
+                <strong>Clear all entered donor information?</strong>
+            </p>
+
+            <div class="anon-confirm-buttons">
+                <button class="btn-create"
+                        @onclick="ConfirmClearDonorForm">
+                    Clear
+                </button>
+
+                <button class="btn-create"
+                        @onclick="CancelClearDonorForm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DonorItem> SearchResults = new();
+    private List<UserItem> OrgUsers = new();
+    private DonorItem CurrentDonor = new();
+    private string SearchText = string.Empty;
+    private string ValidationMessage = string.Empty;
+    private bool IsAuditView = false;
+    private bool ShowClearConfirm;
+    private string AuditDateTime = string.Empty;
+    private string AuditUserName = string.Empty;
+    private List<DonorStatusItem> DonorStatuses = new();
+    private CancellationTokenSource? OfficialSearchCancellation;
+    private CancellationTokenSource? InteracSearchCancellation;
+    private bool IsOfficialSearchFocused;
+    private bool IsInteracSearchFocused;
+    private List<JsonElement> AuditRecords = [];
+    private int AuditIndex = -1;
+    private DonorItem? LiveDonor;
+
+    private int OrgID =>
+        SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private int? DefaultDonorStatusID =>
+        DonorStatuses
+            .OrderBy(status =>
+                status.Sequence ?? int.MaxValue)
+            .ThenBy(status =>
+                status.DonorStatusID)
+            .Select(status =>
+                (int?)status.DonorStatusID)
+            .FirstOrDefault();
+
+    private bool CanGoOlder =>
+        CurrentDonor.EMADonorID > 0 &&
+        AuditIndex < AuditRecords.Count - 1;
+
+    private bool CanGoNewer =>
+        AuditIndex >= 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (OrgID <= 0)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        DonorStatuses =
+            await CustomizationService.GetDonorStatusesAsync(
+                OrgID,
+                activeOnly: true);
+
+        CreateNewDonor();
+    }
+
+    private string GetUserName(int? userID)
+    {
+        if (!userID.HasValue || userID.Value <= 0)
+            return string.Empty;
+
+        var user = OrgUsers.FirstOrDefault(u => u.UserID == userID.Value);
+
+        return user?.UserName ?? string.Empty;
+    }
+
+    private void OnNameChange(ChangeEventArgs e)
+    {
+        CurrentDonor.OfficialDonorName = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void OnInteracNameChange(ChangeEventArgs e)
+    {
+        CurrentDonor.InteracDonorName = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private async Task OnSearchInput(
+        ChangeEventArgs eventArgs)
+    {
+        SearchText =
+            eventArgs.Value?.ToString()
+            ?? string.Empty;
+
+        SearchResults =
+            [];
+
+        await SearchOfficialNamesAsync();
+    }
+
+    private async Task ShowOfficialNameSearchResults()
+    {
+        IsOfficialSearchFocused =
+            true;
+
+        if (SearchResults.Count == 0)
+        {
+            await SearchOfficialNamesAsync();
+        }
+    }
+
+    private void HideOfficialNameSearchResults()
+    {
+        IsOfficialSearchFocused =
+            false;
+
+        CancelSearch(
+            ref OfficialSearchCancellation);
+    }
+
+    private async Task SearchOfficialNamesAsync()
+    {
+        CancelSearch(
+            ref OfficialSearchCancellation);
+
+        if (!IsOfficialSearchFocused ||
+            SearchText.Trim().Length < 2)
+        {
+            SearchResults =
+                [];
+
+            return;
+        }
+
+        using var cancellation =
+            new CancellationTokenSource();
+
+        OfficialSearchCancellation =
+            cancellation;
+
+        try
+        {
+            await Task.Delay(
+                250,
+                cancellation.Token);
+
+            var results =
+                await DonorService.SearchAsync(
+                    OrgID,
+                    SearchText.Trim(),
+                    field: "official",
+                    cancellationToken: cancellation.Token);
+
+            if (!cancellation.IsCancellationRequested &&
+                IsOfficialSearchFocused)
+            {
+                SearchResults =
+                    results.Take(5).ToList();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    OfficialSearchCancellation,
+                    cancellation))
+            {
+                OfficialSearchCancellation =
+                    null;
+            }
+        }
+    }
+
+    private string InteracSearchText = string.Empty;
+    private List<DonorItem> InteracSearchResults = new();
+
+    private async Task OnInteracSearchInput(
+        ChangeEventArgs eventArgs)
+    {
+        InteracSearchText =
+            eventArgs.Value?.ToString()
+            ?? string.Empty;
+
+        InteracSearchResults =
+            [];
+
+        await SearchInteracNamesAsync();
+    }
+
+    private async Task ShowInteracNameSearchResults()
+    {
+        IsInteracSearchFocused =
+            true;
+
+        if (InteracSearchResults.Count == 0)
+        {
+            await SearchInteracNamesAsync();
+        }
+    }
+
+    private void HideInteracNameSearchResults()
+    {
+        IsInteracSearchFocused =
+            false;
+
+        CancelSearch(
+            ref InteracSearchCancellation);
+    }
+
+    private async Task SearchInteracNamesAsync()
+    {
+        CancelSearch(
+            ref InteracSearchCancellation);
+
+        if (!IsInteracSearchFocused ||
+            InteracSearchText.Trim().Length < 2)
+        {
+            InteracSearchResults =
+                [];
+
+            return;
+        }
+
+        using var cancellation =
+            new CancellationTokenSource();
+
+        InteracSearchCancellation =
+            cancellation;
+
+        try
+        {
+            await Task.Delay(
+                250,
+                cancellation.Token);
+
+            var results =
+                await DonorService.SearchAsync(
+                    OrgID,
+                    InteracSearchText.Trim(),
+                    field: "interac",
+                    cancellationToken: cancellation.Token);
+
+            if (!cancellation.IsCancellationRequested &&
+                IsInteracSearchFocused)
+            {
+                InteracSearchResults =
+                    results.Take(5).ToList();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    InteracSearchCancellation,
+                    cancellation))
+            {
+                InteracSearchCancellation =
+                    null;
+            }
+        }
+    }
+
+    private static void CancelSearch(
+        ref CancellationTokenSource? cancellationSource)
+    {
+        var cancellation =
+            cancellationSource;
+
+        cancellationSource =
+            null;
+
+        cancellation?.Cancel();
+    }
+
+    private static DonorItem CloneDonor(DonorItem donor)
+    {
+        return new DonorItem
+        {
+            EMADonorID = donor.EMADonorID,
+            EMAOrganizationID = donor.EMAOrganizationID,
+            ChMSDonorID = donor.ChMSDonorID,
+            GivingNumber = donor.GivingNumber,
+            EMADefaultCampusID = donor.EMADefaultCampusID,
+            InteracDonorName = donor.InteracDonorName,
+            OfficialDonorName = donor.OfficialDonorName,
+            PhoneNumber = donor.PhoneNumber,
+            EmailAddress = donor.EmailAddress,
+            Address = donor.Address,
+            City = donor.City,
+            ProvinceStateCode = donor.ProvinceStateCode,
+            Country = donor.Country,
+            PostalCode = donor.PostalCode,
+            IsActive = donor.IsActive,
+            DateTimeCreated = donor.DateTimeCreated,
+            CreatedByUserID = donor.CreatedByUserID,
+            DateTimeUpdated = donor.DateTimeUpdated,
+            UpdatedbyUserID = donor.UpdatedbyUserID,
+            IsDonorPilotingEtransfers = donor.IsDonorPilotingEtransfers,
+            AcknowledgmentForManualTransactions = donor.AcknowledgmentForManualTransactions,
+            AcknowledgementForAutomatedTransactions = donor.AcknowledgementForAutomatedTransactions,
+            DonorStatusID = donor.DonorStatusID
+        };
+    }
+
+    private async Task SelectDonor(DonorItem donor)
+    {
+        CurrentDonor = CloneDonor(donor);
+        LiveDonor = CloneDonor(donor);
+        SearchText = donor.OfficialDonorName ?? string.Empty;
+        InteracSearchText = donor.InteracDonorName ?? string.Empty;
+        SearchResults = [];
+        InteracSearchResults = [];
+        IsAuditView = false;
+        AuditDateTime = string.Empty;
+        AuditUserName = string.Empty;
+        AuditIndex = -1;
+        AuditRecords = [];
+        ValidationMessage = string.Empty;
+
+        try
+        {
+            AuditRecords =
+                await DonorService.GetDonorAuditAsync(
+                    OrgID,
+                    donor.EMADonorID);
+        }
+        catch
+        {
+            ValidationMessage =
+                "The donor loaded, but its edit history could not be loaded.";
+        }
+    }
+
+    private void CreateNewDonor()
+    {
+        CurrentDonor = new DonorItem { EMAOrganizationID = OrgID };
+        SearchText = string.Empty;
+        SearchResults = new();
+        InteracSearchText = string.Empty;
+        InteracSearchResults = new();
+        IsAuditView = false;
+        AuditDateTime = string.Empty;
+        AuditUserName = string.Empty;
+        AuditRecords = [];
+        AuditIndex = -1;
+        LiveDonor = null;
+        ValidationMessage = string.Empty;
+        ClearDuplicateState();
+        CurrentDonor.IsDonorPilotingEtransfers = "N";
+        CurrentDonor.AcknowledgmentForManualTransactions = "Y";
+        CurrentDonor.AcknowledgementForAutomatedTransactions = "Y";
+        CurrentDonor.DonorStatusID =
+            DefaultDonorStatusID;
+    }
+
+    private void ClearDonorForm()
+    {
+        if (!HasDonorDataToClear())
+        {
+            CreateNewDonor();
+            return;
+        }
+
+        ShowClearConfirm =
+            true;
+    }
+
+    private bool HasDonorDataToClear() =>
+        CurrentDonor.EMADonorID > 0 ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.OfficialDonorName) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.InteracDonorName) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.Address) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.City) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.ProvinceStateCode) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.PostalCode) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.Country) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.EmailAddress) ||
+        !string.IsNullOrWhiteSpace(CurrentDonor.PhoneNumber) ||
+        CurrentDonor.EMADefaultCampusID.HasValue ||
+        CurrentDonor.DonorStatusID != DefaultDonorStatusID ||
+        CurrentDonor.IsDonorPilotingEtransfers != "N" ||
+        CurrentDonor.AcknowledgmentForManualTransactions != "Y" ||
+        CurrentDonor.AcknowledgementForAutomatedTransactions != "Y";
+
+    private void ConfirmClearDonorForm()
+    {
+        ShowClearConfirm =
+            false;
+
+        CreateNewDonor();
+    }
+
+    private void CancelClearDonorForm()
+    {
+        ShowClearConfirm =
+            false;
+    }
+
+    private async Task EnsureOrganizationUsersLoadedAsync()
+    {
+        if (OrgUsers.Count > 0)
+        {
+            return;
+        }
+
+        OrgUsers =
+            await DonorService.GetOrganizationUsersAsync(
+                OrgID);
+    }
+
+    private async Task GoOlder()
+    {
+        if (!CanGoOlder)
+        {
+            return;
+        }
+
+        AuditIndex++;
+        await LoadAuditRecordAsync(AuditRecords[AuditIndex]);
+    }
+
+    private async Task GoNewer()
+    {
+        if (!CanGoNewer)
+        {
+            return;
+        }
+
+        if (AuditIndex == 0)
+        {
+            AuditIndex = -1;
+            if (LiveDonor is not null)
+            {
+                CurrentDonor = CloneDonor(LiveDonor);
+                SearchText = CurrentDonor.OfficialDonorName ?? string.Empty;
+                InteracSearchText = CurrentDonor.InteracDonorName ?? string.Empty;
+            }
+
+            IsAuditView = false;
+            AuditDateTime = string.Empty;
+            AuditUserName = string.Empty;
+            return;
+        }
+
+        AuditIndex--;
+        await LoadAuditRecordAsync(AuditRecords[AuditIndex]);
+    }
+
+    private async Task LoadAuditRecordAsync(JsonElement auditRecord)
+    {
+        if (!TryGetPropertyIgnoreCase(
+                auditRecord,
+                "Payload",
+                out var payloadElement))
+        {
+            ValidationMessage = "This donor history entry is invalid.";
+            return;
+        }
+
+        var payload =
+            payloadElement.ValueKind == JsonValueKind.String
+                ? payloadElement.GetString()
+                : payloadElement.GetRawText();
+
+        var snapshot =
+            string.IsNullOrWhiteSpace(payload)
+                ? null
+                : JsonSerializer.Deserialize<DonorItem>(
+                    payload,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+        if (snapshot is null)
+        {
+            ValidationMessage = "This donor history entry could not be read.";
+            return;
+        }
+
+        CurrentDonor = CloneDonor(snapshot);
+        SearchText = CurrentDonor.OfficialDonorName ?? string.Empty;
+        InteracSearchText = CurrentDonor.InteracDonorName ?? string.Empty;
+        SearchResults = [];
+        InteracSearchResults = [];
+        IsAuditView = true;
+        ValidationMessage = string.Empty;
+
+        AuditDateTime =
+            TryGetPropertyIgnoreCase(
+                auditRecord,
+                "DateTimeCreated",
+                out var dateElement) &&
+            dateElement.TryGetDateTime(out var auditDate)
+                ? auditDate.ToString("yyyy-MM-dd HH:mm:ss")
+                : string.Empty;
+
+        int? changedByUserID =
+            TryGetPropertyIgnoreCase(
+                auditRecord,
+                "ChangedByUserID",
+                out var userElement) &&
+            userElement.ValueKind == JsonValueKind.Number &&
+            userElement.TryGetInt32(out var userID)
+                ? userID
+                : null;
+
+        await EnsureOrganizationUsersLoadedAsync();
+        AuditUserName = GetUserName(changedByUserID);
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        JsonElement element,
+        string propertyName,
+        out JsonElement value)
+    {
+        if (element.TryGetProperty(
+                propertyName,
+                out value))
+        {
+            return true;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(
+                    property.Name,
+                    propertyName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                value =
+                    property.Value;
+
+                return true;
+            }
+        }
+
+        value =
+            default;
+
+        return false;
+    }
+
+    private bool ValidateDonor()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDonor.OfficialDonorName) &&
+            string.IsNullOrWhiteSpace(CurrentDonor.InteracDonorName))
+        {
+            ValidationMessage = "At least one name field (CRA Name or eTransfer Name) is required.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(CurrentDonor.Address) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.City) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.ProvinceStateCode) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.PostalCode) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.EmailAddress))
+        {
+            ValidationMessage = "All fields except one name field are compulsory.";
+            return false;
+        }
+        if (!CurrentDonor.DonorStatusID.HasValue ||
+            CurrentDonor.DonorStatusID.Value <= 0)
+        {
+            ValidationMessage = "Please select a status.";
+            return false;
+        }
+        ValidationMessage = string.Empty;
+        return true;
+    }
+
+    private async Task SaveAndEnterMore()
+    {
+        if (!ValidateDonor()) return;
+        CurrentDonor.EMAOrganizationID = OrgID;
+        if (CurrentDonor.EMADonorID == 0)
+            await DonorService.CreateAsync(CurrentDonor);
+        else
+            await DonorService.UpdateAsync(CurrentDonor);
+        Console.WriteLine(CurrentDonor);
+        CreateNewDonor();
+    }
+
+    private async Task SaveAndEnterJourney()
+    {
+        if (!ValidateDonor()) return;
+        CurrentDonor.EMAOrganizationID = OrgID;
+        if (CurrentDonor.EMADonorID == 0)
+            await DonorService.CreateAsync(CurrentDonor);
+        else
+            await DonorService.UpdateAsync(CurrentDonor);
+        Navigation.NavigateTo("/journey");
+    }
+
+    private async Task SaveAndGoToDonations()
+    {
+        if (!ValidateDonor()) return;
+        CurrentDonor.EMAOrganizationID = OrgID;
+        if (CurrentDonor.EMADonorID == 0)
+        {
+            var newID = await DonorService.CreateAsync(CurrentDonor);
+            if (newID.HasValue)
+                CurrentDonor.EMADonorID = newID.Value;
+        }
+        else
+        {
+            await DonorService.UpdateAsync(CurrentDonor);
+        }
+        Navigation.NavigateTo($"/enter-donations?donorID={CurrentDonor.EMADonorID}");
+    }
+
+    private string EmailDuplicateMessage = string.Empty;
+    private string PhoneDuplicateMessage = string.Empty;
+    /*
+        Separate per field. A single shared record let a no-match check on
+        one field clear the other field's actions while its warning stayed
+        on screen, leaving a warning with no way to act on it.
+    */
+    private DonorItem? EmailDuplicateRecord = null;
+    private DonorItem? PhoneDuplicateRecord = null;
+    private bool EmailProceedDespiteDuplicate = false;
+    private bool PhoneProceedDespiteDuplicate = false;
+
+    private async Task CheckEmailDuplicates()
+    {
+        EmailProceedDespiteDuplicate = false;
+
+        if (string.IsNullOrWhiteSpace(CurrentDonor.EmailAddress))
+        {
+            EmailDuplicateMessage = "Please enter an email to check.";
+            return;
+        }
+
+        var matches =
+            (await DonorService.SearchAsync(
+                OrgID,
+                CurrentDonor.EmailAddress,
+                field: "email",
+                exact: true))
+            .Where(donor =>
+                donor.EMADonorID != CurrentDonor.EMADonorID)
+            .ToList();
+        if (matches.Any())
+        {
+            EmailDuplicateRecord = matches.First();
+            EmailDuplicateMessage = $"A donor with this email already exists: {EmailDuplicateRecord.OfficialDonorName ?? EmailDuplicateRecord.InteracDonorName}.";
+        }
+        else
+        {
+            EmailDuplicateRecord = null;
+            EmailDuplicateMessage = "No duplicates found for this email.";
+        }
+    }
+
+    private async Task CheckPhoneDuplicates()
+    {
+        PhoneProceedDespiteDuplicate = false;
+
+        if (string.IsNullOrWhiteSpace(CurrentDonor.PhoneNumber))
+        {
+            PhoneDuplicateMessage = "Please enter a phone number to check.";
+            return;
+        }
+
+        var matches =
+            (await DonorService.SearchAsync(
+                OrgID,
+                CurrentDonor.PhoneNumber,
+                field: "phone",
+                exact: true))
+            .Where(donor =>
+                donor.EMADonorID != CurrentDonor.EMADonorID)
+            .ToList();
+        if (matches.Any())
+        {
+            PhoneDuplicateRecord = matches.First();
+            PhoneDuplicateMessage = $"A donor with this phone already exists: {PhoneDuplicateRecord.OfficialDonorName ?? PhoneDuplicateRecord.InteracDonorName}.";
+        }
+        else
+        {
+            PhoneDuplicateRecord = null;
+            PhoneDuplicateMessage = "No duplicates found for this phone number.";
+        }
+    }
+
+    /*
+        Clearing the field's duplicate record hides its buttons; the proceed flag
+        switches the text from a red warning to a neutral confirmation so the
+        user can see their choice registered. Saving is unaffected either way -
+        a donor with EMADonorID 0 is created, which is already what "create a
+        new record anyway" means.
+    */
+    private void ProceedWithDuplicate(bool isEmail)
+    {
+        const string notice =
+            "Continuing as a new record. The existing donor was left unchanged.";
+
+        if (isEmail)
+        {
+            EmailProceedDespiteDuplicate = true;
+            EmailDuplicateRecord = null;
+            EmailDuplicateMessage = notice;
+        }
+        else
+        {
+            PhoneProceedDespiteDuplicate = true;
+            PhoneDuplicateRecord = null;
+            PhoneDuplicateMessage = notice;
+        }
+    }
+
+    private async Task GoToDuplicateRecord(bool isEmail)
+    {
+        var record = isEmail ? EmailDuplicateRecord : PhoneDuplicateRecord;
+
+        if (record is null)
+        {
+            return;
+        }
+
+        await SelectDonor(record);
+        ClearDuplicateState();
+    }
+
+    private void ClearDuplicateState()
+    {
+        EmailDuplicateMessage = string.Empty;
+        PhoneDuplicateMessage = string.Empty;
+        EmailDuplicateRecord = null;
+        PhoneDuplicateRecord = null;
+        EmailProceedDespiteDuplicate = false;
+        PhoneProceedDespiteDuplicate = false;
+    }
+
+    public void Dispose()
+    {
+        CancelSearch(
+            ref OfficialSearchCancellation);
+
+        CancelSearch(
+            ref InteracSearchCancellation);
+    }
+}

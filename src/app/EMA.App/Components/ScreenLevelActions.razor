@@ -1,0 +1,718 @@
+@implements IDisposable
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IScreenFeedbackService ScreenFeedbackService
+@inject IScreenActionUiState ScreenActionUiState
+@inject IUserSessionStateService SessionState
+@inject IOrganizationStateService OrganizationStateService
+
+@if (CanUseScreenActions && HasVisibleScreenActions)
+{
+    <div class="screen-level-actions"
+         aria-label="Current screen feedback and support">
+        @if (_summary.Faqs.Count > 0)
+        {
+            <button type="button"
+                    class="@GetActionButtonClass(ScreenViewerKind.Faq, enabled: true)"
+                    title="Frequently Asked Questions"
+                    aria-label="Frequently Asked Questions"
+                    @onclick="@(() => OpenViewer(ScreenViewerKind.Faq))">
+                <i class="bi bi-question-circle-fill" aria-hidden="true"></i>
+                <span class="screen-level-action-count">@_summary.Faqs.Count</span>
+            </button>
+        }
+
+        @if (_summary.Enhancements.Count > 0)
+        {
+            <button type="button"
+                    class="@GetEnhancementButtonClass()"
+                    title="Enhancement Requests"
+                    aria-label="Enhancement Requests"
+                    @onclick="@(() => OpenViewer(ScreenViewerKind.Enhancement))">
+                <i class="bi bi-lightbulb-fill" aria-hidden="true"></i>
+                <span class="screen-level-action-count">@_summary.Enhancements.Count</span>
+            </button>
+        }
+
+        @if (_summary.SupportTickets.Count > 0)
+        {
+            <button type="button"
+                    class="@GetActionButtonClass(ScreenViewerKind.Support, enabled: true)"
+                    title="Support Tickets"
+                    aria-label="Support Tickets"
+                    @onclick="@(() => OpenViewer(ScreenViewerKind.Support))">
+                <i class="bi bi-ticket-perforated-fill" aria-hidden="true"></i>
+                <span class="screen-level-action-count">@_summary.SupportTickets.Count</span>
+            </button>
+        }
+    </div>
+}
+
+<FloatingPanel IsOpen="@(_viewerKind == ScreenViewerKind.Faq)"
+               Title="Frequently Asked Questions"
+               IconClass="bi bi-question-circle-fill"
+               Size="wide"
+               OnClose="CloseViewerAsync">
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="screen-action-message screen-action-error" role="alert">@_loadError</div>
+    }
+    else if (_summary.Faqs.Count == 0)
+    {
+        <p>There are no reviewed, active FAQs for this screen.</p>
+    }
+    else
+    {
+        <div class="screen-action-browser">
+            <div class="screen-action-list" aria-label="FAQs for this screen">
+                @foreach (var faq in _summary.Faqs)
+                {
+                    <button type="button"
+                            class="@GetListButtonClass(_selectedFaq?.FAQID == faq.FAQID)"
+                            @onclick="@(() => _selectedFaq = faq)">
+                        @faq.Question
+                    </button>
+                }
+            </div>
+            <div class="screen-action-detail">
+                @if (_selectedFaq is not null)
+                {
+                    <h3>@_selectedFaq.Question</h3>
+                    <p class="screen-action-prewrap">@_selectedFaq.Answer</p>
+                }
+                else
+                {
+                    <p>Select a question to see the answer.</p>
+                }
+            </div>
+        </div>
+    }
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@(_viewerKind == ScreenViewerKind.Enhancement)"
+               Title="Enhancement Requests"
+               IconClass="bi bi-lightbulb-fill"
+               Size="wide"
+               OnClose="CloseViewerAsync">
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="screen-action-message screen-action-error" role="alert">@_loadError</div>
+    }
+    else if (_summary.Enhancements.Count == 0)
+    {
+        <p>There are no visible enhancement requests for this screen.</p>
+    }
+    else
+    {
+        <div class="screen-action-browser">
+            <div class="screen-action-list" aria-label="Enhancement requests for this screen">
+                @foreach (var enhancement in _summary.Enhancements)
+                {
+                    <button type="button"
+                            class="@GetListButtonClass(_selectedEnhancement?.EnhancementRequestID == enhancement.EnhancementRequestID)"
+                            @onclick="@(() => SelectEnhancement(enhancement))">
+                        @enhancement.Title
+                    </button>
+                }
+            </div>
+            <div class="screen-action-detail">
+                @if (_selectedEnhancement is not null)
+                {
+                    <h3>@_selectedEnhancement.Title</h3>
+                    <p class="screen-action-prewrap">@_selectedEnhancement.Description</p>
+
+                    <dl class="screen-action-facts">
+                        <dt>Status</dt>
+                        <dd>@GetEnhancementStatusText(_selectedEnhancement)</dd>
+                        <dt>Yes Votes</dt>
+                        <dd>@_selectedEnhancement.YesVotes</dd>
+                        <dt>No Votes</dt>
+                        <dd>@_selectedEnhancement.NoVotes</dd>
+                    </dl>
+
+                    <div class="screen-action-vote-row">
+                        <label for="screen-enhancement-vote">Your organization's vote</label>
+                        <select id="screen-enhancement-vote" @bind="_voteValue">
+                            <option value="">-- Select --</option>
+                            <option value="Y">Yes</option>
+                            <option value="N">No</option>
+                        </select>
+                        <button type="button"
+                                class="screen-action-primary"
+                                disabled="@(_saving || string.IsNullOrWhiteSpace(_voteValue))"
+                                @onclick="SaveVoteAsync">
+                            Save Vote
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_viewerMessage))
+                    {
+                        <div class="screen-action-message" role="status">@_viewerMessage</div>
+                    }
+                }
+                else
+                {
+                    <p>Select an enhancement request to see the details and vote.</p>
+                }
+            </div>
+        </div>
+    }
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@(_viewerKind == ScreenViewerKind.Support)"
+               Title="Support Tickets"
+               IconClass="bi bi-ticket-perforated-fill"
+               Size="wide"
+               OnClose="CloseViewerAsync">
+    @if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="screen-action-message screen-action-error" role="alert">@_loadError</div>
+    }
+    else if (_summary.SupportTickets.Count == 0)
+    {
+        <p>There are no open support tickets for your organization on this screen.</p>
+    }
+    else
+    {
+        <div class="screen-action-browser">
+            <div class="screen-action-list" aria-label="Support tickets for this organization and screen">
+                @foreach (var ticket in _summary.SupportTickets)
+                {
+                    <button type="button"
+                            class="@GetListButtonClass(_selectedSupport?.SupportTicketID == ticket.SupportTicketID)"
+                            @onclick="@(() => _selectedSupport = ticket)">
+                        @ticket.Title
+                    </button>
+                }
+            </div>
+            <div class="screen-action-detail">
+                @if (_selectedSupport is not null)
+                {
+                    <h3>@_selectedSupport.Title</h3>
+                    <p class="screen-action-prewrap">@_selectedSupport.Description</p>
+                    <dl class="screen-action-facts">
+                        <dt>Last Updated</dt>
+                        <dd>@FormatDateTime(_selectedSupport.DateTimeUpdated)</dd>
+                        <dt>Status</dt>
+                        <dd>@_selectedSupport.StatusDescription</dd>
+                    </dl>
+                }
+                else
+                {
+                    <p>Select a support ticket to see its details.</p>
+                }
+            </div>
+        </div>
+    }
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@(_entryKind is not null)"
+               Title="@EntryTitle"
+               IconClass="@EntryIconClass"
+               Size="medium"
+               OnClose="CloseEntryAsync">
+    <div class="screen-action-entry-form">
+        @if (_entryKind == ScreenEntryKind.Faq)
+        {
+            <label for="screen-faq-question">Question</label>
+            <input id="screen-faq-question"
+                   maxlength="256"
+                   @bind="_entryQuestion" />
+
+            <label for="screen-faq-answer">Answer</label>
+            <textarea id="screen-faq-answer"
+                      rows="8"
+                      @bind="_entryAnswer"></textarea>
+        }
+        else if (_entryKind == ScreenEntryKind.Enhancement)
+        {
+            <label for="screen-enhancement-title">Title</label>
+            <input id="screen-enhancement-title"
+                   maxlength="256"
+                   @bind="_entryTitle" />
+
+            <label for="screen-enhancement-description">Description</label>
+            <textarea id="screen-enhancement-description"
+                      rows="8"
+                      @bind="_entryDescription"></textarea>
+        }
+        else if (_entryKind == ScreenEntryKind.Support)
+        {
+            <label for="screen-support-title">Title</label>
+            <input id="screen-support-title"
+                   maxlength="256"
+                   @bind="_entryTitle" />
+
+            <label for="screen-support-description">Description</label>
+            <textarea id="screen-support-description"
+                      rows="8"
+                      @bind="_entryDescription"></textarea>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_entryMessage))
+        {
+            <div class="screen-action-message @(_entryHasError ? "screen-action-error" : string.Empty)"
+                 role="@(_entryHasError ? "alert" : "status")">
+                @_entryMessage
+            </div>
+        }
+
+        <div class="screen-action-entry-buttons">
+            <button type="button"
+                    class="screen-action-primary"
+                    disabled="@_saving"
+                    @onclick="SaveEntryAsync">
+                @(_saving ? "Saving..." : "Submit")
+            </button>
+            <button type="button"
+                    class="screen-action-secondary"
+                    disabled="@_saving"
+                    @onclick="CloseEntryAsync">
+                Cancel
+            </button>
+        </div>
+    </div>
+</FloatingPanel>
+
+@code {
+    private const string OptionalAnswerText =
+        "Answers are optional - EMA staff will answer if you don't know.";
+
+    [Parameter]
+    public MenuItemDto? CurrentMenuItem { get; set; }
+
+    private ScreenActionSummary _summary = new();
+    private ScreenViewerKind? _viewerKind;
+    private ScreenEntryKind? _entryKind;
+    private ScreenFaq? _selectedFaq;
+    private ScreenEnhancement? _selectedEnhancement;
+    private ScreenSupportTicket? _selectedSupport;
+    private string _voteValue = string.Empty;
+    private string? _viewerMessage;
+    private string? _loadError;
+    private string _entryQuestion = string.Empty;
+    private string _entryAnswer = OptionalAnswerText;
+    private string _entryTitle = string.Empty;
+    private string _entryDescription = string.Empty;
+    private string? _entryMessage;
+    private bool _entryHasError;
+    private bool _saving;
+    private int? _lastMenuItemID;
+    private int _loadVersion;
+    private bool _disposed;
+
+    private bool CanUseScreenActions =>
+        SessionState.CurrentSession is { IsDonorSession: false } &&
+        CurrentMenuItem?.MenuItemID > 0;
+
+    private bool HasVisibleScreenActions =>
+        _summary.Faqs.Count > 0 ||
+        _summary.Enhancements.Count > 0 ||
+        _summary.SupportTickets.Count > 0;
+
+    private string EntryTitle =>
+        _entryKind switch
+        {
+            ScreenEntryKind.Faq => "Add a Frequently Asked Question",
+            ScreenEntryKind.Enhancement => "Add an Enhancement Request",
+            ScreenEntryKind.Support => "Create a Support Request",
+            _ => "Enter"
+        };
+
+    private string EntryIconClass =>
+        _entryKind switch
+        {
+            ScreenEntryKind.Faq => "bi bi-question-circle-fill",
+            ScreenEntryKind.Enhancement => "bi bi-lightbulb-fill",
+            ScreenEntryKind.Support => "bi bi-ticket-perforated-fill",
+            _ => "bi bi-pencil-square"
+        };
+
+    protected override void OnInitialized()
+    {
+        ScreenActionUiState.EntryRequested += HandleEntryRequested;
+        SessionState.OnChange += HandleSessionChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var menuItemID = CurrentMenuItem?.MenuItemID;
+
+        if (_lastMenuItemID == menuItemID)
+        {
+            return;
+        }
+
+        _lastMenuItemID = menuItemID;
+        ResetViewer();
+        ResetEntry();
+
+        if (CanUseScreenActions && menuItemID.HasValue)
+        {
+            await LoadSummaryAsync(menuItemID.Value);
+        }
+        else
+        {
+            _summary = new ScreenActionSummary
+            {
+                MenuItemID = menuItemID ?? 0
+            };
+        }
+    }
+
+    private async Task LoadSummaryAsync(int menuItemID)
+    {
+        var version = ++_loadVersion;
+        _loadError = null;
+
+        try
+        {
+            var result = await ScreenFeedbackService
+                .GetScreenActionSummaryAsync(menuItemID);
+
+            if (_disposed || version != _loadVersion ||
+                CurrentMenuItem?.MenuItemID != menuItemID)
+            {
+                return;
+            }
+
+            _summary = result;
+            KeepSelectionsInSync();
+        }
+        catch (Exception exception)
+        {
+            if (_disposed || version != _loadVersion)
+            {
+                return;
+            }
+
+            _loadError = exception.Message;
+            _summary = new ScreenActionSummary
+            {
+                MenuItemID = menuItemID
+            };
+        }
+    }
+
+    private void OpenViewer(ScreenViewerKind kind)
+    {
+        _viewerKind = kind;
+        _viewerMessage = null;
+
+        if (kind == ScreenViewerKind.Faq)
+        {
+            _selectedFaq ??= _summary.Faqs.FirstOrDefault();
+        }
+        else if (kind == ScreenViewerKind.Enhancement)
+        {
+            var first = _summary.Enhancements.FirstOrDefault();
+            if (first is not null)
+            {
+                SelectEnhancement(first);
+            }
+        }
+        else if (kind == ScreenViewerKind.Support)
+        {
+            _selectedSupport ??= _summary.SupportTickets.FirstOrDefault();
+        }
+    }
+
+    private Task CloseViewerAsync()
+    {
+        _viewerKind = null;
+        _viewerMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private void SelectEnhancement(ScreenEnhancement enhancement)
+    {
+        _selectedEnhancement = enhancement;
+        _voteValue = enhancement.OrganizationVote ?? string.Empty;
+        _viewerMessage = null;
+    }
+
+    private async Task SaveVoteAsync()
+    {
+        if (_selectedEnhancement is null || _voteValue is not ("Y" or "N"))
+        {
+            return;
+        }
+
+        _saving = true;
+        _viewerMessage = null;
+
+        try
+        {
+            var id = _selectedEnhancement.EnhancementRequestID;
+            await ScreenFeedbackService.SaveEnhancementVoteAsync(id, _voteValue);
+
+            if (CurrentMenuItem?.MenuItemID is int menuItemID)
+            {
+                await LoadSummaryAsync(menuItemID);
+                _selectedEnhancement = _summary.Enhancements
+                    .FirstOrDefault(item => item.EnhancementRequestID == id);
+
+                if (_selectedEnhancement is not null)
+                {
+                    _voteValue = _selectedEnhancement.OrganizationVote ?? string.Empty;
+                }
+            }
+
+            _viewerMessage = "Vote saved.";
+        }
+        catch (Exception exception)
+        {
+            _viewerMessage = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void HandleEntryRequested(ScreenEntryRequest request)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (!CanUseScreenActions || CurrentMenuItem?.MenuItemID != request.MenuItemID)
+            {
+                return;
+            }
+
+            ResetEntry();
+            _entryKind = request.Kind;
+            StateHasChanged();
+        });
+    }
+
+    private async Task SaveEntryAsync()
+    {
+        var menuItemID = CurrentMenuItem?.MenuItemID ?? 0;
+
+        if (_entryKind is null || menuItemID <= 0)
+        {
+            return;
+        }
+
+        _entryMessage = null;
+        _entryHasError = false;
+
+        if (_entryKind == ScreenEntryKind.Faq && string.IsNullOrWhiteSpace(_entryQuestion))
+        {
+            SetEntryError("Question is required.");
+            return;
+        }
+
+        if (_entryKind is ScreenEntryKind.Enhancement or ScreenEntryKind.Support &&
+            (string.IsNullOrWhiteSpace(_entryTitle) || string.IsNullOrWhiteSpace(_entryDescription)))
+        {
+            SetEntryError("Title and description are required.");
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (_entryKind == ScreenEntryKind.Faq)
+            {
+                await ScreenFeedbackService.CreateFaqAsync(
+                    menuItemID,
+                    new CreateFaqRequest
+                    {
+                        Question = _entryQuestion,
+                        Answer = _entryAnswer
+                    });
+            }
+            else if (_entryKind == ScreenEntryKind.Enhancement)
+            {
+                await ScreenFeedbackService.CreateEnhancementRequestAsync(
+                    menuItemID,
+                    new CreateEnhancementRequest
+                    {
+                        Title = _entryTitle,
+                        Description = _entryDescription
+                    });
+            }
+            else
+            {
+                await ScreenFeedbackService.CreateSupportTicketAsync(
+                    menuItemID,
+                    new CreateSupportTicketRequest
+                    {
+                        Title = _entryTitle,
+                        Description = _entryDescription
+                    });
+            }
+
+            await LoadSummaryAsync(menuItemID);
+            _entryMessage = "Saved.";
+            _entryHasError = false;
+            await Task.Delay(350);
+            ResetEntry();
+        }
+        catch (Exception exception)
+        {
+            SetEntryError(exception.Message);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task CloseEntryAsync()
+    {
+        ResetEntry();
+        return Task.CompletedTask;
+    }
+
+    private void ResetEntry()
+    {
+        _entryKind = null;
+        _entryQuestion = string.Empty;
+        _entryAnswer = OptionalAnswerText;
+        _entryTitle = string.Empty;
+        _entryDescription = string.Empty;
+        _entryMessage = null;
+        _entryHasError = false;
+    }
+
+    private void ResetViewer()
+    {
+        _viewerKind = null;
+        _selectedFaq = null;
+        _selectedEnhancement = null;
+        _selectedSupport = null;
+        _voteValue = string.Empty;
+        _viewerMessage = null;
+        _loadError = null;
+    }
+
+    private void KeepSelectionsInSync()
+    {
+        if (_selectedFaq is not null)
+        {
+            _selectedFaq = _summary.Faqs
+                .FirstOrDefault(item => item.FAQID == _selectedFaq.FAQID);
+        }
+
+        if (_selectedEnhancement is not null)
+        {
+            var id = _selectedEnhancement.EnhancementRequestID;
+            _selectedEnhancement = _summary.Enhancements
+                .FirstOrDefault(item => item.EnhancementRequestID == id);
+        }
+
+        if (_selectedSupport is not null)
+        {
+            _selectedSupport = _summary.SupportTickets
+                .FirstOrDefault(item => item.SupportTicketID == _selectedSupport.SupportTicketID);
+        }
+    }
+
+    private void SetEntryError(string message)
+    {
+        _entryMessage = message;
+        _entryHasError = true;
+    }
+
+    private string GetEnhancementButtonClass()
+    {
+        var enabled = _summary.Enhancements.Count > 0;
+        var color = NormalizeIconColor(_summary.EnhancementIconColor);
+        return $"screen-level-action screen-level-action-enhancement screen-level-action-{color} {(enabled ? "is-active" : "is-inactive")}";
+    }
+
+    private static string GetActionButtonClass(ScreenViewerKind kind, bool enabled)
+    {
+        var kindClass = kind switch
+        {
+            ScreenViewerKind.Faq => "faq",
+            ScreenViewerKind.Support => "support",
+            _ => "default"
+        };
+
+        return $"screen-level-action screen-level-action-{kindClass} {(enabled ? "is-active" : "is-inactive")}";
+    }
+
+    private static string GetListButtonClass(bool selected) =>
+        selected
+            ? "screen-action-list-item is-selected"
+            : "screen-action-list-item";
+
+    private static string NormalizeIconColor(string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            "green" => "green",
+            "red" => "red",
+            "black" => "black",
+            _ => "yellow"
+        };
+
+    private string GetEnhancementStatusText(ScreenEnhancement enhancement)
+    {
+        var date = FormatDateTime(enhancement.DateTimeUpdated);
+
+        return enhancement.EnhancementRequestStatusID switch
+        {
+            10 => $"Please Vote Before {FormatDateTime(enhancement.DateTimeUpdated.AddDays(enhancement.MaxDaysAtStatus))}",
+            40 => $"In Development Since {date}",
+            97 => $"Voted Down on {date}",
+            98 => $"Declined by EMA on {date}",
+            99 => $"Enhancement Completed {date}",
+            _ => $"{enhancement.StatusDescription} - {date}"
+        };
+    }
+
+    private string FormatDateTime(DateTime value)
+    {
+        var localValue = AsLocal(value);
+        var date = EMA.App.Utilities.OrgDateFormat.Format(
+            localValue,
+            OrganizationStateService.CurrentOrganization?.DateFormatID);
+        return $"{date} {localValue:HH:mm}";
+    }
+
+    private static DateTime AsLocal(DateTime value) =>
+        (value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        .ToLocalTime();
+
+    private void HandleSessionChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (CanUseScreenActions && CurrentMenuItem?.MenuItemID is int menuItemID)
+            {
+                await LoadSummaryAsync(menuItemID);
+            }
+            else
+            {
+                _summary = new ScreenActionSummary();
+                ResetViewer();
+                ResetEntry();
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _loadVersion++;
+        ScreenActionUiState.EntryRequested -= HandleEntryRequested;
+        SessionState.OnChange -= HandleSessionChanged;
+    }
+
+    private enum ScreenViewerKind
+    {
+        Faq = 1,
+        Enhancement = 2,
+        Support = 3
+    }
+}

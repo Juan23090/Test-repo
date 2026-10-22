@@ -1,0 +1,13 @@
+.public-content {
+    width: auto;
+    margin-right: clamp(1rem, 3vw, 2.5rem);
+    margin-left: clamp(1rem, 3vw, 2.5rem);
+    box-sizing: border-box;
+}
+
+@media (max-width: 700px) {
+    .public-content {
+        margin-right: 1rem;
+        margin-left: 1rem;
+    }
+}

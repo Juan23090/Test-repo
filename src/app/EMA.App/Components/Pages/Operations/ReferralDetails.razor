@@ -1,0 +1,134 @@
+@page "/referral-details"
+@page "/organization/referral-details"
+@attribute [Authorize]
+@inject IReferralClientService ReferralService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Referral Details - Email Money App</PageTitle>
+
+<div class="ema-page-container referral-details-page">
+    <div class="referrals-shell">
+        <!-- Top Shell Header -->
+        <div class="shell-header">
+            <div class="shell-title-group">
+                <span class="shell-org-name">@(_sessionOrgName)</span>
+                <h1 class="shell-title">Referral Program Summary</h1>
+            </div>
+            <div class="shell-header-actions">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm header-link-btn"
+                        @onclick='() => Navigation.NavigateTo("/referral-program")'>
+                    &larr; Referral Program
+                </button>
+                <button type="button"
+                        class="btn btn-primary btn-sm btn-action-top"
+                        @onclick='() => Navigation.NavigateTo("/send-referrals")'>
+                    + Invite More Organizations
+                </button>
+            </div>
+        </div>
+
+        <div class="shell-body">
+            <p class="shell-intro">
+                Track your sent referrals, claimed invitations, and accumulated invoice credits below.
+            </p>
+
+            @if (_isLoading)
+            {
+                <div class="loading-state text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Loading referral summary...</p>
+                </div>
+            }
+            else if (_loadFailed || _summary is null)
+            {
+                <div class="alert alert-warning" role="alert">
+                    Unable to load referral summary. Please refresh the page.
+                </div>
+            }
+            else
+            {
+                <!-- KPI Tiles Grid -->
+                <div class="kpi-tiles-grid">
+                    <div class="kpi-tile credit-tile">
+                        <span class="kpi-label">Accumulated Credit Balance</span>
+                        <span class="kpi-val text-success">$@_summary.AccumulatedCreditBalance.ToString("N2")</span>
+                        <span class="kpi-sub">Applied to future monthly invoices</span>
+                    </div>
+
+                    <div class="kpi-tile">
+                        <span class="kpi-label">Total Referrals Sent</span>
+                        <span class="kpi-val">@_summary.TotalSent</span>
+                        <span class="kpi-sub">Invitations dispatched</span>
+                    </div>
+
+                    <div class="kpi-tile">
+                        <span class="kpi-label">Accepted / Claimed</span>
+                        <span class="kpi-val">@_summary.TotalAccepted</span>
+                        <span class="kpi-sub">Orgs registered with EMA</span>
+                    </div>
+
+                    <div class="kpi-tile">
+                        <span class="kpi-label">Invoices Credited</span>
+                        <span class="kpi-val">@_summary.TotalCredited</span>
+                        <span class="kpi-sub">Billing cycles completed</span>
+                    </div>
+                </div>
+
+                <!-- History Table Panel -->
+                <div class="history-table-panel mt-4">
+                    <div class="panel-header-bar">
+                        <h4 class="panel-title">Referral Activity &amp; Status</h4>
+                    </div>
+
+                    @if (_summary.History.Count == 0)
+                    {
+                        <div class="empty-state">
+                            <p class="text-muted mb-2">You haven’t sent any referral invitations yet.</p>
+                            <button type="button"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    @onclick='() => Navigation.NavigateTo("/send-referrals")'>
+                                Send Your First Referral
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <ReferralHistoryTable Items="_summary.History" />
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private ReferralSummaryDto? _summary;
+    private string _sessionOrgName = "Organization";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        _sessionOrgName = SessionState.CurrentSession?.OrganizationName ?? "Your Organization";
+
+        if (orgID <= 0)
+        {
+            _loadFailed = true;
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            _summary = await ReferralService.GetReferralHistoryAsync(orgID);
+            _loadFailed = _summary is null;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

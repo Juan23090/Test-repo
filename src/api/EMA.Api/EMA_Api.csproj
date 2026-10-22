@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<AzureFunctionsVersion>v4</AzureFunctionsVersion>
+		<OutputType>Exe</OutputType>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="EMA.Api.Tests.Security" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+
+		<PackageReference Include="Azure.Communication.Email" Version="1.1.0" />
+		<PackageReference Include="Azure.Identity" Version="1.20.0" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.29.0" />
+		<PackageReference Include="Google.Cloud.TextToSpeech.V1" Version="3.18.0" />
+
+		<PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
+
+		<PackageReference Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
+		<PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
+		<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.0.2" />
+		<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs" Version="6.8.1" />
+		<PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.3.1" />
+		<PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
+
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+		<PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="1.0.0" />
+
+		<PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.17.0" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.17.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.17.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Logging" Version="8.17.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Abstractions" Version="8.17.0" />
+
+		<PackageReference Include="MimeKit" Version="4.17.0" />
+		<PackageReference Include="QuestPDF" Version="2025.7.4" />
+		<PackageReference Include="Tesseract" Version="5.2.0" />
+		<PackageReference Include="Docnet.Core" Version="2.6.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="..\EmailTemplates\**\*.html">
+			<Link>EmailTemplates\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>EmailTemplates\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+		</Content>
+
+		<Content Include="PowerShellModules\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>PowerShellModules\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+		</Content>
+
+		<Content Include="tessdata\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>tessdata\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="local.settings.json" />
+	</ItemGroup>
+
+	<Target Name="ExcludeNonWindowsRuntimesOnPublish" AfterTargets="Publish">
+		<ItemGroup>
+			<AllRuntimeDirectories Include="$([System.IO.Directory]::GetDirectories('$(PublishDir)runtimes'))" Condition="Exists('$(PublishDir)runtimes')" />
+			<NonWindowsDirectories Include="@(AllRuntimeDirectories)" Condition="!$([System.String]::Copy('%(Identity)').EndsWith('win')) And !$([System.String]::Copy('%(Identity)').Contains('\win-')) And !$([System.String]::Copy('%(Identity)').Contains('/win-'))" />
+		</ItemGroup>
+		<RemoveDir Directories="@(NonWindowsDirectories)" ContinueOnError="true" />
+	</Target>
+
+</Project>

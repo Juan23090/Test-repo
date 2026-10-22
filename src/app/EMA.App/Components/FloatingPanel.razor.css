@@ -1,0 +1,184 @@
+.ema-floating-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.ema-floating-panel-backdrop-nonmodal {
+    background: transparent;
+    pointer-events: none;
+}
+
+.ema-floating-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100vh - 1rem);
+    min-width: 16.25rem;
+    min-height: 10.625rem;
+    border: 1px solid #777777;
+    border-radius: 0.45rem;
+    background: #ffffff;
+    box-shadow: 0 0.7rem 1.8rem rgba(0, 0, 0, 0.28);
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+.ema-floating-panel-medium {
+    width: min(46rem, calc(100vw - 2rem));
+}
+
+.ema-floating-panel-wide {
+    width: min(68rem, calc(100vw - 2rem));
+    height: min(46rem, calc(100vh - 2rem));
+}
+
+/* Compact picture-in-picture size: roughly half the old medium panel. */
+.ema-floating-panel-pip {
+    top: 4.75rem;
+    right: 1rem;
+    left: auto;
+    width: min(23rem, calc(100vw - 2rem));
+    height: min(16.5rem, calc(100vh - 6rem));
+    transform: none;
+}
+
+.ema-floating-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    flex: 0 0 auto;
+    min-height: 2.45rem;
+    padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+    border-bottom: 1px solid #b7b7b7;
+    background: #efefef;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+
+.ema-floating-panel-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.ema-floating-panel-title span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ema-floating-panel-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: #000000;
+    cursor: pointer;
+}
+
+.ema-floating-panel-close:hover,
+.ema-floating-panel-close:focus-visible {
+    border-color: #8f8f8f;
+    background: #dddddd;
+}
+
+.ema-floating-panel-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 1rem;
+    overflow: auto;
+}
+
+.ema-floating-panel-pip .ema-floating-panel-body {
+    padding: 0;
+    overflow: hidden;
+}
+
+.ema-floating-panel-resize-handle {
+    position: absolute;
+    z-index: 4;
+    width: 1rem;
+    height: 1rem;
+    touch-action: none;
+}
+
+.ema-floating-panel-resize-nw {
+    top: 0;
+    left: 0;
+    cursor: nwse-resize;
+}
+
+.ema-floating-panel-resize-ne {
+    top: 0;
+    right: 0;
+    cursor: nesw-resize;
+}
+
+.ema-floating-panel-resize-sw {
+    bottom: 0;
+    left: 0;
+    cursor: nesw-resize;
+}
+
+.ema-floating-panel-resize-se {
+    right: 0;
+    bottom: 0;
+    cursor: nwse-resize;
+}
+
+@media (max-width: 700px) {
+    .ema-floating-panel-pip {
+        top: 4.25rem;
+        right: 0.5rem;
+        left: auto;
+        width: min(21rem, calc(100vw - 1rem));
+        height: min(15rem, calc(100vh - 5rem));
+        max-width: calc(100vw - 1rem);
+        max-height: calc(100vh - 5rem);
+        transform: none;
+    }
+}
+
+/* Compact movable audio-led form helper. */
+.ema-floating-panel-audio {
+    top: 4.75rem;
+    right: 1rem;
+    left: auto;
+    width: min(25rem, calc(100vw - 2rem));
+    min-height: 0;
+    height: auto;
+    transform: none;
+}
+
+.ema-floating-panel-audio .ema-floating-panel-body {
+    padding: 0.7rem;
+    overflow: visible;
+}
+
+@media (max-width: 700px) {
+    .ema-floating-panel-audio {
+        top: 4.25rem;
+        right: 0.5rem;
+        width: min(22rem, calc(100vw - 1rem));
+        max-width: calc(100vw - 1rem);
+    }
+}

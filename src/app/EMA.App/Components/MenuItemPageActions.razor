@@ -1,0 +1,717 @@
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IBlobService BlobService
+@inject IJSRuntime JS
+
+@if (ResourceGroups.Count > 0)
+{
+    <div class="menu-item-page-actions"
+         aria-label="Current page help resources">
+        @foreach (var group in ResourceGroups)
+        {
+            var firstResource = group.Resources[0];
+            var svgDataUri = GetSafeSvgDataUri(firstResource);
+
+            <button type="button"
+                    class="menu-item-page-action"
+                    title="@GetResourceTypeButtonTitle(group.TypeID)"
+                    aria-label="@GetResourceTypeButtonTitle(group.TypeID)"
+                    aria-expanded="@IsResourceMenuOpen(group.TypeID)"
+                    @onclick="@(() => HandleResourceTypeClickAsync(group))">
+                @if (!string.IsNullOrWhiteSpace(svgDataUri))
+                {
+                    <img class="menu-item-resource-svg"
+                         src="@svgDataUri"
+                         alt=""
+                         aria-hidden="true" />
+                }
+                else
+                {
+                    <i class="@GetFallbackIconClass(group.TypeID)"
+                       aria-hidden="true"></i>
+                }
+            </button>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_openResourceType))
+        {
+            var openGroup =
+                ResourceGroups.FirstOrDefault(group =>
+                    group.TypeID.Equals(
+                        _openResourceType,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (openGroup is not null)
+            {
+                <div class="menu-item-resource-menu"
+                     role="menu"
+                     aria-label="@GetResourceMenuTitle(openGroup.TypeID)">
+                    <div class="menu-item-resource-menu-header">
+                        <span>@GetResourceMenuTitle(openGroup.TypeID)</span>
+                        <button type="button"
+                                class="menu-item-resource-menu-close"
+                                title="Close"
+                                aria-label="Close resource list"
+                                @onclick="CloseResourceMenu">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    @foreach (var resource in openGroup.Resources)
+                    {
+                        <button type="button"
+                                class="menu-item-resource-menu-item"
+                                role="menuitem"
+                                @onclick="@(() => OpenResourceAsync(resource))">
+                            @resource.Description
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+}
+
+<FloatingPanel IsOpen="@_videoOpen"
+               Title="@_videoTitle"
+               IconClass="bi bi-play-btn-fill"
+               Size="pip"
+               NonModal="true"
+               Resizable="true"
+               OnClose="CloseVideoAsync">
+    @if (_videoLoading)
+    {
+        <div class="menu-item-resource-message" role="status">
+            Loading video...
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_videoError))
+    {
+        <div class="menu-item-resource-message menu-item-resource-error"
+             role="alert">
+            @_videoError
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_videoSource))
+    {
+        <video class="menu-item-video-player"
+               src="@_videoSource"
+               controls
+               autoplay
+               preload="metadata">
+            Your browser does not support HTML video playback.
+        </video>
+    }
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@_audioOpen"
+               Title="@_audioTitle"
+               IconClass="bi bi-volume-up-fill"
+               Size="audio"
+               NonModal="true"
+               Resizable="false"
+               OnClose="CloseAudioAsync">
+    @if (_audioLoading)
+    {
+        <div class="menu-item-resource-message" role="status">
+            Loading audio...
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_audioError))
+    {
+        <div class="menu-item-resource-message menu-item-resource-error"
+             role="alert">
+            @_audioError
+        </div>
+    }
+    else if (_audioUsesSpeech && !string.IsNullOrWhiteSpace(_audioScript))
+    {
+        <div class="menu-item-audio-player-wrap">
+            <div class="menu-item-resource-message" role="status">
+                Playing live from the Audio Script using your browser's text-to-speech voice.
+            </div>
+
+            <div class="menu-item-audio-actions"
+                 aria-label="Live audio playback shortcuts">
+                <button type="button"
+                        title="Stop"
+                        aria-label="Stop live audio"
+                        @onclick="StopAudioAsync">
+                    <i class="bi bi-stop-fill" aria-hidden="true"></i>
+                    <span>Stop</span>
+                </button>
+                <button type="button"
+                        title="Rewind about 5 seconds"
+                        aria-label="Rewind live audio about 5 seconds"
+                        @onclick="RewindAudioAsync">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                    <span>-5 sec</span>
+                </button>
+                <button type="button"
+                        title="Replay from the beginning"
+                        aria-label="Replay live audio from the beginning"
+                        @onclick="ReplayAudioAsync">
+                    <i class="bi bi-skip-backward-fill" aria-hidden="true"></i>
+                    <span>Replay</span>
+                </button>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_audioSource))
+    {
+        <div class="menu-item-audio-player-wrap">
+            <audio @ref="_audioElement"
+                   class="menu-item-audio-player"
+                   src="@_audioSource"
+                   controls
+                   autoplay
+                   preload="metadata">
+                Your browser does not support HTML audio playback.
+            </audio>
+
+            <div class="menu-item-audio-actions"
+                 aria-label="Audio playback shortcuts">
+                <button type="button"
+                        title="Stop"
+                        aria-label="Stop audio"
+                        @onclick="StopAudioAsync">
+                    <i class="bi bi-stop-fill" aria-hidden="true"></i>
+                    <span>Stop</span>
+                </button>
+                <button type="button"
+                        title="Rewind 5 seconds"
+                        aria-label="Rewind audio 5 seconds"
+                        @onclick="RewindAudioAsync">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                    <span>-5 sec</span>
+                </button>
+                <button type="button"
+                        title="Replay from the beginning"
+                        aria-label="Replay audio from the beginning"
+                        @onclick="ReplayAudioAsync">
+                    <i class="bi bi-skip-backward-fill" aria-hidden="true"></i>
+                    <span>Replay</span>
+                </button>
+            </div>
+        </div>
+    }
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@_setupOpen"
+               Title="@_setupTitle"
+               IconClass="bi bi-wrench-adjustable"
+               Size="wide"
+               NonModal="true"
+               Resizable="true"
+               OnClose="CloseSetupAsync">
+    @if (!string.IsNullOrWhiteSpace(_setupError))
+    {
+        <div class="menu-item-resource-message menu-item-resource-error"
+             role="alert">
+            @_setupError
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_setupUrl))
+    {
+        <iframe class="menu-item-setup-frame"
+                src="@_setupUrl"
+                title="@_setupTitle"></iframe>
+    }
+</FloatingPanel>
+
+@code {
+    [Parameter]
+    public MenuItemDto? CurrentMenuItem { get; set; }
+
+    private int? _lastMenuItemID;
+    private string? _openResourceType;
+
+    private bool _videoOpen;
+    private bool _videoLoading;
+    private string _videoTitle = "EMA Video";
+    private string? _videoSource;
+    private string? _videoError;
+
+    private bool _audioOpen;
+    private bool _audioLoading;
+    private string _audioTitle = "EMA Audio";
+    private string? _audioSource;
+    private string? _audioScript;
+    private bool _audioUsesSpeech;
+    private string? _audioError;
+    private ElementReference _audioElement;
+
+    private bool _setupOpen;
+    private string _setupTitle = "EMA Setup";
+    private string? _setupUrl;
+    private string? _setupError;
+
+    private IReadOnlyList<ResourceGroup> ResourceGroups =>
+        (CurrentMenuItem?.Resources ?? new List<MenuItemResourceDto>())
+            .Where(resource =>
+                !string.IsNullOrWhiteSpace(
+                    resource.MenuItemResourceTypeID))
+            .GroupBy(resource =>
+                resource.MenuItemResourceTypeID
+                    .Trim()
+                    .ToUpperInvariant())
+            .Where(group =>
+                group.Key is "V" or "A" or "W")
+            .Select(group =>
+                new ResourceGroup(
+                    group.Key,
+                    group
+                        .OrderBy(resource => resource.Sequence)
+                        .ThenBy(resource => resource.MenuItemRowID)
+                        .ToList()))
+            .OrderBy(group => GetResourceTypeOrder(group.TypeID))
+            .ToList();
+
+    protected override void OnParametersSet()
+    {
+        var currentMenuItemID =
+            CurrentMenuItem?.MenuItemID;
+
+        if (_lastMenuItemID == currentMenuItemID)
+        {
+            return;
+        }
+
+        _lastMenuItemID = currentMenuItemID;
+        ResetPanels();
+    }
+
+    private async Task HandleResourceTypeClickAsync(
+        ResourceGroup group)
+    {
+        // A single Audio resource plays immediately. Multiple Audio
+        // resources keep the existing chooser. Video and Setup are unchanged.
+        if (group.TypeID.Equals(
+                "A",
+                StringComparison.OrdinalIgnoreCase) &&
+            group.Resources.Count == 1)
+        {
+            _openResourceType = null;
+            await OpenResourceAsync(group.Resources[0]);
+            return;
+        }
+        ToggleResourceMenu(group.TypeID);
+    }
+    private void ToggleResourceMenu(string typeID)
+    {
+        _openResourceType =
+            IsResourceMenuOpen(typeID)
+                ? null
+                : typeID;
+    }
+
+    private bool IsResourceMenuOpen(string typeID)
+    {
+        return string.Equals(
+            _openResourceType,
+            typeID,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void CloseResourceMenu()
+    {
+        _openResourceType = null;
+    }
+
+    private async Task OpenResourceAsync(
+        MenuItemResourceDto resource)
+    {
+        CloseResourceMenu();
+
+        var typeID =
+            resource.MenuItemResourceTypeID
+                .Trim()
+                .ToUpperInvariant();
+
+        switch (typeID)
+        {
+            case "V":
+                await OpenVideoAsync(resource);
+                break;
+            case "A":
+                await OpenAudioAsync(resource);
+                break;
+            case "W":
+                OpenSetup(resource);
+                break;
+        }
+    }
+
+    private async Task OpenVideoAsync(
+        MenuItemResourceDto resource)
+    {
+        _videoOpen = true;
+        _videoLoading = true;
+        _videoTitle = GetResourceTitle(resource, "Video");
+        _videoSource = null;
+        _videoError = null;
+
+        var source =
+            await ResolveMediaSourceAsync(
+                resource.AudioVideoBlob);
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            _videoError =
+                "The video could not be loaded.";
+        }
+        else
+        {
+            _videoSource = source;
+        }
+
+        _videoLoading = false;
+    }
+
+    private async Task OpenAudioAsync(
+        MenuItemResourceDto resource)
+    {
+        await StopCurrentAudioPlaybackAsync();
+
+        _audioOpen = true;
+        _audioLoading = true;
+        _audioTitle = GetResourceTitle(resource, "Audio");
+        _audioSource = null;
+        _audioScript = null;
+        _audioUsesSpeech = false;
+        _audioError = null;
+
+        // Task 21.1 playback precedence:
+        // 1) If AudioVideoBlob is populated, play the stored EMA media asset.
+        // 2) Otherwise, read AudioScript live with the browser's native TTS engine.
+        if (!string.IsNullOrWhiteSpace(resource.AudioVideoBlob))
+        {
+            var source =
+                await ResolveMediaSourceAsync(
+                    resource.AudioVideoBlob);
+
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                _audioError =
+                    "The audio blob could not be loaded.";
+            }
+            else
+            {
+                _audioSource = source;
+            }
+
+            _audioLoading = false;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(resource.AudioScript))
+        {
+            _audioScript = resource.AudioScript.Trim();
+            _audioUsesSpeech = true;
+
+            var started =
+                await JS.InvokeAsync<bool>(
+                    "emaUi.speechStart",
+                    _audioScript);
+
+            if (!started)
+            {
+                _audioUsesSpeech = false;
+                _audioError =
+                    "Live text-to-speech is not supported by this browser.";
+            }
+
+            _audioLoading = false;
+            return;
+        }
+
+        _audioError =
+            "No audio blob or Audio Script is configured for this resource.";
+        _audioLoading = false;
+    }
+
+    private void OpenSetup(
+        MenuItemResourceDto resource)
+    {
+        _setupOpen = true;
+        _setupTitle = GetResourceTitle(resource, "Setup");
+        _setupError = null;
+        _setupUrl =
+            BuildSetupOverlayUrl(
+                resource.ScreenURL);
+
+        if (string.IsNullOrWhiteSpace(_setupUrl))
+        {
+            _setupError =
+                "This setup screen does not have a valid internal URL.";
+        }
+    }
+
+    private async Task<string?> ResolveMediaSourceAsync(
+        string? blobID)
+    {
+        if (string.IsNullOrWhiteSpace(blobID))
+        {
+            return null;
+        }
+
+        var candidate = blobID.Trim();
+
+        // dbo.MenuItemResource.AudioVideoBlob is varchar(36) and stores
+        // an EMA blob identifier, not an external media URL.
+        if (candidate.Length > 36 ||
+            candidate.Any(char.IsControl) ||
+            candidate.Contains('/') ||
+            candidate.Contains('\\') ||
+            Uri.TryCreate(candidate, UriKind.Absolute, out _))
+        {
+            return null;
+        }
+
+        return await BlobService
+            .BlobGetDataUrlAsync(candidate);
+    }
+
+    private string? BuildSetupOverlayUrl(
+        string? screenUrl)
+    {
+        var candidate =
+            string.IsNullOrWhiteSpace(screenUrl)
+                ? BuildConventionalSetupUrl(
+                    CurrentMenuItem?.URL)
+                : screenUrl.Trim();
+
+        if (string.IsNullOrWhiteSpace(candidate) ||
+            candidate.Contains('\\') ||
+            candidate.StartsWith(
+                "//",
+                StringComparison.Ordinal) ||
+            Uri.TryCreate(
+                candidate,
+                UriKind.Absolute,
+                out _))
+        {
+            return null;
+        }
+
+        if (!candidate.StartsWith(
+                "/",
+                StringComparison.Ordinal))
+        {
+            candidate = $"/{candidate}";
+        }
+
+        var separator =
+            candidate.Contains('?')
+                ? "&"
+                : "?";
+
+        return $"{candidate}{separator}emaOverlay=1";
+    }
+
+    private static string? BuildConventionalSetupUrl(
+        string? menuUrl)
+    {
+        if (string.IsNullOrWhiteSpace(menuUrl) ||
+            Uri.TryCreate(menuUrl, UriKind.Absolute, out _))
+        {
+            return null;
+        }
+
+        var normalized =
+            menuUrl.Trim().TrimEnd('/');
+
+        return normalized.EndsWith(
+                   "-setup",
+                   StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{normalized}-setup";
+    }
+
+    private static string GetResourceTitle(
+        MenuItemResourceDto resource,
+        string fallback)
+    {
+        return string.IsNullOrWhiteSpace(resource.Description)
+            ? fallback
+            : resource.Description.Trim();
+    }
+
+    private static string? GetSafeSvgDataUri(
+        MenuItemResourceDto resource)
+    {
+        return MenuItemResourceSvg.GetSafeDataUri(
+            resource.RawSVG);
+    }
+
+    private static string GetFallbackIconClass(
+        string typeID)
+    {
+        return typeID.ToUpperInvariant() switch
+        {
+            "V" => "bi bi-play-btn-fill",
+            "A" => "bi bi-volume-up-fill",
+            "W" => "bi bi-wrench-adjustable",
+            _ => "bi bi-question-circle"
+        };
+    }
+
+    private static string GetResourceTypeButtonTitle(
+        string typeID)
+    {
+        return typeID.ToUpperInvariant() switch
+        {
+            "V" => "Video help",
+            "A" => "Audio help",
+            "W" => "Setup screens",
+            _ => "Page resources"
+        };
+    }
+
+    private static string GetResourceMenuTitle(
+        string typeID)
+    {
+        return typeID.ToUpperInvariant() switch
+        {
+            "V" => "Videos",
+            "A" => "Audio",
+            "W" => "Setup screens",
+            _ => "Resources"
+        };
+    }
+
+    private static int GetResourceTypeOrder(
+        string typeID)
+    {
+        return typeID.ToUpperInvariant() switch
+        {
+            "V" => 0,
+            "A" => 1,
+            "W" => 2,
+            _ => 3
+        };
+    }
+
+    private async Task StopAudioAsync()
+    {
+        if (_audioUsesSpeech)
+        {
+            await JS.InvokeVoidAsync("emaUi.speechStop");
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "emaUi.mediaStop",
+            _audioElement);
+    }
+
+    private async Task RewindAudioAsync()
+    {
+        if (_audioUsesSpeech)
+        {
+            await JS.InvokeVoidAsync(
+                "emaUi.speechRewind",
+                5);
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "emaUi.mediaRewind",
+            _audioElement,
+            5);
+    }
+
+    private async Task ReplayAudioAsync()
+    {
+        if (_audioUsesSpeech)
+        {
+            await JS.InvokeVoidAsync("emaUi.speechReplay");
+            return;
+        }
+
+        await JS.InvokeVoidAsync(
+            "emaUi.mediaReplay",
+            _audioElement);
+    }
+
+    private async Task StopCurrentAudioPlaybackAsync()
+    {
+        try
+        {
+            if (_audioUsesSpeech)
+            {
+                await JS.InvokeVoidAsync("emaUi.speechCancel");
+            }
+            else if (!string.IsNullOrWhiteSpace(_audioSource))
+            {
+                await JS.InvokeVoidAsync(
+                    "emaUi.mediaStop",
+                    _audioElement);
+            }
+        }
+        catch
+        {
+            // Resource changes and panel closure should remain best-effort.
+        }
+    }
+
+    private Task CloseVideoAsync()
+    {
+        _videoOpen = false;
+        _videoLoading = false;
+        _videoSource = null;
+        _videoError = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task CloseAudioAsync()
+    {
+        await StopCurrentAudioPlaybackAsync();
+
+        _audioOpen = false;
+        _audioLoading = false;
+        _audioSource = null;
+        _audioScript = null;
+        _audioUsesSpeech = false;
+        _audioError = null;
+    }
+
+    private Task CloseSetupAsync()
+    {
+        _setupOpen = false;
+        _setupUrl = null;
+        _setupError = null;
+        return Task.CompletedTask;
+    }
+
+    private void ResetPanels()
+    {
+        _openResourceType = null;
+
+        _videoOpen = false;
+        _videoLoading = false;
+        _videoSource = null;
+        _videoError = null;
+
+        if (_audioUsesSpeech)
+        {
+            _ = JS.InvokeVoidAsync("emaUi.speechCancel");
+        }
+
+        _audioOpen = false;
+        _audioLoading = false;
+        _audioSource = null;
+        _audioScript = null;
+        _audioUsesSpeech = false;
+        _audioError = null;
+
+        _setupOpen = false;
+        _setupUrl = null;
+        _setupError = null;
+    }
+
+    private sealed record ResourceGroup(
+        string TypeID,
+        IReadOnlyList<MenuItemResourceDto> Resources);
+}

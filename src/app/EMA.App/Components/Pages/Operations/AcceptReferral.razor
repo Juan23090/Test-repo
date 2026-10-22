@@ -1,0 +1,242 @@
+@page "/accept-referral"
+@page "/organization/accept-referral"
+@attribute [Authorize]
+@inject IReferralClientService ReferralService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Accept a Referral - Email Money App</PageTitle>
+
+<div class="ema-page-container accept-referral-page">
+    <div class="referrals-shell accept-shell">
+        <!-- Top Shell Header -->
+        <div class="shell-header">
+            <div class="shell-title-group">
+                <span class="shell-org-name">@(_sessionOrgName)</span>
+                <h1 class="shell-title">Accept a Referral</h1>
+            </div>
+            <div class="shell-header-actions">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm header-link-btn"
+                        @onclick='() => Navigation.NavigateTo("/referral-program")'>
+                    &larr; Referral Program
+                </button>
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm header-link-btn"
+                        @onclick='() => Navigation.NavigateTo("/referral-details")'>
+                    View Referral History &amp; Credits
+                </button>
+            </div>
+        </div>
+
+        <div class="shell-body">
+            @if (_isClaimedSuccessfully && _result is not null)
+            {
+                <!-- Success State -->
+                <div class="claim-success-box">
+                    <div class="success-header">
+                        <span class="success-icon">✓</span>
+                        <h3>Referral Successfully Claimed!</h3>
+                    </div>
+                    <p class="success-desc">
+                        Your referral from <strong>@(_result.ReferringOrgName ?? "your peer organization")</strong> has been linked to your account.
+                    </p>
+
+                    <div class="benefit-card">
+                        <div class="benefit-card-title">Mutual Billing Credit Activated</div>
+                        <p>
+                            When your organization completes its first monthly billing cycle, EMA will issue an invoice credit to both organizations equal to the lower of the two monthly invoices.
+                        </p>
+                    </div>
+
+                    <div class="success-action-row">
+                        <button type="button"
+                                class="btn btn-primary btn-pay-forward"
+                                @onclick='() => Navigation.NavigateTo("/send-referrals")'>
+                            Pay It Forward: Invite Another Non-Profit
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Form State -->
+                <p class="shell-intro">
+                    Did a fellow non-profit invite you to Email Money App? Enter the referral code and email address from your invitation below to link your referral and activate your mutual invoice credit.
+                </p>
+
+                <form @onsubmit="ClaimReferralAsync" class="claim-form">
+                    <div class="form-group mb-3">
+                        <label for="referralCode" class="form-label">
+                            Referral Code *
+                        </label>
+                        <input type="text"
+                               id="referralCode"
+                               class="form-control ema-input"
+                               placeholder="e.g. a1b2c3d4e5f60718"
+                               @bind="_referralCode"
+                               @bind:event="oninput"
+                               disabled="@_isSubmitting"
+                               required />
+                        <span class="form-text">
+                            Enter the unique referral code included in your invitation email or link.
+                        </span>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label for="referralEmail" class="form-label">
+                            Invitation Email Address *
+                        </label>
+                        <input type="email"
+                               id="referralEmail"
+                               class="form-control ema-input @(GetEmailInputClass())"
+                               placeholder="e.g. pastor.smith@communitychurch.ca"
+                               @bind="_referralEmail"
+                               @bind:event="oninput"
+                               disabled="@_isSubmitting"
+                               required />
+                        <span class="form-text">
+                            Enter the exact email address where your peer organization sent the EMA referral invitation.
+                        </span>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3 mb-3" role="alert">
+                            <strong>Unable to claim referral:</strong> @_errorMessage
+                        </div>
+                    }
+
+                    <div class="form-submit-row">
+                        <button type="submit"
+                                class="btn btn-primary btn-claim"
+                                disabled="@(_isSubmitting || !IsValidForm())">
+                            @if (_isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <span>Verifying Referral...</span>
+                            }
+                            else
+                            {
+                                <span>Claim Referral Credit</span>
+                            }
+                        </button>
+                    </div>
+                </form>
+
+                <div class="info-rules-box mt-4">
+                    <div class="rules-header">How Referral Credits Work</div>
+                    <ul>
+                        <li>Both organizations must complete at least one billing cycle to receive the credit.</li>
+                        <li>The credit amount equals the lower of the two monthly invoices.</li>
+                        <li>Credits are automatically applied to your future monthly EMA invoices.</li>
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "code")]
+    public string? CodeQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "referralCode")]
+    public string? ReferralCodeQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "email")]
+    public string? EmailQuery { get; set; }
+
+    private string _referralCode = string.Empty;
+    private string _referralEmail = string.Empty;
+    private bool _isSubmitting = false;
+    private bool _isClaimedSuccessfully = false;
+    private string? _errorMessage;
+    private AcceptReferralResult? _result;
+    private string _sessionOrgName = "Organization";
+    private int _orgID;
+
+    protected override void OnInitialized()
+    {
+        _orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        _sessionOrgName = SessionState.CurrentSession?.OrganizationName ?? "Your Organization";
+
+        if (!string.IsNullOrWhiteSpace(ReferralCodeQuery))
+        {
+            _referralCode = ReferralCodeQuery.Trim();
+        }
+        else if (!string.IsNullOrWhiteSpace(CodeQuery))
+        {
+            _referralCode = CodeQuery.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(EmailQuery))
+        {
+            _referralEmail = EmailQuery.Trim();
+        }
+    }
+
+    private bool IsValidForm() => !string.IsNullOrWhiteSpace(_referralCode) && IsValidEmail();
+
+    private bool IsValidEmail() => ReferralEmail.IsValidFormat(_referralEmail);
+
+    private string GetEmailInputClass()
+    {
+        if (string.IsNullOrWhiteSpace(_referralEmail)) return "";
+        return IsValidEmail() ? "is-valid" : "is-invalid";
+    }
+
+    private async Task ClaimReferralAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_referralCode))
+        {
+            _errorMessage = "Please enter the referral code from your invitation.";
+            return;
+        }
+
+        if (!IsValidEmail())
+        {
+            _errorMessage = "Please enter a valid email address.";
+            return;
+        }
+
+        if (_orgID <= 0)
+        {
+            _errorMessage = "Your session has expired. Please sign in again.";
+            return;
+        }
+
+        _isSubmitting = true;
+        _errorMessage = null;
+
+        try
+        {
+            var request = new AcceptReferralRequest
+            {
+                ReferralCode = _referralCode.Trim(),
+                ReferralEmail = _referralEmail.Trim()
+            };
+
+            _result = await ReferralService.AcceptReferralAsync(_orgID, request);
+
+            if (_result is null)
+            {
+                _errorMessage = "We could not reach the server. Please try again.";
+            }
+            else if (_result.IsSuccess)
+            {
+                _isClaimedSuccessfully = true;
+            }
+            else
+            {
+                _errorMessage = string.IsNullOrWhiteSpace(_result.Message)
+                    ? "No active referral invitation was found matching this referral code and email address."
+                    : _result.Message;
+            }
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

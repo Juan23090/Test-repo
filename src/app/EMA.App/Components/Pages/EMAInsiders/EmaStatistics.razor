@@ -1,0 +1,284 @@
+@page "/ema-statistics"
+
+@using System.Globalization
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IEmaStatisticsService StatisticsService
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject IUserSessionStateService SessionState
+
+<PageTitle>EMA Statistics - EMA</PageTitle>
+
+<div class="reports-page">
+    <main class="reports-body" aria-label="EMA statistics">
+        <section class="gift-filters" aria-label="EMA statistics filters">
+            <div class="gift-col">
+                <div class="gift-field">
+                    <span class="gift-label">Start Date:</span>
+                    <input type="date" @bind="StartDate" onclick="this.showPicker()" />
+                </div>
+                <div class="gift-field">
+                    <span class="gift-label">End Date:</span>
+                    <input type="date" @bind="EndDate" onclick="this.showPicker()" />
+                </div>
+            </div>
+
+            <div class="gift-col">
+                <div class="gift-field">
+                    <span class="gift-label">Time Period:</span>
+                    <select @bind="TimePeriod">
+                        <option value="Week">Week</option>
+                        <option value="Month">Month</option>
+                        <option value="Quarter">Quarter</option>
+                        <option value="Year">Year</option>
+                    </select>
+                </div>
+                <div class="gift-field">
+                    <span class="gift-label">Classification:</span>
+                    <select @bind="Classification">
+                        <option value="Organization">Organization</option>
+                        <option value="ChMS">ChMS</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="gift-col">
+                <div class="gift-field">
+                    <span class="gift-label">Scope:</span>
+                    <select @bind="Scope">
+                        @foreach (var option in ScopeOptions)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="gift-field">
+                    <span class="gift-label">Measurement:</span>
+                    <select @bind="Measurement">
+                        @foreach (var option in MeasurementOptions)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <div class="gift-actions">
+            <button type="button" @onclick="LoadAsync" disabled="@IsLoading">Display</button>
+        </div>
+
+        @if (IsLoading)
+        {
+            <p class="status-text">Loading statistics...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text error">@ErrorMessage</p>
+        }
+        else if (Data is { Rows.Count: > 0 })
+        {
+            <div class="gift-grid-wrapper">
+                <table class="gift-grid">
+                    <thead>
+                        <tr>
+                            <th class="sortable" @onclick='() => SortBy("__group")'><span class="gift-hdr">@GroupHeader</span><span class="gift-sort-arrow">@Indicator("__group")</span></th>
+                            @foreach (var period in Data.Periods)
+                            {
+                                <th class="sortable amount" @onclick="() => SortBy(period)"><span class="gift-hdr">@FormatPeriod(period)</span><span class="gift-sort-arrow">@Indicator(period)</span></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in SortedRows())
+                        {
+                            <tr>
+                                <td>@row.Group</td>
+                                @foreach (var period in Data.Periods)
+                                {
+                                    <td class="amount">@FormatValue(row.Values.TryGetValue(period, out var v) ? v : 0m)</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (HasLoaded)
+        {
+            <p class="status-text">No statistics found for the selected filters.</p>
+        }
+        else
+        {
+            <p class="status-text">Select a date range and click Display.</p>
+        }
+    </main>
+</div>
+
+@code {
+    private DateTime? StartDate { get; set; } = new DateTime(DateTime.Today.Year - 2, 1, 1);
+    private DateTime? EndDate { get; set; } = DateTime.Today;
+    private string TimePeriod { get; set; } = "Year";
+    private string LoadedTimePeriod { get; set; } = "Year";
+    private string? DateFormatId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Week columns are period-ending dates, so they follow the org's DateFormatID.
+        var orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0) return;
+
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != orgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(orgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        DateFormatId = org?.DateFormatID;
+    }
+
+    // Only the Week period ships an ISO date; the other periods are already labelled.
+    private string FormatPeriod(string period)
+        => string.Equals(LoadedTimePeriod, "Week", StringComparison.OrdinalIgnoreCase)
+            ? EMA.App.Utilities.OrgDateFormat.Format(period, DateFormatId)
+            : period;
+
+    private string _classification = "Organization";
+    private string Classification
+    {
+        get => _classification;
+        set
+        {
+            _classification = value;
+            // Keep Scope valid for the chosen classification.
+            if (ScopeOptions.All(o => o.Value != Scope))
+                Scope = ScopeOptions[0].Value;
+        }
+    }
+
+    private string Scope { get; set; } = "Donations";
+    private string Measurement { get; set; } = "Count";
+
+    private bool IsLoading { get; set; }
+    private bool HasLoaded { get; set; }
+    private string? ErrorMessage { get; set; }
+    private EmaStatisticsResult? Data { get; set; }
+
+    // Values captured at load time so the grid formats/labels by what was actually fetched.
+    private string LoadedMeasurement { get; set; } = "Count";
+    private string LoadedClassification { get; set; } = "Organization";
+
+    private string SortColumn { get; set; } = "__group";
+    private bool SortAscending { get; set; } = true;
+
+    // "Organizations" is only meaningful when grouping by ChMS.
+    private (string Label, string Value)[] ScopeOptions =>
+        Classification == "ChMS"
+            ? new[] { ("Organizations", "Organizations"), ("Donors", "Donors"), ("Donations", "Donations") }
+            : new[] { ("Donors", "Donors"), ("Donations", "Donations") };
+
+    private static readonly (string Label, string Value)[] MeasurementOptions =
+    {
+        ("Count", "Count"),
+        ("Value of eTransfers", "ValueEtransfers"),
+        ("Value of All Donations", "ValueAllDonations"),
+        ("Percent eTransfers by Value", "PercentEtransfersByValue"),
+        ("Percent eTransfers by Number", "PercentEtransfersByNumber"),
+    };
+
+    private string GroupHeader => LoadedClassification == "ChMS" ? "ChMS" : "Organization";
+
+    private async Task LoadAsync()
+    {
+        ErrorMessage = null;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            Data = null;
+            ErrorMessage = "Please select both Start Date and End Date.";
+            return;
+        }
+
+        var startDate = DateOnly.FromDateTime(StartDate.Value);
+        var endDate = DateOnly.FromDateTime(EndDate.Value);
+
+        if (endDate < startDate)
+        {
+            Data = null;
+            ErrorMessage = "Please ensure the End Date is not before the Start Date.";
+            return;
+        }
+
+        IsLoading = true;
+
+        var result = await StatisticsService.GetStatisticsAsync(
+            startDate, endDate, TimePeriod, Classification, Scope, Measurement);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            Data = result.Data;
+            LoadedMeasurement = Measurement;
+            LoadedClassification = Classification;
+            LoadedTimePeriod = TimePeriod;
+            HasLoaded = true;
+
+            // Default sort: most-current period column, descending (newest is first).
+            if (Data.Periods.Count > 0)
+            {
+                SortColumn = Data.Periods[0];
+                SortAscending = false;
+            }
+            else
+            {
+                SortColumn = "__group";
+                SortAscending = true;
+            }
+        }
+        else
+        {
+            Data = null;
+            ErrorMessage = result.ErrorMessage ?? "Unable to load statistics.";
+        }
+
+        IsLoading = false;
+    }
+
+    private void SortBy(string column)
+    {
+        if (SortColumn == column)
+        {
+            SortAscending = !SortAscending;
+        }
+        else
+        {
+            SortColumn = column;
+            // Group column defaults ascending (A→Z); value columns default descending.
+            SortAscending = column == "__group";
+        }
+    }
+
+    private IEnumerable<EmaStatisticsRow> SortedRows()
+    {
+        if (Data?.Rows is null)
+            return Enumerable.Empty<EmaStatisticsRow>();
+
+        Func<EmaStatisticsRow, IComparable> key = SortColumn == "__group"
+            ? r => r.Group
+            : r => r.Values.TryGetValue(SortColumn, out var v) ? v : 0m;
+
+        return SortAscending ? Data.Rows.OrderBy(key) : Data.Rows.OrderByDescending(key);
+    }
+
+    private string Indicator(string column)
+        => SortColumn == column ? (SortAscending ? "▲" : "▼") : string.Empty;
+
+    private string FormatValue(decimal value) => LoadedMeasurement switch
+    {
+        "Count" => value.ToString("#,##0", CultureInfo.InvariantCulture),
+        "ValueEtransfers" or "ValueAllDonations" => value.ToString("$#,##0.00", CultureInfo.InvariantCulture),
+        "PercentEtransfersByValue" or "PercentEtransfersByNumber" => value.ToString("0.0", CultureInfo.InvariantCulture) + "%",
+        _ => value.ToString(CultureInfo.InvariantCulture),
+    };
+}

@@ -1,0 +1,350 @@
+@page "/self-migrate"
+
+@using EMA.App.Services
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject IBlobService BlobService
+@inject IOrganizationStateService OrganizationState
+@inject IOrganizationService OrganizationService
+
+<PageTitle>DataPort - EMA</PageTitle>
+
+<div class="ema-settings-shell">
+
+    <div class="dataport-container">
+        <h2 class="dataport-title">Migrate Your Donors and Donations from Breeze</h2>
+        @* Task 9 onboarding source banner *@
+        @if (!string.IsNullOrWhiteSpace(OnboardingSource))
+        {
+            <div class="task9-source-banner"
+                 role="status">
+                Setup path: @OnboardingSource
+            </div>
+        }
+
+        @* â”€â”€ State Banner â”€â”€ *@
+        @if (HasPriorData)
+        {
+            <div class="dataport-banner dataport-banner--warning">
+                <p class="banner-heading">You already have migration data on file.</p>
+                <p class="banner-body">
+                    Uploading new files will <strong>permanently overwrite</strong> your existing data.
+                    This action <strong>cannot be undone</strong> and will affect live organization data.
+                </p>
+                <div class="confirm-gate">
+                    <label class="confirm-checkbox-row">
+                        <input id="dataport-confirm-checkbox"
+                               type="checkbox"
+                               @bind="OverwriteChecked" />
+                        <span>I understand this will permanently overwrite my existing data and cannot be reversed.</span>
+                    </label>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="dataport-banner dataport-banner--info">
+                <p class="banner-heading">No prior migration found.</p>
+                <p class="banner-body">
+                    You haven't migrated any data yet. Follow the steps below to upload your Breeze exports.
+                </p>
+            </div>
+        }
+
+        @* â”€â”€ Extract Donors Instructions â”€â”€ *@
+        <div class="dataport-section">
+            <h3 class="section-heading" @onclick="ToggleDonors" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 8px;">
+                EXTRACT DONORS
+                <span class="expand-icon" style="font-size: 0.8rem;">@(DonorsExpanded ? "â–¼" : "â–¶")</span>
+            </h3>
+            <div style="display: @(DonorsExpanded ? "block" : "none");">
+                <ol class="instruction-list">
+                    <li>Open Breeze</li>
+                    <li>On the top menu, touch on People</li>
+                    <li>On the right near the top, Click on Export</li>
+                    <li>The Format is Excel, which is what you want</li>
+                    <li>If you don't see the Include line, click on the pencil</li>
+                    <li>On the Include line, click the down arrow, and select Contact Information</li>
+                    <li><strong>Click Download</strong></li>
+                    <li>This might take several minutes.</li>
+                    <li>When it's done, the data will be in your Download folder</li>
+                    <li>On the URL menu at the top, click on the down arrow pointing to an open box, and you will see the extract people file at the top</li>
+                    <li>Navigate to it, and upload it to EMA using the uploader below (spreadsheet name format: <strong>&lt;YourName&gt;-people-mm-dd-yyyy.xlsx</strong>)</li>
+                </ol>
+
+                <div class="upload-row">
+                    <label for="dataport-people-upload" class="upload-label">People Export (.xlsx):</label>
+                    <InputFile id="dataport-people-upload"
+                               OnChange="OnPeopleFileSelected"
+                               accept=".xlsx,.xls,.csv"
+                               class="file-input" />
+                    @if (PeopleUploadStatus is not null)
+                    {
+                        <span class="upload-status @(PeopleUploadSuccess ? "status-ok" : "status-err")">
+                            @PeopleUploadStatus
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* â”€â”€ Extract Donations Instructions â”€â”€ *@
+        <div class="dataport-section">
+            <h3 class="section-heading" @onclick="ToggleDonations" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 8px;">
+                EXTRACT DONATIONS
+                <span class="expand-icon" style="font-size: 0.8rem;">@(DonationsExpanded ? "â–¼" : "â–¶")</span>
+            </h3>
+            <div style="display: @(DonationsExpanded ? "block" : "none");">
+                <ol class="instruction-list">
+                    <li>Open Breeze</li>
+                    <li>On the top menu, touch on Giving</li>
+                    <li>On the left menu, touch on Reports</li>
+                    <li><strong>Select Dates - By Year - Start 8 years back, and end with this year</strong></li>
+                    <li>On the right, it will default to Download as Excel, which is correct.</li>
+                    <li>Click on that button, and it will download to your Download folder</li>
+                    <li>Navigate to it, and upload it to EMA using the uploader below (spreadsheet name format: <strong>&lt;YourName&gt;-giving-mm-dd-yyyy.xlsx</strong>)</li>
+                </ol>
+
+                <div class="upload-row">
+                    <label for="dataport-donations-upload" class="upload-label">Donations Export (.xlsx):</label>
+                    <InputFile id="dataport-donations-upload"
+                               OnChange="OnDonationsFileSelected"
+                               accept=".xlsx,.xls,.csv"
+                               class="file-input" />
+                    @if (DonationsUploadStatus is not null)
+                    {
+                        <span class="upload-status @(DonationsUploadSuccess ? "status-ok" : "status-err")">
+                            @DonationsUploadStatus
+                        </span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* â”€â”€ ETL Button â”€â”€ *@
+        <div class="dataport-footer">
+            <button id="dataport-run-etl-btn"
+                    class="btn-etl"
+                    disabled="@(!CanRunEtl)"
+                    @onclick="RunEtl">
+                CLICK HERE TO CONVERT YOUR DATA TO EMAIL MONEY APP
+            </button>
+            @if (EtlStatus is not null)
+            {
+                <p class="etl-status">@EtlStatus</p>
+            }
+        </div>
+    </div>
+</div>
+
+@implements IDisposable
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "source")]
+    public string? Task9Source { get; set; }
+
+    private string? OnboardingSource =>
+        string.IsNullOrWhiteSpace(Task9Source)
+            ? null
+            : Task9Source.Trim();
+
+    // â”€â”€ Org context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private int OrgId => OrganizationState.CurrentOrganization?.EMAOrganizationID ?? 0;
+
+    protected override void OnInitialized()
+    {
+        OrganizationState.OnChange += OnOrgStateChanged;
+    }
+
+    private void OnOrgStateChanged()
+    {
+        // Reset confirmation state when org changes (e.g. org switcher)
+        OverwriteChecked = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        OrganizationState.OnChange -= OnOrgStateChanged;
+    }
+
+    private bool DonorsExpanded { get; set; } = false;
+    private bool DonationsExpanded { get; set; } = false;
+
+    private void ToggleDonors() => DonorsExpanded = !DonorsExpanded;
+    private void ToggleDonations() => DonationsExpanded = !DonationsExpanded;
+
+    // â”€â”€ State detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Derived from real blob GUIDs on the org â€” no extra API call needed.
+    private OrganizationSummary? currentOrg => OrganizationState.CurrentOrganization;
+    private bool HasPriorData =>
+        !string.IsNullOrWhiteSpace(currentOrg?.ETLDonorDataBlobID) ||
+        !string.IsNullOrWhiteSpace(currentOrg?.ETLDonationDataBlobID);
+
+    // â”€â”€ Confirmation gate (checkbox only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private bool OverwriteChecked  { get; set; } = false;
+    private bool ConfirmedOverwrite => !HasPriorData || OverwriteChecked;
+
+    // â”€â”€ File state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private IBrowserFile? PeopleFile { get; set; }
+    private IBrowserFile? DonationsFile { get; set; }
+
+    private string? PeopleUploadStatus { get; set; }
+    private bool PeopleUploadSuccess { get; set; }
+
+    private string? DonationsUploadStatus { get; set; }
+    private bool DonationsUploadSuccess { get; set; }
+
+    // â”€â”€ ETL state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private string? EtlStatus { get; set; }
+    private bool IsRunning { get; set; }
+
+    private bool CanRunEtl =>
+        !IsRunning &&
+        ConfirmedOverwrite &&
+        PeopleUploadSuccess &&
+        DonationsUploadSuccess;
+
+    private const long MaxFileSize = 50 * 1024 * 1024; // 50 MB
+
+    private static readonly string[] AllowedExtensions = { ".xlsx", ".xls", ".csv" };
+
+
+    private (bool Valid, string Message) ValidateFile(IBrowserFile? file)
+    {
+        if (file is null)
+        {
+            return (false, "No file selected.");
+        }
+
+        var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(ext))
+        {
+            return (false, $"âœ— Invalid file type. Allowed: {string.Join(", ", AllowedExtensions)}");
+        }
+
+        if (file.Size > MaxFileSize)
+        {
+            return (false, "âœ— File size exceeds the 50 MB limit.");
+        }
+
+        return (true, $"âœ“ Selected: {file.Name}");
+    }
+
+    // â”€â”€ File handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private void OnPeopleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        var (valid, msg) = ValidateFile(file);
+        
+        PeopleUploadStatus = msg;
+        PeopleUploadSuccess = valid;
+        PeopleFile = valid ? file : null;
+    }
+
+    private void OnDonationsFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        var (valid, msg) = ValidateFile(file);
+        
+        DonationsUploadStatus = msg;
+        DonationsUploadSuccess = valid;
+        DonationsFile = valid ? file : null;
+    }
+
+    // â”€â”€ ETL trigger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    private async Task RunEtl()
+    {
+        if (PeopleFile is null || DonationsFile is null)
+        {
+            EtlStatus = "Please select valid files first.";
+            return;
+        }
+
+        var currentOrg = OrganizationState.CurrentOrganization;
+        if (currentOrg is null)
+        {
+            EtlStatus = "âœ— Could not load organization. Please refresh and try again.";
+            return;
+        }
+
+        // Follow Gabe's blob design: GUIDs are permanent once created.
+        // If the org already has a GUID, reuse it â€” BlobPut overwrites.
+        // If null, generate a new GUID now and persist it to SQL.
+        var generatedPeopleBlobId    = false;
+        var generatedDonationsBlobId = false;
+
+        if (string.IsNullOrWhiteSpace(currentOrg.ETLDonorDataBlobID))
+        {
+            currentOrg.ETLDonorDataBlobID = Guid.NewGuid().ToString("N");
+            generatedPeopleBlobId = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(currentOrg.ETLDonationDataBlobID))
+        {
+            currentOrg.ETLDonationDataBlobID = Guid.NewGuid().ToString("N");
+            generatedDonationsBlobId = true;
+        }
+
+        // Snapshot the GUIDs before any awaits
+        var peopleBlobId    = currentOrg.ETLDonorDataBlobID!;
+        var donationsBlobId = currentOrg.ETLDonationDataBlobID!;
+
+        IsRunning = true;
+
+        EtlStatus = "Uploading People export fileâ€¦";
+        StateHasChanged();
+
+        var peopleOk = await BlobService.BlobPutAsync(
+            peopleBlobId,
+            PeopleFile,
+            maxAllowedSize: MaxFileSize);
+
+        if (!peopleOk)
+        {
+            EtlStatus = "âœ— Uploading People file failed. Migration aborted.";
+            IsRunning = false;
+            return;
+        }
+
+        EtlStatus = "Uploading Donations export fileâ€¦";
+        StateHasChanged();
+
+        var donationsOk = await BlobService.BlobPutAsync(
+            donationsBlobId,
+            DonationsFile,
+            maxAllowedSize: MaxFileSize);
+
+        if (!donationsOk)
+        {
+            EtlStatus = "âœ— Uploading Donations file failed. Migration aborted.";
+            IsRunning = false;
+            return;
+        }
+
+        EtlStatus = "Linking uploaded files to your Organization in databaseâ€¦";
+        StateHasChanged();
+
+        var dbUpdated = await OrganizationService.UpdateOrganizationAsync(OrgId, currentOrg);
+        if (!dbUpdated)
+        {
+            // Roll back any newly-generated GUIDs â€” don't orphan blobs
+            if (generatedPeopleBlobId)    { await BlobService.BlobDeleteAsync(peopleBlobId);    currentOrg.ETLDonorDataBlobID    = null; }
+            if (generatedDonationsBlobId) { await BlobService.BlobDeleteAsync(donationsBlobId); currentOrg.ETLDonationDataBlobID = null; }
+
+            EtlStatus = "âœ— Failed to update Organization database migration records. Migration aborted.";
+            IsRunning = false;
+            return;
+        }
+
+        // Keep the in-memory cache in sync
+        OrganizationState.UpdateOrganization(currentOrg);
+
+        EtlStatus = "Running migrationâ€¦ (ETL pipeline not yet implemented)";
+        await Task.Delay(500); // placeholder async work
+        EtlStatus = "ETL pipeline will be implemented in a future task.";
+        IsRunning = false;
+    }
+}
+

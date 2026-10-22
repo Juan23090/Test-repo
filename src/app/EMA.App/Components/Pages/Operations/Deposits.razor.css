@@ -1,0 +1,682 @@
+:root {
+    --ink: #1f1f1f;
+    --line: #666;
+    --paper: #f2f2f2;
+    --blue-note: #2748d8;
+}
+
+.deposits-page {
+    min-height: 100vh;
+    background: #dcdcdc;
+    color: var(--ink);
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.slip-shell {
+    margin: 0 auto;
+    max-width: 1060px;
+    background: var(--paper);
+    border: 2px solid #7e7e7e;
+    padding: 0.85rem;
+}
+
+.slip-header {
+    display: grid;
+    grid-template-columns: 250px 1fr 260px;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.logo-art {
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #7a7a7a;
+    font-size: 0.72rem;
+    margin-bottom: 0.35rem;
+}
+
+/* EMA logo (top-left) */
+.logo-ema {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.ema-logo-img {
+    max-width: 120px;
+    max-height: 72px;
+    object-fit: contain;
+}
+
+/* Org logo + phone (top-right) */
+.logo-org {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+/* Setup-required gate (shown when Branch/Account/Cheque/Cash method not set) */
+.setup-needed {
+    border: 2px solid #7d7d7d;
+    background: #ececec;
+    text-align: center;
+    padding: 2rem 1rem;
+    margin-top: 1rem;
+}
+
+.setup-needed-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.3rem;
+    font-weight: 800;
+}
+
+.setup-needed-link {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--blue-note);
+    text-decoration: underline;
+}
+
+/* Inline deposit-slip setup form (shown until the org is configured) */
+.setup-needed {
+    text-align: left;
+}
+
+.setup-needed-hint {
+    margin: 0 0 1rem;
+    font-size: 0.9rem;
+    color: #555;
+    text-align: center;
+}
+
+.setup-field {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 640px;
+    margin: 0 auto 0.75rem;
+}
+
+.setup-field label {
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.setup-field input,
+.setup-field select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.45rem;
+    border: 2px solid #8a8a8a;
+    background: #fff;
+    font: inherit;
+}
+
+.setup-field input:focus,
+.setup-field select:focus {
+    outline: none;
+    border-color: #4e7fce;
+}
+
+.setup-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.9rem;
+    margin-top: 1.1rem;
+}
+
+.setup-save {
+    min-height: 38px;
+    padding: 0 1.6rem;
+    border: 2px solid #8a8a8a;
+    background: #4e7fce;
+    color: #fff;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+}
+
+.setup-save:hover:not(:disabled),
+.setup-save:focus-visible:not(:disabled) {
+    background: #4572b8;
+}
+
+.setup-save:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.setup-cancel {
+    min-height: 38px;
+    padding: 0 1.4rem;
+    border: 2px solid #8a8a8a;
+    background: #ececec;
+    color: #1f1f1f;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+}
+
+.setup-cancel:hover:not(:disabled),
+.setup-cancel:focus-visible:not(:disabled) {
+    background: #dcdcdc;
+}
+
+.setup-error {
+    color: #b3261e;
+    font-weight: 600;
+    font-size: 0.92rem;
+    text-align: center;
+}
+
+@media (max-width: 560px) {
+    .setup-field {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+}
+
+/* Editable + autosaved counting steps */
+.counting-steps-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 0.35rem;
+    border: 2px solid #8a8a8a;
+    background: #efefef;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.83rem;
+    font-weight: 600;
+    padding: 0.35rem;
+    resize: vertical;
+}
+
+.counting-steps-input:focus {
+    outline: none;
+    border-color: #6f6f6f;
+}
+
+.small {
+    width: 100%;
+    font-size: 0.65rem;
+    padding: 0.45rem;
+}
+
+.hint,
+.save-hint,
+.blue-note,
+.autosave-note,
+.blue-text {
+    color: var(--blue-note);
+}
+
+.hint,
+.save-hint,
+.autosave-note {
+    font-size: 0.7rem;
+    text-align: center;
+}
+
+.slip-title {
+    text-align: center;
+}
+
+.slip-title h2,
+.slip-title h3 {
+    margin: 0;
+    font-weight: 800;
+}
+
+.slip-title h2 {
+    font-size: clamp(1.5rem, 3vw, 2.3rem);
+}
+
+.slip-title h3 {
+    font-size: clamp(1.2rem, 2.4vw, 1.9rem);
+    margin-top: 0.25rem;
+}
+
+.meta-row {
+    display: grid;
+    /* Wider first column so the longer "Deposit Date:" label fits; Branch/Account trimmed to suit. */
+    grid-template-columns: 1.5fr 0.9fr 1.1fr;
+    gap: 0.9rem;
+    margin-top: 0.85rem;
+}
+
+/* Deposit period range shown above the Branch & Account line. */
+.deposit-dates-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.deposit-dates-label {
+    font-weight: 800;
+    font-size: 0.92rem;
+    white-space: nowrap;
+}
+
+.deposit-dates-sep {
+    font-weight: 700;
+    font-size: 0.92rem;
+}
+
+.deposit-date-box {
+    min-width: 150px;
+}
+
+.meta-field {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.meta-field label {
+    font-weight: 800;
+    font-size: 0.92rem;
+}
+
+.value-box {
+    border: 2px solid #7d7d7d;
+    background: #ececec;
+    text-align: center;
+    padding: 0.55rem 0.35rem;
+    font-weight: 700;
+    min-height: 18px;
+}
+
+.value-box-input {
+    display: flex;
+    align-items: center;
+    padding: 0.55rem 0.35rem;
+}
+
+.date-input-overlay {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.text-input-overlay {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1;
+    padding: 0;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.date-input-overlay:focus {
+    outline: none;
+}
+
+.text-input-overlay:focus {
+    outline: none;
+}
+
+.date-input-overlay::-webkit-datetime-edit,
+.date-input-overlay::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+}
+
+.cheques-section {
+    margin-top: 0.7rem;
+}
+
+.cheques-section h4,
+.cash-card h4 {
+    text-align: center;
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 800;
+    border: 2px solid #7d7d7d;
+    border-bottom: none;
+    padding: 0.4rem;
+}
+
+.cheques-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+}
+
+.cheque-table,
+.cash-card table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.cheque-table th,
+.cheque-table td,
+.cash-card th,
+.cash-card td {
+    border: 2px solid #7d7d7d;
+    min-height: 34px;
+    height: 34px;
+    padding: 0.2rem 0.35rem;
+    text-align: left;
+    font-size: 0.87rem;
+    font-weight: 600;
+    background: #efefef;
+}
+
+.cheque-table th:nth-child(1),
+.cheque-table td:nth-child(1) {
+    width: 70%;
+}
+
+.cheque-table th:nth-child(2),
+.cheque-table td:nth-child(2) {
+    width: 30%;
+    text-align: center;
+}
+
+.blue-note {
+    text-align: center;
+    font-weight: 500;
+    font-size: 0.74rem;
+}
+
+.cheque-totals {
+    display: grid;
+    grid-template-columns: 1.1fr 0.7fr 1.1fr 0.7fr;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.cheque-totals button,
+.totals-stack button {
+    min-height: 38px;
+    font-size: 0.83rem;
+}
+
+.cash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+    margin-top: 0.85rem;
+}
+
+.cash-card h4 {
+    font-size: 2rem;
+    background: #e8e8e8;
+}
+
+.cash-card th,
+.cash-card td {
+    text-align: center;
+}
+
+.cash-card th {
+    background: #ececec;
+    font-weight: 800;
+}
+
+.mini {
+    width: 100%;
+    min-height: 30px;
+    font-size: 0.72rem;
+}
+
+.mini-input {
+    width: 100%;
+    min-height: 30px;
+    box-sizing: border-box;
+    border: 2px solid #8a8a8a;
+    background: #efefef;
+    text-align: center;
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 0.78rem;
+}
+
+.mini-input:focus {
+    outline: none;
+    border-color: #6f6f6f;
+}
+
+.counting-notes {
+    margin-top: 0.65rem;
+    border: 2px solid #7d7d7d;
+    background: #efefef;
+    padding: 0.45rem;
+}
+
+.counting-notes p {
+    margin: 0.1rem 0;
+    font-size: 0.83rem;
+}
+
+.totals-stack {
+    margin-top: 0.65rem;
+    display: grid;
+    grid-template-columns: 1.1fr 0.7fr;
+    gap: 0.4rem;
+}
+
+.autosave-note {
+    text-align: center;
+    margin-top: 0.7rem;
+    font-size: 0.82rem;
+}
+
+.slip-actions {
+    margin: 1rem auto 0;
+    max-width: 1060px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.slip-action-btn {
+    min-height: 34px;
+    border: 2px solid #8a8a8a;
+    background: #4e7fce;
+    color: #111;
+    /* Match the Bills/Coin cell size (Roger: buttons were too bold). */
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+}
+
+.slip-action-btn:hover,
+.slip-action-btn:focus-visible {
+    background: #4572b8;
+}
+
+@media (max-width: 980px) {
+    .slip-header {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+    }
+
+    .meta-row,
+    .cheques-grid,
+    .cash-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .save-hint {
+        margin-top: 0.2rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .deposits-page {
+        padding: 0.45rem;
+    }
+
+    .app-header {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .user-link {
+        text-align: center;
+    }
+
+    .slip-shell {
+        padding: 0.55rem;
+    }
+
+    .cheque-table th,
+    .cheque-table td,
+    .cash-card th,
+    .cash-card td {
+        font-size: 0.75rem;
+        padding: 0.15rem;
+    }
+
+    .cheque-totals,
+    .totals-stack {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .slip-actions {
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+    }
+
+    .slip-action-btn {
+        min-height: 48px;
+        font-size: 1rem;
+    }
+}
+
+@media print {
+    @page {
+        size: portrait;
+        margin: 5mm;
+    }
+
+    body.deposit-slip-print-mode {
+        background: #fff !important;
+    }
+
+    body.deposit-slip-print-mode .deposits-page {
+        min-height: auto;
+        background: #fff;
+        padding: 0;
+    }
+
+    body.deposit-slip-print-mode .deposits-page > :not(#deposit-slip-content) {
+        display: none !important;
+    }
+
+    body.deposit-slip-print-mode #deposit-slip-content {
+        display: block !important;
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        border: 0;
+        background: #fff;
+        padding: 0;
+        break-inside: auto;
+        page-break-inside: auto;
+    }
+
+    /* Force the desktop slip composition in print (avoid mobile breakpoint collapse). */
+    body.deposit-slip-print-mode .slip-header {
+        display: grid;
+        grid-template-columns: 250px 1fr 260px !important;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    body.deposit-slip-print-mode .meta-row {
+        display: grid;
+        grid-template-columns: 1.5fr 0.9fr 1.1fr !important;
+        gap: 0.9rem;
+    }
+
+    body.deposit-slip-print-mode .cheques-grid,
+    body.deposit-slip-print-mode .cash-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 0.9rem;
+    }
+
+    body.deposit-slip-print-mode .cheque-totals,
+    body.deposit-slip-print-mode .totals-stack {
+        grid-template-columns: 1.1fr 0.7fr 1.1fr 0.7fr !important;
+    }
+
+    body.deposit-slip-print-mode .cheque-table th,
+    body.deposit-slip-print-mode .cheque-table td,
+    body.deposit-slip-print-mode .cash-card th,
+    body.deposit-slip-print-mode .cash-card td {
+        min-height: 22px;
+        height: 22px;
+        font-size: 0.72rem;
+        padding: 0.08rem 0.22rem;
+    }
+
+    body.deposit-slip-print-mode .cheques-section h4,
+    body.deposit-slip-print-mode .cash-card h4 {
+        font-size: 1.55rem;
+        padding: 0.14rem;
+    }
+
+    body.deposit-slip-print-mode .meta-row,
+    body.deposit-slip-print-mode .cheques-grid,
+    body.deposit-slip-print-mode .cash-grid {
+        gap: 0.3rem;
+    }
+
+    body.deposit-slip-print-mode .slip-title h2 {
+        font-size: 2rem;
+    }
+
+    body.deposit-slip-print-mode .slip-title h3 {
+        font-size: 1.55rem;
+        margin-top: 0.1rem;
+    }
+
+    body.deposit-slip-print-mode .value-box,
+    body.deposit-slip-print-mode .value-box-input {
+        padding: 0.35rem 0.2rem;
+    }
+
+    body.deposit-slip-print-mode .counting-notes {
+        margin-top: 0.35rem;
+        padding: 0.3rem;
+    }
+
+    body.deposit-slip-print-mode .counting-notes p {
+        font-size: 0.72rem;
+        margin: 0.04rem 0;
+    }
+}
+

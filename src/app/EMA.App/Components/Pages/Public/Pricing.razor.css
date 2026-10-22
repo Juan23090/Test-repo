@@ -1,0 +1,78 @@
+.pricing-invoicing-page {
+    width: min(100%, 78rem);
+    margin: 0 auto;
+    padding: 0.25rem 0 2rem;
+    font-family: var(--ema-ui-font);
+}
+
+.pricing-key-points {
+    display: grid;
+    gap: 1.25rem;
+    margin: 0;
+    padding-left: 1.8rem;
+}
+
+.pricing-key-points > li {
+    padding-left: 0.35rem;
+    font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+    line-height: 1.45;
+}
+
+.pricing-table-wrap {
+    width: 100%;
+    margin-top: 1.5rem;
+    overflow-x: auto;
+}
+
+.pricing-rate-table-wrap {
+    margin-top: 1rem;
+}
+
+.pricing-table {
+    width: 100%;
+    min-width: 44rem;
+    border-collapse: collapse;
+    background: #fff;
+}
+
+.pricing-table th,
+.pricing-table td {
+    border: 1px solid #a9a9a9;
+    padding: 0.85rem 0.75rem;
+    text-align: center;
+    vertical-align: middle;
+    font-size: clamp(1rem, 1.4vw, 1.2rem);
+}
+
+.pricing-table thead th,
+.pricing-table tbody th {
+    background: #f0f0f0;
+    font-weight: 700;
+}
+
+.pricing-rate-table {
+    max-width: 62rem;
+    margin: 0 auto;
+}
+
+.pricing-savings-table tbody tr:last-child th,
+.pricing-savings-table tbody tr:last-child td {
+    font-weight: 700;
+}
+
+@media (max-width: 48rem) {
+    .pricing-key-points {
+        gap: 1rem;
+        padding-left: 1.35rem;
+    }
+
+    .pricing-key-points > li {
+        font-size: 1rem;
+    }
+
+    .pricing-table th,
+    .pricing-table td {
+        padding: 0.65rem 0.55rem;
+        font-size: 0.95rem;
+    }
+}

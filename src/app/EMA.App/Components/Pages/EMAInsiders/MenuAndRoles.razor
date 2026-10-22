@@ -1,0 +1,666 @@
+@page "/menu-and-roles"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IJSRuntime JS
+
+<PageTitle>Menu & Roles - EMA</PageTitle>
+
+<div class="ema-settings-shell">
+    <div class="menu-roles-container">
+        <div class="menu-roles-form" id="add-edit-menu-form">
+            <h3 class="section-title text-center">Add / Edit Menu Line:</h3>
+
+            @if (!string.IsNullOrEmpty(ValidationMessage))
+            {
+                <div class="validation-message" role="alert">
+                    @ValidationMessage
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(SuccessMessage))
+            {
+                <div class="success-message" role="alert">
+                    @SuccessMessage
+                </div>
+            }
+
+            <div class="form-row-horizontal menu-roles-row">
+                <div class="form-group">
+                    <span class="form-label-horizontal">Category</span>
+                    <select class="form-input-horizontal" @bind="CategoryIDString">
+                        <option value="">-- Select --</option>
+                        @foreach (var cat in Categories)
+                        {
+                            <option value="@cat.ID">@cat.Description</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">Row</span>
+                    <select class="form-input-horizontal" @bind="CurrentMenuItem.MenuItemRowID">
+                        <option value="-1">-- Select --</option>
+                        @foreach (var row in Rows)
+                        {
+                            <option value="@row.ID">@row.Description</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-group id-group">
+                    <span class="form-label-horizontal">ID</span>
+                    <input class="form-input-horizontal" type="number" @bind="CurrentMenuItem.MenuItemID" placeholder="1234" />
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">Type</span>
+                    <select class="form-input-horizontal" @bind="CurrentMenuItem.MenuItemTypeID">
+                        <option value="-1">-- Select --</option>
+                        @foreach (var t in Types)
+                        {
+                            <option value="@t.ID">@t.Description</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">Name</span>
+                    <input class="form-input-horizontal" type="text" @bind="CurrentMenuItem.MenuName" placeholder="About" />
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">URL</span>
+                    <input class="form-input-horizontal" type="text" @bind="CurrentMenuItem.URL" placeholder="/about" />
+                </div>
+
+                <div class="form-group title-group">
+                    <span class="form-label-horizontal">Screen Title</span>
+                    <input class="form-input-horizontal" type="text" @bind="CurrentMenuItem.ScreenTitle" placeholder="About Us" />
+                </div>
+
+                <div class="form-group display-control-group">
+                    <span class="form-label-horizontal">Display</span>
+                    <select class="form-input-horizontal" @bind="CurrentMenuItem.DisplayControlID">
+                        <option value="M">Menu</option>
+                        <option value="W">Wizard</option>
+                        <option value="B">Both</option>
+                        <option value="L">Landing Page</option>
+                    </select>
+                </div>
+
+                <div class="form-group-active">
+                    <span class="form-label-horizontal">Active</span>
+                    <div class="form-checkbox-container">
+                        <input type="checkbox" @bind="CurrentMenuItem.IsActive" />
+                    </div>
+                </div>
+
+                <button type="button"
+                        class="btn-view-resources"
+                        disabled="@(!CanViewResources)"
+                        title="@(CanViewResources ? "View resources for this MenuItem" : "Select an existing MenuItem first")"
+                        @onclick="OpenResources">
+                    View Resources
+                </button>
+            </div>
+
+            <div class="roles-section">
+                <div class="roles-title">Select Roles (must select at least one role)</div>
+                <table class="roles-table">
+                    <tbody>
+                        @foreach (var role in MasterRoles)
+                        {
+                            <tr>
+                                <td>@role.RoleName</td>
+                                <td class="cell-check">
+                                    <input type="checkbox"
+                                           aria-label="Toggle role @role.RoleName"
+                                           checked="@CurrentMenuItem.RoleIDs.Contains(role.RoleID)"
+                                           @onchange="(e) => ToggleRole(role.RoleID, e.Value)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="action-buttons">
+                    <button class="btn-save-menu" @onclick="SaveMenuItem">
+                        Save Menu Item with Roles
+                    </button>
+                    @if (IsEditMode)
+                    {
+                        <button class="btn-reset-menu" @onclick="ResetForm">
+                            Reset / Add New
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="menu-table-section">
+            <h3 class="section-title text-center">Existing Menu Lines - Click the Menu Name to view, then make the edits above</h3>
+            <div class="menu-grid-flex">
+                <div class="grid-column">
+                    <div class="grid-header">Category</div>
+                    <div class="filter-cell">
+                        <select class="form-input-horizontal filter-input" @bind="SelectedCategoryFilter">
+                            <option value="">-- All --</option>
+                            @foreach (var cat in Categories)
+                            {
+                                <option value="@cat.ID">@cat.Description</option>
+                            }
+                        </select>
+                    </div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">
+                            @(Categories.FirstOrDefault(c => c.ID == item.MenuItemCategoryID)?.Description ?? item.MenuItemCategoryID?.ToString() ?? "")
+                        </div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">Row</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">
+                            @(Rows.FirstOrDefault(r => r.ID == item.MenuItemRowID)?.Description ?? item.MenuItemRowID.ToString())
+                        </div>
+                    }
+                </div>
+
+                <div class="grid-column id-column">
+                    <div class="grid-header cell-center">ID</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell cell-center">@item.MenuItemID</div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">Type</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">
+                            @(Types.FirstOrDefault(t => t.ID == item.MenuItemTypeID)?.Description ?? item.MenuItemTypeID.ToString())
+                        </div>
+                    }
+                </div>
+
+                <div class="grid-column display-control-column">
+                    <div class="grid-header">Display</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">@GetDisplayControlLabel(item.DisplayControlID)</div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">Menu Name</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">
+                            <span class="link-name" @onclick="() => SelectMenuItem(item)">@item.MenuName</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">URL</div>
+                    <div class="filter-cell"></div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">@item.URL</div>
+                    }
+                </div>
+
+                <div class="grid-column title-column">
+                    <div class="grid-header">Screen Title</div>
+                    <div class="filter-cell filter-search-wrap">
+                        <input class="form-input-horizontal filter-input" type="text" @bind="ScreenTitleFilterText" @bind:event="oninput" placeholder="Filter Title..." />
+                        @if (!string.IsNullOrEmpty(ScreenTitleFilterText))
+                        {
+                            <button type="button" class="filter-clear-btn" @onclick="ClearScreenTitleFilter" title="Clear filter">&times;</button>
+                        }
+                    </div>
+                    @foreach (var item in FilteredMenuItemsList)
+                    {
+                        <div class="grid-cell">@item.ScreenTitle</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<MenuItemResourcesOverlay IsOpen="@IsResourceOverlayOpen"
+                          MenuItem="@ResourceMenuItem"
+                          ResourceTypes="@ResourceTypes"
+                          OnClose="CloseResources"
+                          OnResourcesSaved="HandleResourcesSaved" />
+
+@code {
+    [Inject]
+    private IOrganizationService OrganizationService { get; set; } = default!;
+
+    private MenuItemDto CurrentMenuItem = CreateBlankMenuItem();
+    private List<MenuItemDto> MenuItemsList = new();
+    private List<RoleItem> MasterRoles = new();
+    private List<LookupItem> Categories = new();
+    private List<LookupItem> Rows = new();
+    private List<LookupItem> Types = new();
+    private List<MenuItemResourceTypeDto> ResourceTypes = new();
+
+    private string ValidationMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+    private bool IsEditMode = false;
+    private bool IsResourceOverlayOpen;
+    private MenuItemDto? ResourceMenuItem;
+
+    private string SelectedCategoryFilter = string.Empty;
+    private string ScreenTitleFilterText = string.Empty;
+
+    private void ClearScreenTitleFilter()
+    {
+        ScreenTitleFilterText = string.Empty;
+    }
+
+    private bool CanViewResources =>
+        IsEditMode &&
+        CurrentMenuItem.OriginalMenuItemID is > 0;
+
+    private IEnumerable<MenuItemDto> FilteredMenuItemsList
+    {
+        get
+        {
+            var list = MenuItemsList.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(SelectedCategoryFilter) && int.TryParse(SelectedCategoryFilter, out var catId))
+            {
+                list = list.Where(x => x.MenuItemCategoryID == catId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(ScreenTitleFilterText))
+            {
+                list = list.Where(x => x.ScreenTitle != null && x.ScreenTitle.Contains(ScreenTitleFilterText, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return list;
+        }
+    }
+
+    private string CategoryIDString
+    {
+        get => CurrentMenuItem.MenuItemCategoryID?.ToString() ?? string.Empty;
+        set => CurrentMenuItem.MenuItemCategoryID = string.IsNullOrEmpty(value) ? null : int.Parse(value);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var lookupDataLoaded =
+            await LoadLookupDataAsync();
+
+        var menuItemsLoaded =
+            await LoadMenuItemsAsync();
+
+        if (!lookupDataLoaded || !menuItemsLoaded)
+        {
+            ValidationMessage =
+                "Unable to load Menu Items. Refresh the page or sign in again if the problem continues.";
+        }
+    }
+
+    private async Task<bool> LoadLookupDataAsync()
+    {
+        var rolesResult = await OrganizationService.GetRolesAsync();
+        var categoriesResult = await OrganizationService.GetMenuItemCategoriesAsync();
+        var rowsResult = await OrganizationService.GetMenuItemRowsAsync();
+        var typesResult = await OrganizationService.GetMenuItemTypesAsync();
+        var resourceTypesResult = await OrganizationService.GetMenuItemResourceTypesAsync();
+
+        MasterRoles = rolesResult ?? new List<RoleItem>();
+        Categories = categoriesResult ?? new List<LookupItem>();
+        Rows = rowsResult ?? new List<LookupItem>();
+        Types = typesResult ?? new List<LookupItem>();
+        ResourceTypes = resourceTypesResult ?? new List<MenuItemResourceTypeDto>();
+
+        return rolesResult is not null &&
+               categoriesResult is not null &&
+               rowsResult is not null &&
+               typesResult is not null &&
+               resourceTypesResult is not null;
+    }
+
+    private async Task<bool> LoadMenuItemsAsync()
+    {
+        var result = await OrganizationService.GetMenuItemsAsync();
+        MenuItemsList = result ?? new List<MenuItemDto>();
+        return result is not null;
+    }
+
+    private async Task SelectMenuItem(MenuItemDto item)
+    {
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+        IsResourceOverlayOpen = false;
+        ResourceMenuItem = null;
+        IsEditMode = true;
+
+        CurrentMenuItem = new MenuItemDto
+        {
+            MenuItemID = item.MenuItemID,
+            OriginalMenuItemID = item.MenuItemID,
+            MenuItemCategoryID = item.MenuItemCategoryID,
+            MenuItemRowID = item.MenuItemRowID,
+            MenuItemTypeID = item.MenuItemTypeID,
+            DisplayControlID = NormalizeDisplayControlID(item.DisplayControlID),
+            MenuName = item.MenuName,
+            ScreenTitle = item.ScreenTitle,
+            URL = item.URL,
+            IsActive = item.IsActive,
+            RoleIDs = new List<int>(item.RoleIDs),
+            Resources = item.Resources
+                .Select(CloneResource)
+                .ToList()
+        };
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "emaUi.scrollIntoView",
+                "add-edit-menu-form");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error scrolling to menu edit form: {ex.Message}");
+        }
+    }
+
+    private void OpenResources()
+    {
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (!CanViewResources ||
+            CurrentMenuItem.OriginalMenuItemID is not int menuItemID)
+        {
+            ValidationMessage =
+                "Select an existing MenuItem before viewing its resources.";
+            return;
+        }
+
+        var persistedMenuItem =
+            MenuItemsList.FirstOrDefault(item =>
+                item.MenuItemID == menuItemID);
+
+        if (persistedMenuItem is null)
+        {
+            ValidationMessage =
+                "The selected MenuItem could not be found. Reload the list and try again.";
+            return;
+        }
+
+        ResourceMenuItem = CloneMenuItem(persistedMenuItem);
+        IsResourceOverlayOpen = true;
+    }
+
+    private void CloseResources()
+    {
+        IsResourceOverlayOpen = false;
+        ResourceMenuItem = null;
+    }
+
+    private Task HandleResourcesSaved(
+        List<MenuItemResourceDto> resources)
+    {
+        if (ResourceMenuItem is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var menuItemID = ResourceMenuItem.MenuItemID;
+        var clonedResources =
+            resources.Select(CloneResource).ToList();
+
+        ResourceMenuItem.Resources =
+            clonedResources.Select(CloneResource).ToList();
+
+        var listItem =
+            MenuItemsList.FirstOrDefault(item =>
+                item.MenuItemID == menuItemID);
+
+        if (listItem is not null)
+        {
+            listItem.Resources =
+                clonedResources.Select(CloneResource).ToList();
+        }
+
+        if (CurrentMenuItem.OriginalMenuItemID == menuItemID)
+        {
+            CurrentMenuItem.Resources =
+                clonedResources.Select(CloneResource).ToList();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ToggleRole(int roleID, object? checkedValue)
+    {
+        bool isChecked = checkedValue is bool val && val;
+        if (isChecked)
+        {
+            if (!CurrentMenuItem.RoleIDs.Contains(roleID))
+            {
+                CurrentMenuItem.RoleIDs.Add(roleID);
+            }
+        }
+        else
+        {
+            CurrentMenuItem.RoleIDs.Remove(roleID);
+        }
+    }
+
+    private void ResetForm()
+    {
+        ResetFormInternal(true);
+    }
+
+    private void ResetFormInternal(bool clearSuccess)
+    {
+        CurrentMenuItem = CreateBlankMenuItem();
+        IsEditMode = false;
+        IsResourceOverlayOpen = false;
+        ResourceMenuItem = null;
+        ValidationMessage = string.Empty;
+        if (clearSuccess)
+        {
+            SuccessMessage = string.Empty;
+        }
+    }
+
+    private async Task SaveMenuItem()
+    {
+        if (CurrentMenuItem.MenuItemID <= 0)
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "ID must be a positive integer.";
+            return;
+        }
+
+        if (!HasValidLandingCoordinates(CurrentMenuItem))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage =
+                IsLandingMenuItem(CurrentMenuItem)
+                    ? "Landing Pages must use Row 0 (Landing Page) and Type 0 (Landing)."
+                    : "Row and Type are required for non-landing menu items.";
+            return;
+        }
+
+        if (!IsValidDisplayControlID(CurrentMenuItem.DisplayControlID))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Display must be Menu, Wizard, Both, or Landing Page.";
+            return;
+        }
+
+        if (!IsLandingMenuItem(CurrentMenuItem) &&
+            string.IsNullOrWhiteSpace(CurrentMenuItem.MenuName))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Name is required for non-landing menu items.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentMenuItem.ScreenTitle))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Screen Title is required.";
+            return;
+        }
+
+        bool isPublic = Categories.FirstOrDefault(c => c.ID == CurrentMenuItem.MenuItemCategoryID)?.Description?.Equals("Public", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (!isPublic && (CurrentMenuItem.RoleIDs == null || !CurrentMenuItem.RoleIDs.Any()))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "You must select at least one role.";
+            return;
+        }
+
+        ValidationMessage = string.Empty;
+
+        var ok = await OrganizationService.SaveMenuItemAsync(CurrentMenuItem);
+        if (ok)
+        {
+            SuccessMessage = $"Successfully saved menu item '{CurrentMenuItem.MenuName}' (ID: {CurrentMenuItem.MenuItemID}).";
+            ResetFormInternal(false);
+            await LoadMenuItemsAsync();
+            _ = ClearSuccessMessageAfterDelay();
+        }
+        else
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Failed to save menu item to database.";
+        }
+    }
+
+    private static MenuItemDto CloneMenuItem(MenuItemDto item)
+    {
+        return new MenuItemDto
+        {
+            MenuItemID = item.MenuItemID,
+            OriginalMenuItemID = item.OriginalMenuItemID ?? item.MenuItemID,
+            MenuItemCategoryID = item.MenuItemCategoryID,
+            MenuItemRowID = item.MenuItemRowID,
+            MenuItemTypeID = item.MenuItemTypeID,
+            DisplayControlID = NormalizeDisplayControlID(item.DisplayControlID),
+            MenuName = item.MenuName,
+            ScreenTitle = item.ScreenTitle,
+            URL = item.URL,
+            IsActive = item.IsActive,
+            RoleIDs = new List<int>(item.RoleIDs),
+            Resources = item.Resources
+                .Select(CloneResource)
+                .ToList()
+        };
+    }
+
+    private static MenuItemResourceDto CloneResource(
+        MenuItemResourceDto resource)
+    {
+        return new MenuItemResourceDto
+        {
+            MenuItemRowID = resource.MenuItemRowID,
+            MenuItemID = resource.MenuItemID,
+            MenuItemResourceTypeID = resource.MenuItemResourceTypeID,
+            Sequence = resource.Sequence,
+            Description = resource.Description,
+            AudioScript = resource.AudioScript,
+            AudioVideoBlob = resource.AudioVideoBlob,
+            ScreenURL = resource.ScreenURL,
+            ResourceTypeDescription = resource.ResourceTypeDescription,
+            ResourceTypeName = resource.ResourceTypeName,
+            RawSVG = resource.RawSVG
+        };
+    }
+
+    private static string GetResourceTypeID(
+        MenuItemResourceDto resource)
+    {
+        return resource.MenuItemResourceTypeID
+            ?.Trim()
+            .ToUpperInvariant()
+            ?? string.Empty;
+    }
+
+    private static MenuItemDto CreateBlankMenuItem()
+    {
+        return new MenuItemDto
+        {
+            Row = -1,
+            MenuItemTypeID = -1,
+            IsActive = true
+        };
+    }
+
+    private static bool IsLandingMenuItem(
+        MenuItemDto item)
+    {
+        return string.Equals(
+            item.DisplayControlID?.Trim(),
+            "L",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasValidLandingCoordinates(
+        MenuItemDto item)
+    {
+        if (IsLandingMenuItem(item))
+        {
+            return item.MenuItemRowID == 0 &&
+                   item.MenuItemTypeID == 0;
+        }
+
+        return item.MenuItemRowID > 0 &&
+               item.MenuItemTypeID > 0;
+    }
+
+    private static bool IsValidDisplayControlID(string? value)
+    {
+        var normalized = value?.Trim().ToUpperInvariant();
+        return normalized is "M" or "W" or "B" or "L";
+    }
+
+    private static string NormalizeDisplayControlID(string? value)
+    {
+        var normalized = value?.Trim().ToUpperInvariant();
+        return normalized is "M" or "W" or "B" or "L"
+            ? normalized
+            : "M";
+    }
+
+    private static string GetDisplayControlLabel(string? value)
+    {
+        return NormalizeDisplayControlID(value) switch
+        {
+            "W" => "Wizard",
+            "B" => "Both",
+            "L" => "Landing Page",
+            _ => "Menu"
+        };
+    }
+
+    private async Task ClearSuccessMessageAfterDelay()
+    {
+        await Task.Delay(4000);
+        SuccessMessage = string.Empty;
+        StateHasChanged();
+    }
+}

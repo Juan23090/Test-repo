@@ -1,0 +1,137 @@
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="@BackdropCssClass">
+        <section id="@PanelId"
+                 class="@PanelCssClass"
+                 role="dialog"
+                 aria-modal="@AriaModalValue"
+                 aria-label="@Title">
+            <header class="ema-floating-panel-header">
+                <div class="ema-floating-panel-title">
+                    @if (!string.IsNullOrWhiteSpace(IconClass))
+                    {
+                        <i class="@IconClass" aria-hidden="true"></i>
+                    }
+                    <span>@Title</span>
+                </div>
+
+                <button type="button"
+                        class="ema-floating-panel-close"
+                        title="Close"
+                        aria-label="Close"
+                        @onclick="CloseAsync">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </header>
+
+            <div class="ema-floating-panel-body">
+                @ChildContent
+            </div>
+
+            @if (Resizable)
+            {
+                <span class="ema-floating-panel-resize-handle ema-floating-panel-resize-nw"
+                      data-ema-resize="nw"
+                      aria-hidden="true"></span>
+                <span class="ema-floating-panel-resize-handle ema-floating-panel-resize-ne"
+                      data-ema-resize="ne"
+                      aria-hidden="true"></span>
+                <span class="ema-floating-panel-resize-handle ema-floating-panel-resize-sw"
+                      data-ema-resize="sw"
+                      aria-hidden="true"></span>
+                <span class="ema-floating-panel-resize-handle ema-floating-panel-resize-se"
+                      data-ema-resize="se"
+                      aria-hidden="true"></span>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string IconClass { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Size { get; set; } = "medium";
+
+    [Parameter]
+    public bool NonModal { get; set; }
+
+    [Parameter]
+    public bool Resizable { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private readonly string PanelId =
+        $"ema-floating-panel-{Guid.NewGuid():N}";
+
+    private bool _interactionInitialized;
+
+    private string PanelCssClass =>
+        $"ema-floating-panel ema-floating-panel-{Size}";
+
+    private string BackdropCssClass =>
+        NonModal
+            ? "ema-floating-panel-backdrop ema-floating-panel-backdrop-nonmodal"
+            : "ema-floating-panel-backdrop";
+
+    private string AriaModalValue =>
+        NonModal ? "false" : "true";
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (IsOpen && !_interactionInitialized)
+        {
+            _interactionInitialized = true;
+
+            await JS.InvokeVoidAsync(
+                "emaUi.makeDraggable",
+                PanelId,
+                ".ema-floating-panel-header");
+
+            if (Resizable)
+            {
+                await JS.InvokeVoidAsync(
+                    "emaUi.makeResizable",
+                    PanelId,
+                    260,
+                    170);
+            }
+        }
+        else if (!IsOpen)
+        {
+            _interactionInitialized = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _interactionInitialized = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "emaUi.releaseFloatingPanel",
+                PanelId);
+        }
+        catch
+        {
+            // Closing the panel should never fail because JS cleanup failed.
+        }
+
+        await OnClose.InvokeAsync();
+    }
+}

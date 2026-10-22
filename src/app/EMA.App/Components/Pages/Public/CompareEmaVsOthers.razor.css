@@ -1,0 +1,69 @@
+.ema-comparison-page {
+    width: min(100%, 76rem);
+    margin: 0 auto;
+    padding: 0 0 2rem;
+    font-family: var(--ema-ui-font);
+}
+
+.ema-comparison-intro {
+    max-width: 60rem;
+    margin: 0 auto 1.25rem;
+    text-align: center;
+    font-size: 1.15rem;
+    line-height: 1.5;
+}
+
+.ema-comparison-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #8d8d8d;
+    background: #fff;
+}
+
+.ema-comparison-table {
+    width: 100%;
+    min-width: 52rem;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.ema-comparison-table th,
+.ema-comparison-table td {
+    border: 1px solid #c7c7c7;
+    padding: 0.85rem 0.75rem;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.35;
+}
+
+.ema-comparison-table thead th {
+    background: #d9d9d9;
+    font-size: 1.05rem;
+}
+
+.ema-comparison-table tbody th {
+    width: 24%;
+    background: #f1f1f1;
+    font-weight: 700;
+}
+
+.ema-comparison-table tbody td:nth-child(2) {
+    background: #f9fcf9;
+    font-weight: 600;
+}
+
+@media (max-width: 48rem) {
+    .ema-comparison-page {
+        padding-bottom: 1rem;
+    }
+
+    .ema-comparison-intro {
+        font-size: 1rem;
+    }
+
+    .ema-comparison-table th,
+    .ema-comparison-table td {
+        padding: 0.65rem 0.55rem;
+        font-size: 0.9rem;
+    }
+}

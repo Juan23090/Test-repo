@@ -1,0 +1,403 @@
+@page "/ww-faqs"
+
+@inject IScreenFeedbackService ScreenFeedbackService
+@inject IOrganizationStateService OrganizationStateService
+
+<PageTitle>Work With FAQs - EMA</PageTitle>
+
+<section class="task39-admin-page">
+    <div class="task41-faq-heading-row">
+        <h1>Work with Frequently Asked Questions</h1>
+        <div class="task41-faq-toolbar">
+            <button type="button"
+                    disabled="@(_saving || _publishing)"
+                    @onclick="BeginGlobalFaq">
+                New Global FAQ
+            </button>
+            <button type="button"
+                    disabled="@(_saving || _publishing)"
+                    @onclick="PublishAsync">
+                @(_publishing ? "Publishing..." : "Publish Public FAQ Page")
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_publishMessage))
+    {
+        <div class="task39-message" role="status">@_publishMessage</div>
+    }
+
+    @if (_creatingGlobalFaq)
+    {
+        <div class="task39-admin-detail task41-global-faq-create">
+            <h2>New Global FAQ</h2>
+            <p class="task39-note">
+                This FAQ is not tied to an existing screen. It starts as unreviewed, inactive,
+                and not copied to the public website until you review and update it.
+            </p>
+            <label>Question
+                <input maxlength="256" @bind="_newQuestion" />
+            </label>
+            <label>Answer
+                <textarea rows="8" @bind="_newAnswer"></textarea>
+            </label>
+            <div class="task39-admin-actions">
+                <button type="button" disabled="@_saving" @onclick="CreateGlobalFaqAsync">
+                    @(_saving ? "Creating..." : "Create FAQ")
+                </button>
+                <button type="button" disabled="@_saving" @onclick="CancelGlobalFaq">Cancel</button>
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <span role="status">@_message</span>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="task39-admin-filters">
+        <label>Reviewed
+            <select @bind="_reviewedFilter">
+                <option value="">All</option>
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select>
+        </label>
+        <label>Active
+            <select @bind="_activeFilter">
+                <option value="">All</option>
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select>
+        </label>
+        <label>Copy to Public
+            <select @bind="_copyToPublicFilter">
+                <option value="">All</option>
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select>
+        </label>
+        <label>Start Date
+            <input type="date" @bind="_startDate" />
+        </label>
+        <label>End Date
+            <input type="date" @bind="_endDate" />
+        </label>
+        <label class="task39-admin-search">Find Question
+            <input type="search"
+                   placeholder="Start typing to find the question"
+                   @bind="_search"
+                   @bind:event="oninput" />
+        </label>
+    </div>
+
+    @if (_loading)
+    {
+        <p>Loading...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="task39-message task39-error" role="alert">@_error</div>
+    }
+    else
+    {
+        <div class="task39-admin-browser">
+            <div class="task39-admin-list">
+                @foreach (var item in FilteredItems)
+                {
+                    <button type="button"
+                            class="@(item.FAQID == _selected?.FAQID ? "is-selected" : string.Empty)"
+                            @onclick="@(() => Select(item))">
+                        <span>@item.Question</span>
+                        <small>@item.ScreenTitle</small>
+                    </button>
+                }
+            </div>
+
+            <div class="task39-admin-detail">
+                @if (_selected is null)
+                {
+                    <p>Select an FAQ to review it.</p>
+                }
+                else
+                {
+                    <div class="task39-meta-grid">
+                        <strong>Organization</strong><span>@DisplayOrganization(_selected.OrganizationName, _selected.OrganizationID)</span>
+                        <strong>User</strong><span>@DisplayUser(_selected.AskedByUserName, _selected.AskedByUserID)</span>
+                        <strong>Screen</strong><span>@DisplayScreen(_selected)</span>
+                        <strong>Entered</strong><span>@FormatDateTime(_selected.DateTimeEntered)</span>
+                    </div>
+
+                    <label>Question
+                        <input maxlength="256" @bind="_selected.Question" />
+                    </label>
+                    <label>Answer
+                        <textarea rows="8" @bind="_selected.Answer"></textarea>
+                    </label>
+                    <label>Internal Comments
+                        <input maxlength="256" @bind="_selected.Comments" />
+                    </label>
+
+                    <div class="task39-inline-fields">
+                        <label>Reviewed
+                            <select @bind="SelectedReviewedValue">
+                                <option value="Y">Yes</option>
+                                <option value="N">No</option>
+                            </select>
+                        </label>
+                        <label>Active
+                            <select @bind="SelectedActiveValue">
+                                <option value="Y">Yes</option>
+                                <option value="N">No</option>
+                            </select>
+                        </label>
+                        <label>Copy to Public
+                            <select @bind="SelectedCopyToPublicValue">
+                                <option value="Y">Yes</option>
+                                <option value="N">No</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="task39-admin-actions">
+                        <button type="button" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Saving..." : "Save FAQ")</button>
+                        @if (!string.IsNullOrWhiteSpace(_message))
+                        {
+                            <span role="status">@_message</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private List<FaqAdminItem> _items = new();
+    private FaqAdminItem? _selected;
+    private string _reviewedFilter = string.Empty;
+    private string _activeFilter = string.Empty;
+    private string _copyToPublicFilter = string.Empty;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _publishing;
+    private bool _creatingGlobalFaq;
+    private string _newQuestion = string.Empty;
+    private string _newAnswer = string.Empty;
+    private string? _error;
+    private string? _message;
+    private string? _publishMessage;
+
+    private string SelectedReviewedValue
+    {
+        get => _selected?.IsReviewed == true ? "Y" : "N";
+        set
+        {
+            if (_selected is not null)
+            {
+                _selected.IsReviewed = string.Equals(value, "Y", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    private string SelectedActiveValue
+    {
+        get => _selected?.IsActive == true ? "Y" : "N";
+        set
+        {
+            if (_selected is not null)
+            {
+                _selected.IsActive = string.Equals(value, "Y", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    private string SelectedCopyToPublicValue
+    {
+        get => _selected?.CopyToPublic == true ? "Y" : "N";
+        set
+        {
+            if (_selected is not null)
+            {
+                _selected.CopyToPublic = string.Equals(value, "Y", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
+    private IEnumerable<FaqAdminItem> FilteredItems =>
+        _items.Where(item =>
+            MatchesYesNo(_reviewedFilter, item.IsReviewed) &&
+            MatchesYesNo(_activeFilter, item.IsActive) &&
+            MatchesYesNo(_copyToPublicFilter, item.CopyToPublic) &&
+            IsInDateRange(item.DateTimeEntered) &&
+            MatchesSearch(item.Question, item.Answer, item.ScreenTitle));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _items = await ScreenFeedbackService.GetFaqAdminAsync();
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Select(FaqAdminItem item)
+    {
+        _creatingGlobalFaq = false;
+        _selected = item;
+        _message = null;
+    }
+
+    private void BeginGlobalFaq()
+    {
+        _selected = null;
+        _creatingGlobalFaq = true;
+        _newQuestion = string.Empty;
+        _newAnswer = string.Empty;
+        _message = null;
+    }
+
+    private void CancelGlobalFaq()
+    {
+        _creatingGlobalFaq = false;
+        _newQuestion = string.Empty;
+        _newAnswer = string.Empty;
+        _message = null;
+    }
+
+    private async Task CreateGlobalFaqAsync()
+    {
+        _saving = true;
+        _message = null;
+        try
+        {
+            var faqID = await ScreenFeedbackService.CreateGlobalFaqAsync(
+                new CreateFaqRequest
+                {
+                    Question = _newQuestion,
+                    Answer = _newAnswer
+                });
+
+            _creatingGlobalFaq = false;
+            await LoadAsync();
+            _selected = _items.FirstOrDefault(item => item.FAQID == faqID);
+            _message = "Global FAQ created. Review it before making it active or public.";
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selected is null) return;
+        var selectedFaqID = _selected.FAQID;
+        _saving = true;
+        _message = null;
+        try
+        {
+            await ScreenFeedbackService.UpdateFaqAsync(
+                selectedFaqID,
+                new UpdateFaqAdminRequest
+                {
+                    Question = _selected.Question,
+                    Answer = _selected.Answer,
+                    Comments = _selected.Comments,
+                    IsReviewed = _selected.IsReviewed,
+                    IsActive = _selected.IsActive,
+                    CopyToPublic = _selected.CopyToPublic
+                });
+            _message = "Saved.";
+            await LoadAsync();
+            _selected = _items.FirstOrDefault(item => item.FAQID == selectedFaqID);
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task PublishAsync()
+    {
+        _publishing = true;
+        _publishMessage = null;
+        try
+        {
+            var result = await ScreenFeedbackService.PublishPublicFaqPageAsync();
+            _publishMessage = $"Published {result.PublishedFaqCount} FAQ(s) to the public FAQ page.";
+        }
+        catch (Exception exception)
+        {
+            _publishMessage = exception.Message;
+        }
+        finally
+        {
+            _publishing = false;
+        }
+    }
+
+    private bool IsInDateRange(DateTime value)
+    {
+        var localDate = AsLocal(value).Date;
+        if (_startDate.HasValue && localDate < _startDate.Value.Date) return false;
+        if (_endDate.HasValue && localDate > _endDate.Value.Date) return false;
+        return true;
+    }
+
+    private bool MatchesSearch(params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return values.Any(value => value?.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static bool MatchesYesNo(string filter, bool value) =>
+        string.IsNullOrWhiteSpace(filter) || (filter == "Y") == value;
+
+    private static string DisplayOrganization(string name, int? id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id?.ToString() ?? "Unknown";
+
+    private static string DisplayUser(string name, int id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id.ToString();
+
+    private static string DisplayScreen(FaqAdminItem item) =>
+        item.MenuItemID.HasValue
+            ? $"{item.ScreenTitle} ({item.MenuItemID.Value})"
+            : "General (not tied to a screen)";
+
+    private string FormatDateTime(DateTime value)
+    {
+        var localValue = AsLocal(value);
+        var date = EMA.App.Utilities.OrgDateFormat.Format(
+            localValue,
+            OrganizationStateService.CurrentOrganization?.DateFormatID);
+        return $"{date} {localValue:HH:mm}";
+    }
+
+    private static DateTime AsLocal(DateTime value) =>
+        (value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        .ToLocalTime();
+}

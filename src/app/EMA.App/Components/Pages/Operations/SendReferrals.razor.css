@@ -1,0 +1,452 @@
+.send-referrals-page {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 0 1rem 2.5rem;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.referrals-shell {
+    width: min(100%, 1020px);
+    border: 1px solid #a6a6a6;
+    background: #f2f2f2;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+/* Shell Header */
+.shell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
+    background: #d9d9d9;
+    border-bottom: 1px solid #a6a6a6;
+}
+
+.shell-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.shell-org-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #444444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.shell-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.header-link-btn {
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #8d8d8d;
+    color: #222222;
+    font-size: 0.85rem;
+}
+
+.header-link-btn:hover {
+    background: #e6e6e6;
+    color: #000000;
+}
+
+/* Shell Body */
+.shell-body {
+    padding: 1.25rem 1.5rem 1.75rem;
+}
+
+.shell-intro {
+    font-size: 0.95rem;
+    color: #333333;
+    line-height: 1.45;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #d0d0d0;
+    padding-bottom: 0.85rem;
+}
+
+/* Loading */
+.loading-state {
+    text-align: center;
+    padding: 3rem 1rem;
+}
+
+/* Eligibility Notice Box */
+.eligibility-notice-box {
+    border: 2px solid #b45309;
+    background: #fffbeb;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.notice-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.notice-icon {
+    font-size: 1.4rem;
+}
+
+.notice-title {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #92400e;
+    margin: 0;
+}
+
+.metrics-pill-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 0.85rem 0;
+}
+
+.metric-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #ffffff;
+    border: 1px solid #a6a6a6;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.9rem;
+    color: #333333;
+}
+
+.metric-chip.is-complete {
+    border-color: #15803d;
+    background: #dcfce7;
+    color: #166534;
+    font-weight: 600;
+}
+
+.chip-status {
+    font-weight: 800;
+}
+
+.notice-footer-text {
+    font-size: 0.88rem;
+    color: #78350f;
+    margin: 0;
+    font-style: italic;
+}
+
+/* Composer Section */
+.composer-section {
+    margin-bottom: 1.5rem;
+}
+
+.composer-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.composer-label {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #111111;
+    margin: 0;
+}
+
+/* 1. Preface Box */
+.preface-container-box {
+    border: 1px solid #737373;
+    background: #ffffff;
+}
+
+.preface-greeting-header {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.92rem;
+    color: #111111;
+    border-bottom: 1px solid #737373;
+    background: #ffffff;
+}
+
+.preface-textarea-seamless {
+    width: 100%;
+    border: 0;
+    outline: none;
+    background: #ffffff;
+    color: #111111;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.92rem;
+    font-family: inherit;
+    line-height: 1.45;
+    box-sizing: border-box;
+    display: block;
+    resize: vertical;
+}
+
+.preface-textarea-seamless:focus {
+    outline: none;
+}
+
+/* 2. Email Message Container Box */
+.email-message-container-box {
+    border: 1px solid #737373;
+    background: #ffffff;
+    padding: 0.75rem 0.85rem;
+}
+
+.email-lead-line {
+    margin: 0 0 0.55rem 0;
+    font-size: 0.92rem;
+    color: #111111;
+}
+
+.email-bullet-list {
+    margin: 0.55rem 0;
+    padding-left: 1.75rem;
+    list-style-type: disc;
+}
+
+.email-bullet-list li {
+    font-size: 0.92rem;
+    color: #111111;
+    line-height: 1.45;
+    margin-bottom: 0.35rem;
+}
+
+.email-bullet-list li:last-child {
+    margin-bottom: 0;
+}
+
+.email-message-p {
+    margin: 0.65rem 0 0;
+    font-size: 0.92rem;
+    color: #111111;
+    line-height: 1.45;
+}
+
+.email-link-p {
+    margin-top: 0.75rem;
+}
+
+.email-buzz-link {
+    color: #111111;
+    text-decoration: underline;
+    font-weight: 700;
+}
+
+.email-buzz-link:hover {
+    color: #000000;
+}
+
+.section-heading {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+}
+
+.step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    background: #2748d8;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.9rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+.section-title {
+    display: block;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.section-subtitle {
+    display: block;
+    font-size: 0.85rem;
+    color: #555555;
+    margin-top: 0.1rem;
+}
+
+/* Tables */
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #a6a6a6;
+    background: #ffffff;
+}
+
+.ema-data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ema-data-table th,
+.ema-data-table td {
+    padding: 0.5rem 0.65rem;
+    border-right: 1px solid #d0d0d0;
+    border-bottom: 1px solid #d0d0d0;
+    vertical-align: middle;
+}
+
+.ema-data-table th:last-child,
+.ema-data-table td:last-child {
+    border-right: 0;
+}
+
+.ema-data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.ema-input {
+    border: 1px solid #8d8d8d;
+    border-radius: 0;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.88rem;
+}
+
+.ema-input:focus {
+    border-color: #2748d8;
+    box-shadow: 0 0 0 2px rgba(39, 72, 216, 0.2);
+}
+
+.btn-delete-row {
+    border: 0;
+    background: transparent;
+    color: #dc2626;
+    font-weight: 800;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+}
+
+.btn-delete-row:hover {
+    color: #991b1b;
+}
+
+.table-actions-row {
+    margin-top: 0.5rem;
+}
+
+.btn-add-recipient {
+    font-weight: 700;
+    font-size: 0.82rem;
+    border-radius: 0;
+    background: #ffffff;
+    border: 1px solid #8d8d8d;
+    color: #222222;
+}
+
+.btn-add-recipient:hover {
+    background: #e2e2e2;
+    color: #000000;
+}
+
+/* Submit Actions */
+.submit-bar {
+    margin-top: 1.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #d0d0d0;
+    text-align: right;
+}
+
+.btn-submit-referrals {
+    background: #2748d8;
+    border: 1px solid #1a38b8;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.98rem;
+    padding: 0.6rem 1.75rem;
+    border-radius: 0;
+}
+
+.btn-submit-referrals:hover:not(:disabled) {
+    background: #1e3bb5;
+}
+
+/* History Panel */
+.history-panel {
+    border: 1px solid #a6a6a6;
+    background: #ffffff;
+}
+
+.history-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    background: #d9d9d9;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #a6a6a6;
+}
+
+.history-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.history-metrics-group {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.metric-tag {
+    font-size: 0.8rem;
+    background: #ffffff;
+    border: 1px solid #8d8d8d;
+    padding: 0.2rem 0.55rem;
+    color: #222222;
+}
+
+.metric-tag.highlight {
+    background: #dcfce7;
+    border-color: #16a34a;
+    color: #166534;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-accepted {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-credited {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-expired {
+    background: #f3f4f6;
+    color: #6b7280;
+}

@@ -1,0 +1,240 @@
+@page "/crdb"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationOnboardingService OnboardingService
+@inject ICustomizationService CustomizationService
+
+<PageTitle>Set Up Credit &amp; Debit Cards - EMA</PageTitle>
+
+<section class="task22-page">
+    <header class="task22-header">
+        <h1>Set Up Credit &amp; Debit Cards</h1>
+    </header>
+
+    @if (IsLoading)
+    {
+        <p class="task22-status">Loading...</p>
+    }
+    else
+    {
+        @if (!Settings.CreditDebitSchemaAvailable)
+        {
+            <div class="task22-schema-notice" role="alert">
+                Credit and Debit Card defaults are not available in this environment yet.
+            </div>
+        }
+
+        @if (HasVisibleAttributeRows)
+        {
+        <div class="task22-card">
+            @if (Settings.UseEvents)
+            {
+            <div class="task22-row">
+                <label for="crdb-event">Default Event for Credit &amp; Debit Cards:</label>
+                <div class="task22-control">
+                    <select id="crdb-event"
+                            class="task22-select"
+                            disabled="@(!Settings.CreditDebitSchemaAvailable)"
+                            @bind="Settings.EMAEventIDForCreditDebitCards">
+                        <option value="">Select an Event</option>
+                        @foreach (var item in Events)
+                        {
+                            <option value="@item.EMAEventID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseSources)
+            {
+            <div class="task22-row">
+                <label for="crdb-source">Default Source for Credit &amp; Debit Cards:</label>
+                <div class="task22-control">
+                    <select id="crdb-source"
+                            class="task22-select"
+                            disabled="@(!Settings.CreditDebitSchemaAvailable)"
+                            @bind="Settings.EMASourceIDForCreditDebitCards">
+                        <option value="">Select a Source</option>
+                        @foreach (var item in Sources)
+                        {
+                            <option value="@item.EMADonationSourceID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseMethodsOfGiving)
+            {
+            <div class="task22-row">
+                <label for="crdb-method">Default Method of Giving Credit &amp; Debit Cards:</label>
+                <div class="task22-control">
+                    <select id="crdb-method"
+                            class="task22-select"
+                            disabled="@(!Settings.CreditDebitSchemaAvailable)"
+                            @bind="Settings.EMAMethodOfGivingIDForCreditDebitCards">
+                        <option value="">Select a Method</option>
+                        @foreach (var item in Methods)
+                        {
+                            <option value="@item.EMAMethodOfGivingID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseFunds)
+            {
+            <div class="task22-row">
+                <label for="crdb-fund">Default Fund for Credit &amp; Debit Cards:</label>
+                <div class="task22-control">
+                    <select id="crdb-fund"
+                            class="task22-select"
+                            disabled="@(!Settings.CreditDebitSchemaAvailable)"
+                            @bind="Settings.EMAFundIDForCreditDebitCards">
+                        <option value="">Select a Fund</option>
+                        @foreach (var item in Funds)
+                        {
+                            <option value="@item.EMAFundID">@item.FundName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseCampuses)
+            {
+            <div class="task22-row">
+                <label for="crdb-campus">Default Campus for Credit &amp; Debit Cards:</label>
+                <div class="task22-control">
+                    <select id="crdb-campus"
+                            class="task22-select"
+                            disabled="@(!Settings.CreditDebitSchemaAvailable)"
+                            @bind="Settings.EMACampusIDForCreditDebitCards">
+                        <option value="">Select a Campus</option>
+                        @foreach (var item in Campuses)
+                        {
+                            <option value="@item.EMACampusID">@item.CampusName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+        </div>
+        }
+
+        <p class="task22-stripe-note">
+            This form will be fleshed out when Stripe is implemented. In addition to the defaults above, Stripe credentials will be required.
+        </p>
+
+        <div class="task22-actions">
+            <button type="button"
+                    class="task22-save-button"
+                    disabled="@(IsSaving || !Settings.CreditDebitSchemaAvailable)"
+                    @onclick="SaveAsync">
+                @(IsSaving ? "Saving..." : "Save")
+            </button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <p class="task22-status @(IsError ? "task22-status-error" : "task22-status-success")" role="status">
+            @StatusMessage
+        </p>
+    }
+</section>
+
+@code {
+    private int OrganizationID => SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private bool HasVisibleAttributeRows =>
+        Settings.UseEvents ||
+        Settings.UseSources ||
+        Settings.UseMethodsOfGiving ||
+        Settings.UseFunds ||
+        Settings.UseCampuses;
+
+    private OrganizationOnboardingSettings Settings = new();
+    private List<EventItem> Events = new();
+    private List<DonationSourceItem> Sources = new();
+    private List<MethodOfGivingItem> Methods = new();
+    private List<FundItem> Funds = new();
+    private List<CampusItem> Campuses = new();
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsError;
+    private string StatusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage = "An organization session is required.";
+            IsLoading = false;
+            return;
+        }
+
+        var settingsTask = OnboardingService.GetAsync(OrganizationID);
+        var eventsTask = CustomizationService.GetEventsAsync(OrganizationID, true);
+        var sourcesTask = CustomizationService.GetDonationSourcesAsync(OrganizationID, true);
+        var methodsTask = CustomizationService.GetMethodsOfGivingAsync(OrganizationID, true);
+        var fundsTask = CustomizationService.GetFundsAsync(OrganizationID, true);
+        var campusesTask = CustomizationService.GetCampusesAsync(OrganizationID, true);
+
+        await Task.WhenAll(settingsTask, eventsTask, sourcesTask, methodsTask, fundsTask, campusesTask);
+
+        var settings = await settingsTask;
+        if (settings is null)
+        {
+            IsError = true;
+            StatusMessage = "The Credit and Debit Card setup could not be loaded.";
+            IsLoading = false;
+            return;
+        }
+
+        Settings = settings;
+        Events = await eventsTask;
+        Sources = await sourcesTask;
+        Methods = await methodsTask;
+        Funds = await fundsTask;
+        Campuses = await campusesTask;
+        IsLoading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (IsSaving ||
+            !Settings.CreditDebitSchemaAvailable)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var result = await OnboardingService.SaveAsync(
+            OrganizationID,
+            "crdb",
+            new SaveOrganizationOnboardingSettingsRequest
+            {
+                EMAEventIDForCreditDebitCards = Settings.EMAEventIDForCreditDebitCards,
+                EMASourceIDForCreditDebitCards = Settings.EMASourceIDForCreditDebitCards,
+                EMAMethodOfGivingIDForCreditDebitCards = Settings.EMAMethodOfGivingIDForCreditDebitCards,
+                EMAFundIDForCreditDebitCards = Settings.EMAFundIDForCreditDebitCards,
+                EMACampusIDForCreditDebitCards = Settings.EMACampusIDForCreditDebitCards
+            });
+
+        IsSaving = false;
+        IsError = !result.Succeeded;
+        StatusMessage = result.Message;
+    }
+}

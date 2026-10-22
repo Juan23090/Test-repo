@@ -1,0 +1,2797 @@
+@page "/enter-donations"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@using EMA.App.Utilities
+
+@inject IDonationService DonationService
+@inject IDonorService DonorService
+@inject IUserSessionStateService SessionState
+@inject ICustomizationService CustomizationService
+@inject NavigationManager Navigation
+
+<PageTitle>Donations - EMA</PageTitle>
+
+<div class="donors-container donations-container">
+    <div class="donors-form donations-form">
+        <button class="btn-create additional-fields-toggle"
+                type="button"
+                aria-expanded="@ShowAdditionalFields"
+                @onclick="ToggleAdditionalFields">
+            @(ShowAdditionalFields ? "Hide Additional Fields" : "Show Additional Fields")
+        </button>
+
+        @if (ShowAdditionalFields)
+        {
+            <section class="donation-additional-fields" aria-label="Additional donation fields">
+                <div class="form-row compact-field-row">
+                    <label class="form-label"><strong>Date:</strong></label>
+                    <input class="form-input compact-date-input"
+                           type="date"
+                           value="@(CurrentDonation.DateTimeReceived?.ToString("yyyy-MM-dd"))"
+                           @onchange="OnDateChanged"
+                           disabled="@IsAuditView"
+                           @ref="DateInput" />
+                    <button class="icon-action @(SearchMode == "Date" ? "btn-search-active" : "")"
+                            type="button"
+                            title="Search by date"
+                            aria-label="Search by date"
+                            @onclick='() => SetSearchMode("Date")'>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 2v3M17 2v3M3.5 8.5h17M5 4h14a2 2 0 0 1 2 2v6.5M10.5 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M16 16l5 5M18 13a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z" />
+                        </svg>
+                    </button>
+                </div>
+
+                @if (ShowMethodsOfGiving)
+                {
+                    <div class="form-row compact-field-row">
+                        <label class="form-label"><strong>Method:</strong></label>
+                        <select class="form-input compact-select"
+                                value="@CurrentDonation.EMAMethodOfGivingID"
+                                @onchange="OnMethodChanged"
+                                disabled="@IsAuditView">
+                            <option value="0">-- Select --</option>
+                            @foreach (var method in Methods)
+                            {
+                                <option value="@method.EMAMethodOfGivingID">@method.Description</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                @if (ShowEvents)
+                {
+                    <div class="form-row compact-field-row">
+                        <label class="form-label"><strong>Event:</strong></label>
+                        <select class="form-input compact-select"
+                                @bind="CurrentDonation.EMAEventID"
+                                disabled="@IsAuditView">
+                            <option value="0">-- Select --</option>
+                            @foreach (var eventItem in Events)
+                            {
+                                <option value="@eventItem.EMAEventID">@eventItem.Description</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                @if (ShowCurrencyTypes)
+                {
+                    <div class="form-row compact-field-row">
+                        <label class="form-label"><strong>Source:</strong></label>
+                        <select class="form-input compact-select"
+                                @bind="CurrentDonation.EMADonationSourceID"
+                                disabled="@IsAuditView">
+                            <option value="0">-- Select --</option>
+                            @foreach (var source in CurrencyTypes)
+                            {
+                                <option value="@source.EMADonationSourceID">@source.Description</option>
+                            }
+                        </select>
+                    </div>
+                }
+
+                @if (ShowTributes)
+                {
+                    <div class="form-row compact-field-row">
+                        <label class="form-label"><strong>Tribute:</strong></label>
+                        <select class="form-input tribute-type-select compact-select"
+                                @bind="CurrentDonation.EMATributeTypeID"
+                                disabled="@IsAuditView">
+                            <option value="">-- Select --</option>
+                            @foreach (var tributeType in TributeTypes)
+                            {
+                                <option value="@tributeType.EMATributeTypeID">@tributeType.Description</option>
+                            }
+                        </select>
+                        <textarea class="form-input compact-textarea"
+                                  @bind="CurrentDonation.TributeText"
+                                  @bind:event="oninput"
+                                  placeholder="@((CurrentDonation.EMATributeTypeID ?? 0) > 0 ? "" : "Please pick your tribute type first")"
+                                  disabled="@(IsAuditView || !CurrentDonation.EMATributeTypeID.HasValue || CurrentDonation.EMATributeTypeID <= 0)">
+                        </textarea>
+                    </div>
+                }
+
+                <div class="form-row compact-field-row label-top">
+                    <label class="form-label"><strong>Comments:</strong></label>
+                    <textarea class="form-input form-textarea comments-one-line"
+                              rows="1"
+                              @bind="CurrentDonation.Comments"
+                              @bind:event="oninput"
+                              disabled="@IsAuditView"></textarea>
+                </div>
+
+                @if (ShowAnonymous)
+                {
+                    @if (!EMADonorIDForAnonymous.HasValue || EMADonorIDForAnonymous.Value <= 0)
+                    {
+                        <div class="form-row compact-field-row">
+                            <label class="form-label"><strong>Anonymous:</strong></label>
+                            <span class="anon-not-setup">Organization Anonymous Donor needs to be set up</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-row compact-field-row anonymous-field-row">
+                            <label class="form-label"><strong>Anonymous:</strong></label>
+                            <input type="checkbox"
+                                   class="anon-checkbox"
+                                   @key="AnonCheckboxKey"
+                                   checked="@IsAnonymous"
+                                   @onchange="OnAnonCheckboxChanged"
+                                   disabled="@(IsAuditView || IsAnonymous)" />
+                            <input class="form-input anon-message-box"
+                                   value="@AnonymousDisplayText"
+                                   readonly
+                                   aria-live="polite" />
+                        </div>
+                    }
+                }
+            </section>
+        }
+
+        <div class="donations-primary-fields">
+            <div class="form-row donation-main-row label-top">
+                <label class="form-label"><strong>Donor:</strong></label>
+                <div class="donor-input-wrap">
+                    <input class="form-input typeahead donor-search-input @(IsAnonymous ? "anon-donor-field" : "")"
+                           @ref="DonorSearchInput"
+                           placeholder="Start typing a donor or city"
+                           value="@DonorSearchText"
+                           @oninput="OnDonorSearchInput"
+                           @onfocus="ShowDonorSearch"
+                           @onblur="HideDonorSearchResults"
+                           disabled="@(IsAuditView || IsAnonymous)" />
+                    @if (DonorSearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown">
+                            @foreach (var donor in DonorSearchResults)
+                            {
+                                <button class="typeahead-item donor-result"
+                                        type="button"
+                                        @onmousedown:preventDefault="true"
+                                        @onclick="() => SelectDonor(donor)">
+                                    <span>@FormatDonorDisplay(donor)</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else if (ShowDonorNotFoundHint)
+                    {
+                        <div class="donor-not-found-hint">
+                            Donor does not exist &mdash; click Create New Donor.
+                        </div>
+                    }
+                </div>
+                <button class="icon-action @(SearchMode == "Donor" ? "btn-search-active" : "")"
+                        type="button"
+                        title="Search by donor"
+                        aria-label="Search by donor"
+                        @onclick='() => SetSearchMode("Donor")'>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="10.5" cy="10.5" r="6.5" />
+                        <path d="m15.5 15.5 5 5" />
+                    </svg>
+                </button>
+                <button class="icon-action"
+                        type="button"
+                        title="Create new donor"
+                        aria-label="Create new donor"
+                        @onclick="CreateNewDonor">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M2.5 21c.5-5 3-7.5 6.5-7.5s6 2.5 6.5 7.5M18.5 10v7M15 13.5h7" />
+                    </svg>
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(RepeatDonationMessage))
+            {
+                <div class="repeat-donation-message" role="status">@RepeatDonationMessage</div>
+            }
+
+            <div class="form-row reference-total-row">
+                <label class="form-label"><strong>Reference (optional):</strong></label>
+                <input class="form-input reference-input"
+                       size="15"
+                       maxlength="15"
+                       @bind="CurrentDonation.ReferenceNumber"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+                <label class="inline-total-label"><strong>Total:</strong></label>
+                <input class="form-input donation-total-input"
+                       type="text"
+                       inputmode="decimal"
+                       value="@(CurrentDonation.DonationAmount == 0 ? string.Empty : CurrentDonation.DonationAmount.ToString("C"))"
+                       @onchange="OnDonationTotalChanged"
+                       disabled="@IsAuditView" />
+            </div>
+        </div>
+
+        <div class="distribution-grid @(ShowCampuses ? "with-campuses" : "without-campuses")">
+            <div class="dist-header">
+                @if (ShowFunds)
+                {
+                    <span class="dist-col-fund fund-header-link"
+                          role="button"
+                          title="Choose which funds appear in this list"
+                          @onclick="OpenFundShortlistAsync">
+                        <strong><u>Fund</u></strong><span class="fund-header-caret">&#9881;</span>
+                    </span>
+                }
+                @if (ShowCampuses)
+                {
+                    <span class="dist-col-campus"><strong><u>Campus</u></strong></span>
+                }
+                <span class="dist-col-amount"><strong><u>Amount</u></strong></span>
+            </div>
+
+            @foreach (var row in DistributionRows)
+            {
+                <div class="dist-row" @key="row">
+                    @if (ShowFunds)
+                    {
+                        <div class="dist-col-fund">
+                            <select class="form-input"
+                                    value="@row.EMAFundID"
+                                    @onchange="eventArgs => OnFundChanged(row, eventArgs)"
+                                    disabled="@IsAuditView">
+                                <option value="0">-- Select --</option>
+                                @foreach (var fund in AvailableFunds())
+                                {
+                                    <option value="@fund.EMAFundID">@fund.FundName</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    @if (ShowCampuses)
+                    {
+                        <div class="dist-col-campus">
+                            <select class="form-input"
+                                    @bind="row.EMACampusID"
+                                    disabled="@IsAuditView">
+                                <option value="0">-- None --</option>
+                                @foreach (var campus in Campuses)
+                                {
+                                    <option value="@campus.EMACampusID">@campus.CampusName</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div class="dist-col-amount">
+                        <input class="form-input"
+                               type="text"
+                               inputmode="decimal"
+                               value="@(row.DistributionAmount == 0 ? string.Empty : row.DistributionAmount.ToString("C"))"
+                               @onchange="eventArgs => OnDistributionAmountChanged(row, eventArgs)"
+                               disabled="@IsAuditView" />
+                    </div>
+                </div>
+            }
+
+            <div class="dist-add-row">
+                <button class="btn-create btn-add-distribution"
+                        type="button"
+                        @onclick="AddDistributionRow"
+                        disabled="@IsAuditView">
+                    + Add Distribution
+                </button>
+            </div>
+
+            <div class="dist-total-row">
+                <span class="dist-total-label"><strong><u>Unallocated:</u></strong></span>
+                <span class="dist-total-value @(UnallocatedAmount != 0 ? "dist-unallocated-nonzero" : "")">
+                    @UnallocatedAmount.ToString("C")
+                </span>
+            </div>
+            <div class="dist-default-row">
+                <span class="dist-default-label"><strong><u>Default:</u></strong></span>
+                <span class="dist-default-box">
+                    <input type="checkbox"
+                           @bind="CurrentDonation.IsTemplateBool"
+                           disabled="@IsAuditView" />
+                </span>
+            </div>
+        </div>
+
+        <div class="donation-save-row">
+            <button class="btn-create btn-clear-donation"
+                    type="button"
+                    @onclick="RequestClearDonation"
+                    disabled="@IsSaving">
+                Clear
+            </button>
+            <span class="save-btn-wrap" title="@SaveBlockReason">
+                <button class="btn-save btn-save-donations"
+                        @onclick="SaveDonation"
+                        disabled="@(IsAuditView || IsSaving || SaveBlockReason != null)">
+                    <strong>@(IsSaving ? "Saving..." : "Click Here to Save")</strong>
+                </button>
+            </span>
+        </div>
+
+        <div class="donation-history-row">
+            <div class="nav-section">
+                <div class="arrow-buttons">
+                    <button class="btn-arrow" @onclick="GoOlder" disabled="@(!CanGoOlder)">&#9664; Older</button>
+                    <button class="btn-arrow" @onclick="GoNewer" disabled="@(!CanGoNewer)">Newer &#9654;</button>
+                </div>
+                <div class="audit-info">
+                    <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">
+                        @(IsAuditView ? AuditDateTime : "Date & Time")
+                    </div>
+                    <div class="@(IsAuditView ? "audit-row" : "audit-placeholder")">
+                        @(IsAuditView ? AuditUserName : "User Name")
+                    </div>
+                </div>
+            </div>
+            <button class="btn-steps"
+                    title="Steps taken with this donation"
+                    aria-label="Steps taken with this donation"
+                    @onclick="OpenStepsOverlay"
+                    disabled="@(CurrentDonation.EMADonationID == 0)">
+                <svg viewBox="0 0 40 40" aria-hidden="true">
+                    <polyline points="4,36 12,36 12,28 20,28 20,20 28,20 28,12 36,12"
+                              stroke="currentColor" stroke-width="2.5" fill="none" />
+                    <path d="M4 21 14 11M14 11H7M14 11v7"
+                          stroke="currentColor" stroke-width="2" fill="none" />
+                </svg>
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(ValidationMessage))
+        {
+            <div class="validation-message" role="alert">@ValidationMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="success-message" role="status">@SuccessMessage</div>
+        }
+    </div>
+
+@if (!string.IsNullOrEmpty(SearchMode))
+{
+    <div class="donations-detail">
+        <table class="detail-table">
+            <thead>
+                <tr>
+                    <th class="sortable"
+                        @onclick='() => SortBy("Date")'>
+                        Date
+                        @(SortColumn == "Date"
+                            ? SortAsc ? "▲" : "▼"
+                            : string.Empty)
+                    </th>
+
+                    <th class="sortable"
+                        @onclick='() => SortBy("Donor")'>
+                        Donor
+                        @(SortColumn == "Donor"
+                            ? SortAsc ? "▲" : "▼"
+                            : string.Empty)
+                    </th>
+
+                    <th class="sortable"
+                        @onclick='() => SortBy("Amount")'>
+                        Amount
+                        @(SortColumn == "Amount"
+                            ? SortAsc ? "▲" : "▼"
+                            : string.Empty)
+                    </th>
+                </tr>
+            </thead>
+
+            <tbody>
+                @foreach (var donation in SortedDonations)
+                {
+                    <tr class="@(SelectedDonationID == donation.EMADonationID ? "row-selected" : "")"
+                        @onclick="async () => await SelectDonation(donation)">
+                        <td>
+                            @FormatDateTime(donation.DateTimeReceived)
+                        </td>
+
+                        <td>
+                            @(EMADonorIDForAnonymous.HasValue &&
+                              donation.EMADonorID == EMADonorIDForAnonymous.Value
+                                ? "Hidden - Anonymous"
+                                : donation.InteracDonorName)
+                        </td>
+
+                        <td>
+                            @donation.DonationAmount.ToString("C")
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+</div>
+
+@if (ShowAnonConfirm)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CancelAnonymous">
+        <div class="steps-overlay-panel anon-confirm-panel"
+             @onclick:stopPropagation="true">
+            <p>
+                <strong>
+                    Are you sure you want to change this donation to Anonymous?
+                </strong>
+            </p>
+
+            <p class="anon-confirm-warning">
+                This can't be undone.
+            </p>
+
+            <div class="anon-confirm-buttons">
+                <button class="btn-create"
+                        @onclick="ConfirmAnonymous">
+                    Yes, make Anonymous
+                </button>
+
+                <button class="btn-create"
+                        @onclick="CancelAnonymous">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (ShowClearConfirm)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CancelClearDonation">
+        <div class="steps-overlay-panel clear-confirm-panel"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="clear-donation-title"
+             @onclick:stopPropagation="true">
+            <h3 id="clear-donation-title">Clear this donation?</h3>
+            <p>All entered donation data will be cleared.</p>
+
+            <div class="anon-confirm-buttons">
+                <button class="btn-create"
+                        type="button"
+                        @onclick="ConfirmClearDonation">
+                    Yes, clear it
+                </button>
+                <button class="btn-create"
+                        type="button"
+                        @onclick="CancelClearDonation">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (StepsOverlayVisible)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CloseStepsOverlay">
+        <div class="steps-overlay-panel"
+             @onclick:stopPropagation="true">
+            <div class="steps-overlay-header">
+                <span>
+                    Steps Taken With This Donation
+                </span>
+
+                <button class="steps-overlay-close"
+                        @onclick="CloseStepsOverlay">
+                    &times;
+                </button>
+            </div>
+
+            @if (StepsLoading)
+            {
+                <p class="steps-overlay-empty" role="status">
+                    Loading donation steps...
+                </p>
+            }
+            else if (DonationStepLogs.Count == 0)
+            {
+                <p class="steps-overlay-empty">
+                    No steps logged for this donation.
+                </p>
+            }
+            else
+            {
+                <table class="steps-table">
+                    <thead>
+                        <tr>
+                            <th>Date / Time</th>
+                            <th>Step ID</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var step in DonationStepLogs)
+                        {
+                            <tr>
+                                <td>
+                                    @FormatDateTimeString(
+                                        step.TryGetProperty(
+                                            "DateTimeLogged",
+                                            out var dateTimeLogged)
+                                            ? dateTimeLogged.GetString()
+                                            : string.Empty)
+                                </td>
+
+                                <td>
+                                    @(step.TryGetProperty(
+                                          "DonationStepID",
+                                          out var donationStepID) &&
+                                      donationStepID.ValueKind !=
+                                      System.Text.Json.JsonValueKind.Null
+                                        ? donationStepID.GetInt32()
+                                        : 0)
+                                </td>
+
+                                <td>
+                                    @(step.TryGetProperty(
+                                          "Description",
+                                          out var description)
+                                        ? description.GetString()
+                                        : string.Empty)
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@if (FundShortlistVisible)
+{
+    <div class="steps-overlay-backdrop"
+         @onclick="CancelFundShortlist">
+        <div class="steps-overlay-panel fund-shortlist-panel"
+             @onclick:stopPropagation="true">
+            <div class="steps-overlay-header">
+                <span>
+                    Funds Shown In This List
+                </span>
+
+                <button class="steps-overlay-close"
+                        @onclick="CancelFundShortlist">
+                    &times;
+                </button>
+            </div>
+
+            @if (FundShortlistError is not null)
+            {
+                <p class="fund-shortlist-error">@FundShortlistError</p>
+            }
+
+            @if (FundShortlistDraft.Count == 0)
+            {
+                <p class="steps-overlay-empty">
+                    This organization has no active funds.
+                </p>
+            }
+            else
+            {
+                <div class="fund-shortlist-scroll">
+                    <table class="lookup-grid">
+                        <tbody>
+                            @foreach (var item in FundShortlistDraft)
+                            {
+                                var index = FundShortlistDraft.IndexOf(item);
+
+                                <tr>
+                                    <td class="fund-shortlist-check">
+                                        <input type="checkbox"
+                                               @bind="item.Selected" />
+                                    </td>
+                                    <td>@item.FundName</td>
+                                    <td class="col-seq">
+                                        <button class="seq-btn"
+                                                title="Move up"
+                                                disabled="@(index == 0)"
+                                                @onclick="() => MoveShortlistFund(item, -1)">&#9650;</button>
+                                        <button class="seq-btn"
+                                                title="Move down"
+                                                disabled="@(index == FundShortlistDraft.Count - 1)"
+                                                @onclick="() => MoveShortlistFund(item, 1)">&#9660;</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="fund-shortlist-buttons">
+                <button class="btn-create"
+                        disabled="@FundShortlistSaving"
+                        @onclick="SaveFundShortlistAsync">
+                    @(FundShortlistSaving ? "Saving..." : "Save")
+                </button>
+
+                <button class="btn-create"
+                        disabled="@FundShortlistSaving"
+                        @onclick="CancelFundShortlist">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    private ElementReference DateInput;
+    private ElementReference DonorSearchInput;
+
+    private DonationItem CurrentDonation = new();
+
+    private List<DonationItem> AllDonations = [];
+    private List<DonorItem> DonorSearchResults = [];
+    private List<DonationSourceItem> CurrencyTypes = [];
+    private List<EventItem> Events = [];
+    private List<TributeTypeItem> TributeTypes = [];
+    private List<MethodOfGivingItem> Methods = [];
+    private List<CampusItem> Campuses = [];
+    private List<FundItem> Funds = [];
+
+    // Per-user fund shortlist. FundShortlist is what is saved; FundShortlistDraft holds the
+    // overlay's in-progress edits so Cancel can discard them.
+    private List<UserFundShortListItem> FundShortlist = [];
+    private List<UserFundShortListItem> FundShortlistDraft = [];
+    private bool FundShortlistVisible;
+    private bool FundShortlistSaving;
+    private string? FundShortlistError;
+    private List<UserItem> OrgUsers = [];
+    private List<DistributionRowItem> DistributionRows = [];
+
+    private string DonorSearchText = string.Empty;
+    private bool IsDonorSearchFocused;
+    private CancellationTokenSource? DonorSearchCancellation;
+    private string AnonymousDonorName = string.Empty;
+    private string ValidationMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+    private string RepeatDonationMessage = string.Empty;
+    private string SelectedDonorDisplayText = string.Empty;
+    private string SearchMode = string.Empty;
+    private string SortColumn = "Date";
+    private string AuditDateTime = string.Empty;
+    private string AuditUserName = string.Empty;
+    private string OrganizationDateFormat = "yyyy-MM-dd";
+
+    private bool IsAnonymous;
+    private bool ShowAnonConfirm;
+    private bool ShowClearConfirm;
+    private bool IsSaving;
+    private bool SortAsc;
+    private bool IsAuditView;
+    private bool ShowCampuses = true;
+    private bool ShowCurrencyTypes = true;
+    private bool ShowEvents = true;
+    private bool ShowFunds = true;
+    private bool ShowMethodsOfGiving = true;
+    private bool ShowTributes = true;
+    private bool ShowAnonymous;
+    private bool ShowAdditionalFields;
+    private bool StepsOverlayVisible;
+    private bool StepsLoading;
+
+    private int? EMADonorIDForAnonymous;
+    private int? EMAMethodOfGivingIDForCreditDebitCards;
+    private int? EMACampusIDForCreditDebitCards;
+    private int? EMAMethodOfGivingIDForETransfers;
+    private int? EMACampusIDForEtransfers;
+    private int? EMAMethodOfGivingIDForPADs;
+    private int? EMACampusIDForPADs;
+
+    private long SelectedDonationID;
+
+    private List<System.Text.Json.JsonElement> AuditRecords = [];
+    private List<System.Text.Json.JsonElement> DonationStepLogs = [];
+
+    private DonationItem LiveDonation = new();
+
+    private List<DistributionRowItem> LiveDistributions = [];
+
+    private int AuditIndex = -1;
+
+    private decimal TotalAmount;
+
+    // Single source of truth for whether the donation can be saved.
+    // Returns the first blocking reason (shown as the Save button tooltip),
+    // or null when everything required is satisfied.
+    private string? SaveBlockReason
+    {
+        get
+        {
+            if (IsAuditView)
+            {
+                return null;
+            }
+
+            if (CurrentDonation.EMADonorID <= 0)
+            {
+                return "Please Search/Create a Donation";
+            }
+
+            if (!CurrentDonation.DateTimeReceived.HasValue)
+            {
+                return "Please select a donation date.";
+            }
+
+            if (ShowCurrencyTypes &&
+                (CurrentDonation.EMADonationSourceID ?? 0) <= 0)
+            {
+                return "Please select a source.";
+            }
+
+            if (ShowMethodsOfGiving &&
+                (CurrentDonation.EMAMethodOfGivingID ?? 0) <= 0)
+            {
+                return "Please select a method.";
+            }
+
+            if (ShowEvents &&
+                (CurrentDonation.EMAEventID ?? 0) <= 0)
+            {
+                return "Please select an event.";
+            }
+
+            if (!DistributionRows.Any(row =>
+                    row.DistributionAmount != 0))
+            {
+                return "Please enter at least one amount.";
+            }
+
+            if (DistributionRows.Any(row =>
+                    row.DistributionAmount < 0))
+            {
+                return "Distribution amounts cannot be negative.";
+            }
+
+            // Per-row campus/fund pairing (respects the customization flags):
+            // a row that has an amount, a campus, or a fund must have the
+            // enabled selections completed; fully empty rows are fine.
+            foreach (var row in DistributionRows)
+            {
+                var hasAmount = row.DistributionAmount != 0;
+                var hasCampus = row.EMACampusID > 0;
+                var hasFund = row.EMAFundID > 0;
+
+                if (!hasAmount && !hasCampus && !hasFund)
+                {
+                    continue;
+                }
+
+                if (ShowCampuses && !hasCampus)
+                {
+                    return "Please select a campus for each row in use.";
+                }
+
+                if (ShowFunds && !hasFund)
+                {
+                    return "Please select a fund for each row in use.";
+                }
+
+                if (!hasAmount)
+                {
+                    return "Please enter an amount for each row in use.";
+                }
+            }
+
+            if (CurrentDonation.DonationAmount <= 0)
+            {
+                return "The donation total must be greater than zero.";
+            }
+
+            if (UnallocatedAmount != 0)
+            {
+                return $"Cannot save — {UnallocatedAmount:C} is still unallocated. The fund amounts must add up to the donation total.";
+            }
+
+            return null;
+        }
+    }
+
+    private decimal UnallocatedAmount =>
+        decimal.Round(
+            CurrentDonation.DonationAmount - TotalAmount,
+            2,
+            MidpointRounding.AwayFromZero);
+
+    private int OrgID =>
+        SessionState.CurrentSession?.EMAOrganizationID
+        ?? 0;
+
+    private int UserID =>
+        SessionState.CurrentSession?.UserID
+        ?? 0;
+
+    private bool CanGoOlder =>
+        CurrentDonation.EMADonationID > 0 &&
+        AuditIndex < AuditRecords.Count - 1;
+
+    private bool CanGoNewer =>
+        AuditIndex >= 0;
+
+    private IEnumerable<DonationItem> FilteredDonations
+    {
+        get
+        {
+            if (SearchMode == "Date" &&
+                CurrentDonation.DateTimeReceived.HasValue)
+            {
+                return AllDonations.Where(donation =>
+                    donation.DateTimeReceived.HasValue &&
+                    donation.DateTimeReceived.Value.Date ==
+                    CurrentDonation.DateTimeReceived.Value.Date);
+            }
+
+            if (SearchMode == "Donor" &&
+                CurrentDonation.EMADonorID > 0)
+            {
+                return AllDonations.Where(donation =>
+                    donation.EMADonorID ==
+                    CurrentDonation.EMADonorID);
+            }
+
+            return AllDonations;
+        }
+    }
+
+    private IEnumerable<DonationItem> SortedDonations =>
+        SortColumn switch
+        {
+            "Donor" =>
+                SortAsc
+                    ? FilteredDonations.OrderBy(donation =>
+                        donation.InteracDonorName)
+                    : FilteredDonations.OrderByDescending(donation =>
+                        donation.InteracDonorName),
+
+            "Reference" =>
+                SortAsc
+                    ? FilteredDonations.OrderBy(donation =>
+                        donation.ReferenceNumber)
+                    : FilteredDonations.OrderByDescending(donation =>
+                        donation.ReferenceNumber),
+
+            "Memo" =>
+                SortAsc
+                    ? FilteredDonations.OrderBy(donation =>
+                        donation.Comments)
+                    : FilteredDonations.OrderByDescending(donation =>
+                        donation.Comments),
+
+            "Amount" =>
+                SortAsc
+                    ? FilteredDonations.OrderBy(donation =>
+                        donation.DonationAmount)
+                    : FilteredDonations.OrderByDescending(donation =>
+                        donation.DonationAmount),
+
+            _ =>
+                SortAsc
+                    ? FilteredDonations
+                        .OrderBy(donation => donation.DateTimeReceived)
+                        .ThenBy(donation => donation.EMADonationID)
+                    : FilteredDonations
+                        .OrderByDescending(donation => donation.DateTimeReceived)
+                        .ThenByDescending(donation => donation.EMADonationID)
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (OrgID <= 0)
+        {
+            Navigation.NavigateTo(
+                "/login");
+
+            return;
+        }
+
+        try
+        {
+            var donationSourcesTask =
+                CustomizationService.GetDonationSourcesAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var eventsTask =
+                CustomizationService.GetEventsAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var tributeTypesTask =
+                CustomizationService.GetTributeTypesAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var methodsTask =
+                CustomizationService.GetMethodsOfGivingAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var campusesTask =
+                CustomizationService.GetCampusesAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var fundsTask =
+                CustomizationService.GetFundsAsync(
+                    OrgID,
+                    activeOnly: true);
+
+            var usersTask =
+                DonorService.GetOrganizationUsersAsync(
+                    OrgID);
+
+            var settingsTask =
+                LoadOrganizationSettingsAsync();
+
+            await Task.WhenAll(
+                donationSourcesTask,
+                eventsTask,
+                tributeTypesTask,
+                methodsTask,
+                campusesTask,
+                fundsTask,
+                usersTask,
+                settingsTask);
+
+            CurrencyTypes =
+                await donationSourcesTask;
+
+            Events =
+                await eventsTask;
+
+            TributeTypes =
+                await tributeTypesTask;
+
+            Methods =
+                await methodsTask;
+
+            Campuses =
+                await campusesTask;
+
+            Funds =
+                await fundsTask;
+
+            OrgUsers =
+                await usersTask;
+
+            // Load the user's fund shortlist, and force the picker open the first time they land
+            // here -- with no rows the fund dropdown would otherwise have nothing to offer.
+            if (ShowFunds && UserID > 0)
+            {
+                await LoadFundShortlistAsync();
+
+                if (FundShortlist.Count > 0 && !FundShortlist.Any(item => item.Selected))
+                {
+                    await OpenFundShortlistAsync();
+                }
+            }
+
+            ResetDonationForm();
+
+            var donorID =
+                GetQueryInt(
+                    "donorID");
+
+            if (donorID.HasValue)
+            {
+                var donor =
+                    await DonorService.GetByIDAsync(
+                        donorID.Value);
+
+                if (donor is not null &&
+                    donor.EMAOrganizationID == OrgID)
+                {
+                    await SelectDonor(
+                        donor);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            ValidationMessage =
+                exception.Message;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (firstRender &&
+            OrgID > 0)
+        {
+            await DonorSearchInput.FocusAsync();
+        }
+    }
+
+    private async Task LoadOrganizationSettingsAsync()
+    {
+        var orgSettings =
+            await CustomizationService.GetOrgSettingsAsync(
+                OrgID);
+
+        if (!orgSettings.HasValue)
+        {
+            return;
+        }
+
+        var settings =
+            orgSettings.Value;
+
+        ShowCampuses =
+            ReadFlag(
+                settings,
+                "UseCampuses");
+
+        ShowCurrencyTypes =
+            ReadFlag(
+                settings,
+                "UseSources");
+
+        ShowFunds =
+            ReadFlag(
+                settings,
+                "UseFunds");
+
+        ShowMethodsOfGiving =
+            ReadFlag(
+                settings,
+                "UseMethodsOfGiving");
+
+        ShowAnonymous =
+            ReadFlag(
+                settings,
+                "UseAnonymousEnabled");
+
+        ShowEvents =
+            ReadFlag(
+                settings,
+                "UseEvents");
+
+        ShowTributes =
+            ReadFlag(
+                settings,
+                "UseTributeTypes");
+
+        EMADonorIDForAnonymous =
+            settings.TryGetProperty(
+                    "EMADonorIDForAnonymous",
+                    out var anonymousDonorID) &&
+                anonymousDonorID.ValueKind !=
+                System.Text.Json.JsonValueKind.Null
+                ? anonymousDonorID.GetInt32()
+                : null;
+
+        EMAMethodOfGivingIDForCreditDebitCards =
+            ReadNullableInt(settings, "EMAMethodOfGivingIDForCreditDebitCards");
+        EMACampusIDForCreditDebitCards =
+            ReadNullableInt(settings, "EMACampusIDForCreditDebitCards");
+        EMAMethodOfGivingIDForETransfers =
+            ReadNullableInt(settings, "EMAMethodOfGivingIDForETransfers");
+        EMACampusIDForEtransfers =
+            ReadNullableInt(settings, "EMACampusIDForEtransfers");
+        EMAMethodOfGivingIDForPADs =
+            ReadNullableInt(settings, "EMAMethodOfGivingIDForPADs");
+        EMACampusIDForPADs =
+            ReadNullableInt(settings, "EMACampusIDForPADs");
+
+        AnonymousDonorName =
+            settings.TryGetProperty(
+                    "AnonymousDonorName",
+                    out var anonymousDonorName) &&
+                anonymousDonorName.ValueKind !=
+                System.Text.Json.JsonValueKind.Null
+                ? anonymousDonorName.GetString()
+                  ?? string.Empty
+                : string.Empty;
+
+        OrganizationDateFormat =
+            settings.TryGetProperty(
+                    "DateFormat",
+                    out var dateFormat) &&
+                dateFormat.ValueKind !=
+                System.Text.Json.JsonValueKind.Null
+                ? dateFormat.ValueKind ==
+                  System.Text.Json.JsonValueKind.String
+                    ? dateFormat.GetString()
+                      ?? "yyyy-MM-dd"
+                    : dateFormat.ToString()
+                : "yyyy-MM-dd";
+    }
+
+    private void ResetDonationForm()
+    {
+        CurrentDonation =
+            new DonationItem
+            {
+                EMAOrganizationID =
+                    OrgID,
+
+                DateTimeReceived =
+                    DateTime.UtcNow,
+
+                IsTemplate =
+                    'N'
+            };
+
+        DonorSearchText =
+            string.Empty;
+
+        SelectedDonorDisplayText =
+            string.Empty;
+
+        RepeatDonationMessage =
+            string.Empty;
+
+        DonorSearchResults =
+            [];
+
+        IsAnonymous =
+            false;
+
+        ShowAnonConfirm =
+            false;
+
+        ShowClearConfirm =
+            false;
+
+        IsAuditView =
+            false;
+
+        AuditDateTime =
+            string.Empty;
+
+        AuditUserName =
+            string.Empty;
+
+        AuditRecords =
+            [];
+
+        AuditIndex =
+            -1;
+
+        SelectedDonationID =
+            0;
+
+        InitDistributionRows();
+        RecalculateTotal();
+    }
+
+    private void InitDistributionRows()
+    {
+        DistributionRows =
+        [
+            new DistributionRowItem(),
+            new DistributionRowItem(),
+            new DistributionRowItem()
+        ];
+    }
+
+    private void AddDistributionRow()
+    {
+        if (!IsAuditView)
+        {
+            DistributionRows.Add(
+                new DistributionRowItem());
+        }
+    }
+
+    private async Task OnDonorSearchInput(
+        ChangeEventArgs eventArgs)
+    {
+        DonorSearchText =
+            eventArgs.Value?.ToString()
+            ?? string.Empty;
+
+        // Typing away from the selected donor clears the selection so a
+        // stale donor can't be saved against a name that no longer matches.
+        var selectedDisplayName =
+            string.IsNullOrWhiteSpace(SelectedDonorDisplayText)
+                ? GetDonorDisplayName(
+                    CurrentDonation.EMADonorID,
+                    CurrentDonation.InteracDonorName)
+                : SelectedDonorDisplayText;
+
+        if (CurrentDonation.EMADonorID > 0 &&
+            !string.Equals(
+                DonorSearchText,
+                selectedDisplayName,
+                StringComparison.Ordinal))
+        {
+            CurrentDonation.EMADonorID =
+                0;
+
+            SelectedDonorDisplayText =
+                string.Empty;
+
+            RepeatDonationMessage =
+                string.Empty;
+        }
+
+        DonorSearchResults =
+            [];
+
+        await SearchDonorsAsync();
+    }
+
+    private async Task ShowDonorSearch()
+    {
+        IsDonorSearchFocused =
+            true;
+
+        if (DonorSearchResults.Count == 0)
+        {
+            await SearchDonorsAsync();
+        }
+    }
+
+    private void HideDonorSearchResults()
+    {
+        IsDonorSearchFocused =
+            false;
+
+        CancelDonorSearch();
+    }
+
+    private void CancelDonorSearch()
+    {
+        var cancellation =
+            DonorSearchCancellation;
+
+        DonorSearchCancellation =
+            null;
+
+        cancellation?.Cancel();
+    }
+
+    private async Task SearchDonorsAsync()
+    {
+        CancelDonorSearch();
+
+        if (!IsDonorSearchFocused ||
+            DonorSearchText.Trim().Length < 2)
+        {
+            DonorSearchResults =
+                [];
+
+            return;
+        }
+
+        var cancellation =
+            new CancellationTokenSource();
+
+        DonorSearchCancellation =
+            cancellation;
+
+        try
+        {
+            await Task.Delay(
+                250,
+                cancellation.Token);
+
+            var results =
+                await DonorService.SearchAsync(
+                    OrgID,
+                    DonorSearchText.Trim(),
+                    cancellationToken: cancellation.Token);
+
+            if (!cancellation.IsCancellationRequested &&
+                IsDonorSearchFocused)
+            {
+                DonorSearchResults =
+                    results.Take(5).ToList();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer query or blur superseded this search.
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    DonorSearchCancellation,
+                    cancellation))
+            {
+                DonorSearchCancellation =
+                    null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private bool ShowDonorNotFoundHint =>
+        IsDonorSearchFocused &&
+        !IsAnonymous &&
+        !IsAuditView &&
+        CurrentDonation.EMADonorID <= 0 &&
+        DonorSearchText.Trim().Length >= 2 &&
+        DonorSearchResults.Count == 0;
+
+    private async Task SelectDonor(
+        DonorItem donor)
+    {
+        CurrentDonation.EMADonorID =
+            donor.EMADonorID;
+
+        CurrentDonation.InteracDonorName =
+            donor.OfficialDonorName
+            ?? donor.InteracDonorName;
+
+        SelectedDonorDisplayText =
+            FormatDonorDisplay(
+                donor);
+
+        DonorSearchText =
+            SelectedDonorDisplayText;
+
+        DonorSearchResults =
+            [];
+
+        IsAnonymous =
+            EMADonorIDForAnonymous.HasValue &&
+            donor.EMADonorID ==
+            EMADonorIDForAnonymous.Value;
+
+        ValidationMessage =
+            string.Empty;
+
+        if (CurrentDonation.EMADonationID == 0 &&
+            CurrentDonation.DonationAmount == 0 &&
+            DistributionRows.All(row => row.DistributionAmount == 0))
+        {
+            await ApplyMatchingRecentDonationAsync(
+                donor.EMADonorID);
+        }
+    }
+
+    private void CreateNewDonor()
+    {
+        Navigation.NavigateTo(
+            "/donor-maintenance");
+    }
+
+    private void OnDateChanged(
+        ChangeEventArgs eventArgs)
+    {
+        if (!DateTime.TryParse(
+                eventArgs.Value?.ToString(),
+                out var date))
+        {
+            CurrentDonation.DateTimeReceived =
+                null;
+
+            return;
+        }
+
+        var time =
+            CurrentDonation.DateTimeReceived?.TimeOfDay
+            ?? DateTime.UtcNow.TimeOfDay;
+
+        CurrentDonation.DateTimeReceived =
+            DateTime.SpecifyKind(
+                date.Date.Add(time),
+                DateTimeKind.Utc);
+    }
+
+    private void ToggleAdditionalFields()
+    {
+        ShowAdditionalFields =
+            !ShowAdditionalFields;
+    }
+
+    private void OnDonationTotalChanged(
+        ChangeEventArgs eventArgs)
+    {
+        var newTotal =
+            ParseAmount(
+                eventArgs.Value);
+
+        CurrentDonation.DonationAmount =
+            newTotal;
+
+        AllocateDonationTotal(
+            newTotal);
+    }
+
+    private void AllocateDonationTotal(
+        decimal newTotal)
+    {
+        RecalculateTotal();
+
+        var difference =
+            decimal.Round(
+                newTotal - TotalAmount,
+                2,
+                MidpointRounding.AwayFromZero);
+
+        if (difference > 0)
+        {
+            var target =
+                DistributionRows.LastOrDefault(row =>
+                    row.DistributionAmount > 0)
+                ?? DistributionRows.First();
+
+            target.DistributionAmount =
+                Math.Min(
+                    MaxDistributionAmount,
+                    target.DistributionAmount + difference);
+        }
+        else if (difference < 0)
+        {
+            var remaining =
+                -difference;
+
+            foreach (var row in DistributionRows
+                         .Where(row => row.DistributionAmount > 0)
+                         .Reverse())
+            {
+                var reduction =
+                    Math.Min(
+                        row.DistributionAmount,
+                        remaining);
+
+                row.DistributionAmount -=
+                    reduction;
+
+                remaining -=
+                    reduction;
+
+                if (remaining == 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        RecalculateTotal();
+    }
+
+    private void OnMethodChanged(
+        ChangeEventArgs eventArgs)
+    {
+        CurrentDonation.EMAMethodOfGivingID =
+            int.TryParse(
+                eventArgs.Value?.ToString(),
+                out var methodID) &&
+            methodID > 0
+                ? methodID
+                : null;
+
+        ApplyCampusDefaults();
+    }
+
+    private void OnFundChanged(
+        DistributionRowItem row,
+        ChangeEventArgs eventArgs)
+    {
+        row.EMAFundID =
+            int.TryParse(
+                eventArgs.Value?.ToString(),
+                out var fundID) &&
+            fundID > 0
+                ? fundID
+                : 0;
+
+        ApplyCampusDefault(
+            row);
+    }
+
+    private void ApplyCampusDefaults()
+    {
+        if (!ShowCampuses)
+        {
+            return;
+        }
+
+        for (var index = 0; index < DistributionRows.Count; index++)
+        {
+            var row =
+                DistributionRows[index];
+
+            if (index == 0 ||
+                row.EMAFundID > 0 ||
+                row.DistributionAmount > 0)
+            {
+                ApplyCampusDefault(
+                    row);
+            }
+        }
+    }
+
+    private void ApplyCampusDefault(
+        DistributionRowItem row)
+    {
+        var methodCampusID =
+            GetMethodCampusID(
+                CurrentDonation.EMAMethodOfGivingID);
+
+        if (methodCampusID.HasValue &&
+            methodCampusID.Value > 0)
+        {
+            row.EMACampusID =
+                methodCampusID.Value;
+
+            return;
+        }
+
+        var fundCampusID =
+            Funds.FirstOrDefault(fund =>
+                fund.EMAFundID == row.EMAFundID)
+                ?.EMACampusID;
+
+        if (fundCampusID.HasValue &&
+            fundCampusID.Value > 0)
+        {
+            row.EMACampusID =
+                fundCampusID.Value;
+        }
+    }
+
+    private int? GetMethodCampusID(
+        int? methodID)
+    {
+        if (!methodID.HasValue)
+        {
+            return null;
+        }
+
+        if (methodID == EMAMethodOfGivingIDForCreditDebitCards)
+        {
+            return EMACampusIDForCreditDebitCards;
+        }
+
+        if (methodID == EMAMethodOfGivingIDForETransfers)
+        {
+            return EMACampusIDForEtransfers;
+        }
+
+        if (methodID == EMAMethodOfGivingIDForPADs)
+        {
+            return EMACampusIDForPADs;
+        }
+
+        return null;
+    }
+
+    private static decimal ParseAmount(
+        object? value)
+    {
+        var amount =
+            decimal.TryParse(
+                value?.ToString(),
+                System.Globalization.NumberStyles.Currency,
+                System.Globalization.CultureInfo.CurrentCulture,
+                out var parsed)
+                ? parsed
+                : 0;
+
+        return Math.Clamp(
+            amount,
+            0,
+            MaxDistributionAmount);
+    }
+
+    private const decimal MaxDistributionAmount = 99_999_999.99m;
+
+    private void OnDistributionAmountChanged(
+        DistributionRowItem row,
+        ChangeEventArgs eventArgs)
+    {
+        var amount =
+            ParseAmount(
+                eventArgs.Value);
+
+        row.DistributionAmount =
+            amount;
+
+        RecalculateTotal();
+    }
+
+    private async Task SetSearchMode(
+        string mode)
+    {
+        SearchMode =
+            SearchMode == mode
+                ? string.Empty
+                : mode;
+
+        if (string.IsNullOrEmpty(
+                SearchMode))
+        {
+            return;
+        }
+
+        try
+        {
+            AllDonations =
+                SearchMode == "Donor" &&
+                CurrentDonation.EMADonorID > 0
+                    ? await DonationService.GetByDonorAsync(
+                        OrgID,
+                        CurrentDonation.EMADonorID)
+                    : SearchMode == "Date" &&
+                      CurrentDonation.DateTimeReceived.HasValue
+                        ? await DonationService.GetByDateAsync(
+                            OrgID,
+                            CurrentDonation.DateTimeReceived.Value)
+                        : [];
+
+            ValidationMessage =
+                string.Empty;
+        }
+        catch (Exception exception)
+        {
+            AllDonations =
+                [];
+
+            SearchMode =
+                string.Empty;
+
+            ValidationMessage =
+                exception.Message;
+        }
+    }
+
+    private void RecalculateTotal()
+    {
+        TotalAmount =
+            DistributionRows.Sum(row =>
+                row.DistributionAmount);
+    }
+
+    private async Task SelectDonation(
+        DonationItem summary)
+    {
+        try
+        {
+            var donation =
+                await DonationService.GetByIDAsync(
+                    OrgID,
+                    summary.EMADonationID);
+
+            if (donation is null)
+            {
+                ValidationMessage =
+                    "Donation not found.";
+
+                return;
+            }
+
+            CurrentDonation =
+                CloneDonation(
+                    donation);
+
+            SelectedDonationID =
+                donation.EMADonationID;
+
+            IsAnonymous =
+                EMADonorIDForAnonymous.HasValue &&
+                donation.EMADonorID ==
+                EMADonorIDForAnonymous.Value;
+
+            if (IsAnonymous)
+            {
+                SelectedDonorDisplayText =
+                    "Hidden - Anonymous";
+            }
+            else
+            {
+                var selectedDonor =
+                    await DonorService.GetByIDAsync(
+                        donation.EMADonorID);
+
+                SelectedDonorDisplayText =
+                    selectedDonor is not null
+                        ? FormatDonorDisplay(selectedDonor)
+                        : GetDonorDisplayName(
+                            donation.EMADonorID,
+                            donation.InteracDonorName);
+            }
+
+            DonorSearchText =
+                SelectedDonorDisplayText;
+
+            IsAuditView =
+                false;
+
+            AuditIndex =
+                -1;
+
+            AuditDateTime =
+                string.Empty;
+
+            AuditUserName =
+                string.Empty;
+
+            ValidationMessage =
+                string.Empty;
+
+            DistributionRows =
+                donation.Distributions
+                    .Select(CloneDistribution)
+                    .ToList();
+
+            while (DistributionRows.Count < 3)
+            {
+                DistributionRows.Add(
+                    new DistributionRowItem());
+            }
+
+            if (DistributionRows.All(row =>
+                    row.DistributionAmount == 0) &&
+                donation.DonationAmount > 0)
+            {
+                DistributionRows[0].DistributionAmount =
+                    donation.DonationAmount;
+            }
+
+            RecalculateTotal();
+
+            LiveDonation =
+                CloneDonation(
+                    CurrentDonation);
+
+            LiveDistributions =
+                DistributionRows
+                    .Select(CloneDistribution)
+                    .ToList();
+
+            AuditRecords =
+                await DonationService.GetDonationAuditAsync(
+                    OrgID,
+                    donation.EMADonationID);
+        }
+        catch (Exception exception)
+        {
+            ValidationMessage =
+                exception.Message;
+        }
+    }
+
+    private void SortBy(
+        string column)
+    {
+        if (SortColumn == column)
+        {
+            SortAsc =
+                !SortAsc;
+
+            return;
+        }
+
+        SortColumn =
+            column;
+
+        SortAsc =
+            true;
+    }
+
+    private void GoOlder()
+    {
+        if (!CanGoOlder)
+        {
+            return;
+        }
+
+        AuditIndex++;
+
+        LoadAuditRecord(
+            AuditRecords[AuditIndex]);
+    }
+
+    private void GoNewer()
+    {
+        if (!CanGoNewer)
+        {
+            return;
+        }
+
+        if (AuditIndex == 0)
+        {
+            AuditIndex =
+                -1;
+
+            IsAuditView =
+                false;
+
+            AuditDateTime =
+                string.Empty;
+
+            AuditUserName =
+                string.Empty;
+
+            CurrentDonation =
+                CloneDonation(
+                    LiveDonation);
+
+            DistributionRows =
+                LiveDistributions
+                    .Select(CloneDistribution)
+                    .ToList();
+
+            IsAnonymous =
+                EMADonorIDForAnonymous.HasValue &&
+                CurrentDonation.EMADonorID ==
+                EMADonorIDForAnonymous.Value;
+
+            DonorSearchText =
+                IsAnonymous
+                    ? "Hidden - Anonymous"
+                    : GetDonorDisplayName(
+                        CurrentDonation.EMADonorID,
+                        CurrentDonation.InteracDonorName);
+
+            RecalculateTotal();
+
+            return;
+        }
+
+        AuditIndex--;
+
+        LoadAuditRecord(
+            AuditRecords[AuditIndex]);
+    }
+
+    private void LoadAuditRecord(
+        System.Text.Json.JsonElement record)
+    {
+        if (!TryGetPropertyIgnoreCase(
+                record,
+                "Payload",
+                out var payloadElement) ||
+            payloadElement.ValueKind ==
+            System.Text.Json.JsonValueKind.Null)
+        {
+            return;
+        }
+
+        var payloadJson =
+            payloadElement.ValueKind ==
+            System.Text.Json.JsonValueKind.String
+                ? payloadElement.GetString()
+                : payloadElement.GetRawText();
+
+        if (string.IsNullOrWhiteSpace(
+                payloadJson))
+        {
+            return;
+        }
+
+        using var document =
+            System.Text.Json.JsonDocument.Parse(
+                payloadJson);
+
+        var payload =
+            document.RootElement;
+
+        if (TryGetPropertyIgnoreCase(
+                payload,
+                "Donation",
+                out var donationElement))
+        {
+            var auditDonation =
+                System.Text.Json.JsonSerializer
+                    .Deserialize<DonationItem>(
+                        donationElement.GetRawText(),
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive =
+                                true
+                        });
+
+            if (auditDonation is not null)
+            {
+                CurrentDonation =
+                    auditDonation;
+            }
+        }
+
+        if (TryGetPropertyIgnoreCase(
+                payload,
+                "Distributions",
+                out var distributionsElement) &&
+            distributionsElement.ValueKind ==
+            System.Text.Json.JsonValueKind.Array)
+        {
+            DistributionRows =
+                System.Text.Json.JsonSerializer
+                    .Deserialize<List<DistributionRowItem>>(
+                        distributionsElement.GetRawText(),
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive =
+                                true
+                        })
+                ?? [];
+        }
+
+        while (DistributionRows.Count < 3)
+        {
+            DistributionRows.Add(
+                new DistributionRowItem());
+        }
+
+        IsAuditView =
+            true;
+
+        AuditDateTime =
+            FormatDateTimeString(
+                TryGetPropertyIgnoreCase(
+                        record,
+                        "DateTimeCreated",
+                        out var dateTimeCreated)
+                    ? dateTimeCreated.GetString()
+                    : string.Empty);
+
+        var auditUserID =
+            TryGetPropertyIgnoreCase(
+                    record,
+                    "UpdatedByUserID",
+                    out var updatedByUserID) &&
+                updatedByUserID.ValueKind ==
+                System.Text.Json.JsonValueKind.Number &&
+                updatedByUserID.TryGetInt32(
+                    out var parsedUserID)
+                ? parsedUserID
+                : CurrentDonation.UpdatedbyUserID;
+
+        AuditUserName =
+            GetUserName(
+                auditUserID);
+
+        IsAnonymous =
+            EMADonorIDForAnonymous.HasValue &&
+            CurrentDonation.EMADonorID ==
+            EMADonorIDForAnonymous.Value;
+
+        DonorSearchText =
+            IsAnonymous
+                ? "Hidden - Anonymous"
+                : GetDonorDisplayName(
+                    CurrentDonation.EMADonorID,
+                    CurrentDonation.InteracDonorName);
+
+        RecalculateTotal();
+    }
+
+    private static bool TryGetPropertyIgnoreCase(
+        System.Text.Json.JsonElement element,
+        string propertyName,
+        out System.Text.Json.JsonElement value)
+    {
+        if (element.TryGetProperty(
+                propertyName,
+                out value))
+        {
+            return true;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(
+                    property.Name,
+                    propertyName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                value =
+                    property.Value;
+
+                return true;
+            }
+        }
+
+        value =
+            default;
+
+        return false;
+    }
+
+    private async Task SaveDonation()
+    {
+        if (SaveBlockReason != null ||
+            IsSaving)
+        {
+            return;
+        }
+
+        IsSaving =
+            true;
+
+        ValidationMessage =
+            string.Empty;
+
+        SuccessMessage =
+            string.Empty;
+
+        try
+        {
+            CurrentDonation.EMAOrganizationID =
+                OrgID;
+
+            if (CurrentDonation.EMADonationID == 0 &&
+                CurrentDonation.DateTimeReceived.HasValue)
+            {
+                var utcNow =
+                    DateTime.UtcNow;
+
+                CurrentDonation.DateTimeReceived =
+                    DateTime.SpecifyKind(
+                        CurrentDonation.DateTimeReceived.Value.Date.Add(
+                            utcNow.TimeOfDay),
+                        DateTimeKind.Utc);
+            }
+
+            CurrentDonation.DonationAmount =
+                decimal.Round(
+                    CurrentDonation.DonationAmount,
+                    2,
+                    MidpointRounding.AwayFromZero);
+
+            CurrentDonation.ClearInteracDonorName =
+                IsAnonymous;
+
+            CurrentDonation.Distributions =
+                DistributionRows
+                    .Where(row =>
+                        row.DistributionAmount > 0)
+                    .Select(CloneDistribution)
+                    .ToList();
+
+            long savedDonationID;
+
+            if (CurrentDonation.EMADonationID == 0)
+            {
+                var donationID =
+                    await DonationService.CreateAsync(
+                        OrgID,
+                        CurrentDonation);
+
+                if (!donationID.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "The donation was created, but the API did not return its ID.");
+                }
+
+                savedDonationID =
+                    donationID.Value;
+            }
+            else
+            {
+                savedDonationID =
+                    CurrentDonation.EMADonationID;
+
+                await DonationService.UpdateAsync(
+                    OrgID,
+                    CurrentDonation);
+            }
+
+            var savedDonation =
+                await DonationService.GetByIDAsync(
+                    OrgID,
+                    savedDonationID);
+
+            if (savedDonation is not null)
+            {
+                AllDonations.RemoveAll(donation =>
+                    donation.EMADonationID ==
+                    savedDonation.EMADonationID);
+
+                AllDonations.Add(
+                    savedDonation);
+            }
+
+            // Preserve the header fields (Date, Source, Method, Event) so the
+            // user can key several donations in a row without re-selecting them.
+            var keepDate = CurrentDonation.DateTimeReceived;
+            var keepSource = CurrentDonation.EMADonationSourceID;
+            var keepMethod = CurrentDonation.EMAMethodOfGivingID;
+            var keepEvent = CurrentDonation.EMAEventID;
+
+            ResetDonationForm();
+
+            CurrentDonation.DateTimeReceived = keepDate;
+            CurrentDonation.EMADonationSourceID = keepSource;
+            CurrentDonation.EMAMethodOfGivingID = keepMethod;
+            CurrentDonation.EMAEventID = keepEvent;
+
+            ApplyCampusDefaults();
+
+            SearchMode =
+                "Recent";
+
+            SortColumn =
+                "Date";
+
+            SortAsc =
+                false;
+
+            SuccessMessage =
+                $"Donation {savedDonationID} saved successfully.";
+
+            await DonorSearchInput.FocusAsync();
+        }
+        catch (Exception exception)
+        {
+            ValidationMessage =
+                exception.Message;
+        }
+        finally
+        {
+            IsSaving =
+                false;
+        }
+    }
+
+    private int AnonCheckboxKey;
+
+    private string AnonymousDisplayText =>
+        IsAnonymous
+            ? string.IsNullOrWhiteSpace(AnonymousDonorName)
+                ? "Donor name: Anonymous donor"
+                : $"Donor name: {AnonymousDonorName}"
+            : "Donations changed to anonymous are not reversible.";
+
+    private void RequestClearDonation()
+    {
+        if (!HasDonationDataToClear())
+        {
+            ResetDonationForm();
+            ValidationMessage = string.Empty;
+            SuccessMessage = string.Empty;
+            return;
+        }
+
+        ShowClearConfirm = true;
+    }
+
+    private bool HasDonationDataToClear() =>
+        CurrentDonation.EMADonationID > 0 ||
+        CurrentDonation.EMADonorID > 0 ||
+        !string.IsNullOrWhiteSpace(DonorSearchText) ||
+        !string.IsNullOrWhiteSpace(CurrentDonation.ReferenceNumber) ||
+        !string.IsNullOrWhiteSpace(CurrentDonation.Comments) ||
+        !string.IsNullOrWhiteSpace(CurrentDonation.TributeText) ||
+        CurrentDonation.DonationAmount != 0 ||
+        CurrentDonation.EMADonationSourceID.GetValueOrDefault() > 0 ||
+        CurrentDonation.EMAMethodOfGivingID.GetValueOrDefault() > 0 ||
+        CurrentDonation.EMAEventID.GetValueOrDefault() > 0 ||
+        CurrentDonation.EMATributeTypeID.GetValueOrDefault() > 0 ||
+        CurrentDonation.DateTimeReceived?.Date != DateTime.Today ||
+        IsAnonymous ||
+        DistributionRows.Any(row =>
+            row.EMAFundID > 0 ||
+            row.EMACampusID > 0 ||
+            row.DistributionAmount != 0);
+
+    private void ConfirmClearDonation()
+    {
+        ResetDonationForm();
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+        SearchMode = string.Empty;
+        AllDonations = [];
+    }
+
+    private void CancelClearDonation()
+    {
+        ShowClearConfirm = false;
+    }
+
+    private void OnAnonCheckboxChanged(
+        ChangeEventArgs eventArgs)
+    {
+        if (eventArgs.Value is bool isChecked &&
+            isChecked &&
+            !IsAnonymous)
+        {
+            ShowAnonConfirm =
+                true;
+        }
+    }
+
+    private void CancelAnonymous()
+    {
+        ShowAnonConfirm =
+            false;
+
+        IsAnonymous =
+            false;
+
+        // Force the checkbox to re-render unchecked (its bound value is
+        // unchanged, so Blazor won't reset the DOM without a new key).
+        AnonCheckboxKey++;
+    }
+
+    private void ConfirmAnonymous()
+    {
+        ShowAnonConfirm =
+            false;
+
+        if (!EMADonorIDForAnonymous.HasValue ||
+            EMADonorIDForAnonymous.Value <= 0)
+        {
+            ValidationMessage =
+                "The organization anonymous donor is not configured.";
+
+            return;
+        }
+
+        IsAnonymous =
+            true;
+
+        CurrentDonation.EMADonorID =
+            EMADonorIDForAnonymous.Value;
+
+        CurrentDonation.InteracDonorName =
+            null;
+
+        CurrentDonation.ClearInteracDonorName =
+            true;
+
+        DonorSearchText =
+            "Hidden - Anonymous";
+
+        DonorSearchResults =
+            [];
+    }
+
+    private string FormatDateTime(
+        DateTime? dateTime) =>
+        dateTime.HasValue
+            ? $"{OrgDateFormat.Format(dateTime.Value, OrganizationDateFormat)} {dateTime.Value:HH:mm:ss}"
+            : string.Empty;
+
+    private string FormatDateTimeString(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return string.Empty;
+        }
+
+        return DateTime.TryParse(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var dateTime)
+            ? $"{OrgDateFormat.Format(dateTime, OrganizationDateFormat)} {dateTime:HH:mm:ss}"
+            : value;
+    }
+
+    private async Task OpenStepsOverlay()
+    {
+        if (CurrentDonation.EMADonationID == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            DonationStepLogs = [];
+            StepsLoading = true;
+            StepsOverlayVisible = true;
+
+            DonationStepLogs =
+                await DonationService.GetDonationStepLogAsync(
+                    CurrentDonation.EMADonationID);
+        }
+        catch (Exception exception)
+        {
+            StepsOverlayVisible = false;
+            ValidationMessage =
+                exception.Message;
+        }
+        finally
+        {
+            StepsLoading = false;
+        }
+    }
+
+    private void CloseStepsOverlay()
+    {
+        StepsOverlayVisible =
+            false;
+
+        StepsLoading =
+            false;
+    }
+
+    // ── Fund shortlist overlay ────────────────────────────────────────────────
+
+    // The funds offered in each distribution row: the user's checked shortlist, in their order.
+    // Any fund already recorded on this donation is appended even when it is not shortlisted --
+    // otherwise the <select> would not contain the bound value and would silently reset the row.
+    private List<FundItem> AvailableFunds()
+    {
+        // No shortlist rows, or nothing picked yet: show every fund rather than stranding the
+        // user with an empty dropdown. The overlay opens alongside this to prompt a choice.
+        if (FundShortlist.Count == 0
+            || !FundShortlist.Any(item => item.Selected))
+        {
+            return Funds;
+        }
+
+        var available = FundShortlist
+            .Where(item => item.Selected)
+            .OrderBy(item => item.Sequence ?? int.MaxValue)
+            .ThenBy(item => item.EMAFundID)
+            .Select(item => Funds.FirstOrDefault(fund => fund.EMAFundID == item.EMAFundID))
+            .Where(fund => fund is not null)
+            .Select(fund => fund!)
+            .ToList();
+
+        foreach (var row in DistributionRows)
+        {
+            if (row.EMAFundID <= 0
+                || available.Any(fund => fund.EMAFundID == row.EMAFundID))
+            {
+                continue;
+            }
+
+            var inUse = Funds.FirstOrDefault(fund => fund.EMAFundID == row.EMAFundID);
+            if (inUse is not null)
+            {
+                available.Add(inUse);
+            }
+        }
+
+        return available;
+    }
+
+    // Re-fetches the shortlist. The API reconciles it against the org's current funds first, so
+    // newly added funds appear (unchecked) and retired ones disappear, with checkmarks preserved.
+    private async Task LoadFundShortlistAsync()
+    {
+        FundShortlist = await CustomizationService.GetUserFundShortListAsync(OrgID);
+    }
+
+    private async Task OpenFundShortlistAsync()
+    {
+        FundShortlistError = null;
+
+        await LoadFundShortlistAsync();
+
+        // Edit a copy so Cancel can throw the changes away.
+        FundShortlistDraft = FundShortlist
+            .Select(item => new UserFundShortListItem
+            {
+                EMAFundID = item.EMAFundID,
+                FundName = item.FundName,
+                Sequence = item.Sequence,
+                Selected = item.Selected
+            })
+            .ToList();
+
+        FundShortlistVisible = true;
+    }
+
+    private void CancelFundShortlist()
+    {
+        FundShortlistDraft = [];
+        FundShortlistVisible = false;
+        FundShortlistError = null;
+    }
+
+    // Moves a row and renumbers the whole draft 1..N by position. Renumbering rather than swapping
+    // two values is self-healing: duplicate or NULL sequences are normalised on the next move.
+    private void MoveShortlistFund(UserFundShortListItem item, int direction)
+    {
+        var index = FundShortlistDraft.IndexOf(item);
+        var newIndex = index + direction;
+
+        if (index < 0 || newIndex < 0 || newIndex >= FundShortlistDraft.Count)
+        {
+            return;
+        }
+
+        FundShortlistDraft.RemoveAt(index);
+        FundShortlistDraft.Insert(newIndex, item);
+
+        for (int position = 0; position < FundShortlistDraft.Count; position++)
+        {
+            FundShortlistDraft[position].Sequence = position + 1;
+        }
+    }
+
+    private async Task SaveFundShortlistAsync()
+    {
+        if (FundShortlistSaving)
+        {
+            return;
+        }
+
+        FundShortlistSaving = true;
+        FundShortlistError = null;
+
+        // Persist the on-screen order even if the user never pressed an arrow.
+        for (int position = 0; position < FundShortlistDraft.Count; position++)
+        {
+            FundShortlistDraft[position].Sequence = position + 1;
+        }
+
+        var saved = await CustomizationService.SaveUserFundShortListAsync(OrgID, FundShortlistDraft);
+
+        FundShortlistSaving = false;
+
+        if (!saved)
+        {
+            FundShortlistError = "Could not save the fund list. Please try again.";
+            return;
+        }
+
+        FundShortlist = FundShortlistDraft;
+        FundShortlistDraft = [];
+        FundShortlistVisible = false;
+    }
+
+    private static string FormatDonorDisplay(
+        DonorItem donor)
+    {
+        var name =
+            !string.IsNullOrWhiteSpace(donor.OfficialDonorName) &&
+            !string.IsNullOrWhiteSpace(donor.InteracDonorName) &&
+            !string.Equals(
+                donor.OfficialDonorName,
+                donor.InteracDonorName,
+                StringComparison.OrdinalIgnoreCase)
+                ? $"{donor.OfficialDonorName} / {donor.InteracDonorName}"
+                : donor.OfficialDonorName
+                  ?? donor.InteracDonorName
+                  ?? string.Empty;
+
+        return string.IsNullOrWhiteSpace(donor.City)
+            ? name
+            : $"{name} — {donor.City}";
+    }
+
+    private async Task ApplyMatchingRecentDonationAsync(
+        int donorID)
+    {
+        RepeatDonationMessage =
+            string.Empty;
+
+        try
+        {
+            var recent =
+                (await DonationService.GetByDonorAsync(
+                    OrgID,
+                    donorID))
+                .OrderByDescending(donation =>
+                    donation.DateTimeReceived)
+                .ThenByDescending(donation =>
+                    donation.EMADonationID)
+                .Take(2)
+                .ToList();
+
+            if (recent.Count != 2)
+            {
+                return;
+            }
+
+            var detailTasks =
+                recent.Select(donation =>
+                    DonationService.GetByIDAsync(
+                        OrgID,
+                        donation.EMADonationID));
+
+            var details =
+                await Task.WhenAll(
+                    detailTasks);
+
+            if (details[0] is null ||
+                details[1] is null ||
+                decimal.Round(details[0]!.DonationAmount, 2) !=
+                decimal.Round(details[1]!.DonationAmount, 2) ||
+                !HaveMatchingAllocations(
+                    details[0]!.Distributions,
+                    details[1]!.Distributions))
+            {
+                return;
+            }
+
+            CurrentDonation.DonationAmount =
+                details[0]!.DonationAmount;
+
+            DistributionRows =
+                details[0]!.Distributions
+                    .Select(CloneDistribution)
+                    .ToList();
+
+            while (DistributionRows.Count < 3)
+            {
+                DistributionRows.Add(
+                    new DistributionRowItem());
+            }
+
+            RecalculateTotal();
+
+            RepeatDonationMessage =
+                "This donor's last two donations had the same total and fund allocation, so those values were filled in automatically.";
+        }
+        catch
+        {
+            // Donation entry remains usable when optional history defaults cannot load.
+        }
+    }
+
+    private static bool HaveMatchingAllocations(
+        IEnumerable<DistributionRowItem> first,
+        IEnumerable<DistributionRowItem> second)
+    {
+        var firstSignature =
+            first.Where(row => row.DistributionAmount > 0)
+                .GroupBy(row => row.EMAFundID)
+                .OrderBy(group => group.Key)
+                .Select(group => (
+                    FundID: group.Key,
+                    Amount: decimal.Round(
+                        group.Sum(row => row.DistributionAmount),
+                        2)))
+                .ToList();
+
+        var secondSignature =
+            second.Where(row => row.DistributionAmount > 0)
+                .GroupBy(row => row.EMAFundID)
+                .OrderBy(group => group.Key)
+                .Select(group => (
+                    FundID: group.Key,
+                    Amount: decimal.Round(
+                        group.Sum(row => row.DistributionAmount),
+                        2)))
+                .ToList();
+
+        return firstSignature.SequenceEqual(
+            secondSignature);
+    }
+
+    private string GetUserName(
+        int? userID)
+    {
+        if (!userID.HasValue ||
+            userID.Value <= 0)
+        {
+            return string.Empty;
+        }
+
+        var user =
+            OrgUsers.FirstOrDefault(candidate =>
+                candidate.UserID == userID.Value);
+
+        return user?.UserName
+            ?? string.Empty;
+    }
+
+    private string GetDonorDisplayName(
+        int donorID,
+        string? fallback)
+    {
+        return fallback
+            ?? string.Empty;
+    }
+
+    private int? GetQueryInt(
+        string key)
+    {
+        var query =
+            new Uri(
+                    Navigation.Uri)
+                .Query
+                .TrimStart('?');
+
+        foreach (var pair in query.Split(
+                     '&',
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts =
+                pair.Split(
+                    '=',
+                    2);
+
+            if (parts.Length == 2 &&
+                string.Equals(
+                    Uri.UnescapeDataString(
+                        parts[0]),
+                    key,
+                    StringComparison.OrdinalIgnoreCase) &&
+                int.TryParse(
+                    Uri.UnescapeDataString(
+                        parts[1]),
+                    out var value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static DonationItem CloneDonation(
+        DonationItem donation) =>
+        new()
+        {
+            EMAOrganizationID =
+                donation.EMAOrganizationID,
+
+            EMADonorID =
+                donation.EMADonorID,
+
+            EMADonationID =
+                donation.EMADonationID,
+
+            InteracDonorName =
+                donation.InteracDonorName,
+
+            EmailBlobPath =
+                donation.EmailBlobPath,
+
+            Comments =
+                donation.Comments,
+
+            DateTimeReceived =
+                donation.DateTimeReceived,
+
+            DonorToOrgChangeRequest =
+                donation.DonorToOrgChangeRequest,
+
+            EMADonationSourceID =
+                donation.EMADonationSourceID,
+
+            EMAMethodOfGivingID =
+                donation.EMAMethodOfGivingID,
+
+            EMAEventID =
+                donation.EMAEventID,
+
+            GlobalMessageID =
+                donation.GlobalMessageID,
+
+            ReferenceNumber =
+                donation.ReferenceNumber,
+
+            DonationAmount =
+                donation.DonationAmount,
+
+            TributeText =
+                donation.TributeText,
+
+            EMATributeTypeID =
+                donation.EMATributeTypeID,
+
+            IsTemplate =
+                donation.IsTemplate,
+
+            ClearInteracDonorName =
+                donation.ClearInteracDonorName,
+
+            RandomNumber2FA =
+                donation.RandomNumber2FA,
+
+            DateTime2FASent =
+                donation.DateTime2FASent,
+
+            DateTime2FAReceived =
+                donation.DateTime2FAReceived,
+
+            DateTime2FAExpires =
+                donation.DateTime2FAExpires,
+
+            DateTimeDonationLocked =
+                donation.DateTimeDonationLocked,
+
+            DateTimeCreated =
+                donation.DateTimeCreated,
+
+            CreatedbyUserID =
+                donation.CreatedbyUserID,
+
+            DateTimeUpdated =
+                donation.DateTimeUpdated,
+
+            UpdatedbyUserID =
+                donation.UpdatedbyUserID,
+
+            Distributions =
+                donation.Distributions
+                    .Select(CloneDistribution)
+                    .ToList()
+        };
+
+    private static DistributionRowItem CloneDistribution(
+        DistributionRowItem distribution) =>
+        new()
+        {
+            EMADonationID =
+                distribution.EMADonationID,
+
+            EMADonationDistributionID =
+                distribution.EMADonationDistributionID,
+
+            EMACampusID =
+                distribution.EMACampusID,
+
+            EMAFundID =
+                distribution.EMAFundID,
+
+            DistributionAmount =
+                distribution.DistributionAmount
+        };
+
+    private static int? ReadNullableInt(
+        System.Text.Json.JsonElement settings,
+        string key) =>
+        settings.TryGetProperty(
+                key,
+                out var value) &&
+            value.ValueKind ==
+            System.Text.Json.JsonValueKind.Number &&
+            value.TryGetInt32(
+                out var parsed)
+                ? parsed
+                : null;
+
+    private static bool ReadFlag(
+        System.Text.Json.JsonElement settings,
+        string key) =>
+        settings.TryGetProperty(
+            key,
+            out var value) &&
+        (value.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.True =>
+                true,
+
+            System.Text.Json.JsonValueKind.String =>
+                string.Equals(
+                    value.GetString()?.Trim(),
+                    "Y",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    value.GetString()?.Trim(),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    value.GetString()?.Trim(),
+                    "1",
+                    StringComparison.OrdinalIgnoreCase),
+
+            System.Text.Json.JsonValueKind.Number =>
+                value.TryGetInt32(out var number) &&
+                number == 1,
+
+            _ =>
+                false
+        });
+}

@@ -1,0 +1,2048 @@
+@page "/basic-information"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@using Microsoft.AspNetCore.Components.Forms
+
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject IBlobService BlobService
+@inject IChMSService ChMSService
+@inject IDateFormatService DateFormatService
+
+<PageTitle>Customization - EMA</PageTitle>
+
+<div class="settings-page">
+    <div class="donors-container">
+        <div class="donors-form">
+
+            <div class="contact-type-toggle"
+                 role="group"
+                 aria-label="Contact information type">
+                <button type="button"
+                        class="contact-type-button @(SelectedContactType == ContactType.Admin ? "active" : string.Empty)"
+                        aria-pressed="@(SelectedContactType == ContactType.Admin)"
+                        @onclick="@(() => SelectContactType(ContactType.Admin))">
+                    Admin
+                </button>
+
+                <button type="button"
+                        class="contact-type-button @(SelectedContactType == ContactType.Organization ? "active" : string.Empty)"
+                        aria-pressed="@(SelectedContactType == ContactType.Organization)"
+                        @onclick="@(() => SelectContactType(ContactType.Organization))">
+                    Organization
+                </button>
+
+                <button type="button"
+                        class="contact-type-button @(SelectedContactType == ContactType.Contact ? "active" : string.Empty)"
+                        aria-pressed="@(SelectedContactType == ContactType.Contact)"
+                        @onclick="@(() => SelectContactType(ContactType.Contact))">
+                    Contact
+                </button>
+            </div>
+
+            @if (SelectedContactType == ContactType.Admin)
+            {
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Admin Contact Name:</strong>
+                    </label>
+
+                    <InfoPopover Title="AdminContactName"
+                                 Content="The full name of the organization's administrator." />
+
+                    <input class="form-input"
+                           autocomplete="name"
+                           @bind="CurrentOrganization.AdminName"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Admin Phone #:</strong>
+                    </label>
+
+                    <InfoPopover Title="AdminPhone"
+                                 Content="The administrator's phone number including extension if applicable." />
+
+                    <input class="form-input"
+                           type="tel"
+                           autocomplete="tel"
+                           @bind="CurrentOrganization.AdminPhone"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Admin Email:</strong>
+                    </label>
+
+                    <InfoPopover Title="AdminEmail"
+                                 Content="Changing this address requires email verification before saving." />
+
+                    <input class="form-input"
+                           type="email"
+                           autocomplete="email"
+                           @bind="CurrentOrganization.AdminEmail"
+                           @bind:event="oninput"
+                           @bind:after="OnAdminEmailChanged"
+                           disabled="@IsAuditView" />
+
+                    <button class="btn-create @(IsAdminEmailVerified
+                                                                                                                                ? "verification-button-verified"
+                                                                                                                                : string.Empty)"
+                            type="button"
+                            disabled="@(IsAuditView ||
+                                                                                                                                        IsSaving ||
+                                                                                                                                        string.IsNullOrWhiteSpace(
+                                                                                                                                            CurrentOrganization.AdminEmail))"
+                            @onclick="@(() => OpenEmailVerification(
+                                                                                                                                EmailVerificationPurpose.OrganizationAdminEmail,
+                                                                                                                                CurrentOrganization.AdminEmail))">
+                        @(IsAdminEmailVerified
+                            ? "Verified"
+                            : "Email To Verify")
+                    </button>
+                </div>
+            }
+            else if (SelectedContactType == ContactType.Organization)
+            {
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Organization Name:</strong>
+                    </label>
+
+                    <InfoPopover Title="OrganizationName"
+                                 Content="The registered legal name of the organization." />
+
+                    <input class="form-input typeahead"
+                           @bind="CurrentOrganization.OrganizationName"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Organization Phone #:</strong>
+                    </label>
+
+                    <InfoPopover Title="OrganizationPhone"
+                                 Content="The main phone number for the organization." />
+
+                    <input class="form-input typeahead"
+                           type="tel"
+                           autocomplete="tel"
+                           @bind="CurrentOrganization.OrganizationPhone"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Organization Email:</strong>
+                    </label>
+
+                    <InfoPopover Title="OrganizationEmail"
+                                 Content="Changing this address requires email verification before saving." />
+
+                    <input class="form-input typeahead"
+                           type="email"
+                           autocomplete="email"
+                           @bind="CurrentOrganization.OrganizationEmail"
+                           @bind:event="oninput"
+                           @bind:after="OnOrganizationEmailChanged"
+                           disabled="@IsAuditView" />
+
+                    <button class="btn-create @(IsOrganizationEmailVerified
+                                                                                                                                ? "verification-button-verified"
+                                                                                                                                : string.Empty)"
+                            type="button"
+                            disabled="@(IsAuditView ||
+                                                                                                                                        IsSaving ||
+                                                                                                                                        string.IsNullOrWhiteSpace(
+                                                                                                                                            CurrentOrganization.OrganizationEmail))"
+                            @onclick="@(() => OpenEmailVerification(
+                                                                                                                                EmailVerificationPurpose.OrganizationEmail,
+                                                                                                                                CurrentOrganization.OrganizationEmail))">
+                        @(IsOrganizationEmailVerified
+                            ? "Verified"
+                            : "Email To Verify")
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Contact Name:</strong>
+                    </label>
+
+                    <InfoPopover Title="ContactName"
+                                 Content="The full name of the organization's primary contact." />
+
+                    <input class="form-input"
+                           autocomplete="name"
+                           @bind="CurrentOrganization.ContactName"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Contact Phone #:</strong>
+                    </label>
+
+                    <InfoPopover Title="ContactPhone"
+                                 Content="The primary contact's phone number including extension if applicable." />
+
+                    <input class="form-input"
+                           type="tel"
+                           autocomplete="tel"
+                           @bind="CurrentOrganization.ContactPhone"
+                           @bind:event="oninput"
+                           disabled="@IsAuditView" />
+                </div>
+
+                <div class="form-row">
+                    <label class="form-label">
+                        <strong>Contact Email:</strong>
+                    </label>
+
+                    <InfoPopover Title="ContactEmail"
+                                 Content="Changing this address requires email verification before saving." />
+
+                    <input class="form-input"
+                           type="email"
+                           autocomplete="email"
+                           @bind="CurrentOrganization.ContactEmail"
+                           @bind:event="oninput"
+                           @bind:after="OnContactEmailChanged"
+                           disabled="@IsAuditView" />
+
+                    <button class="btn-create @(IsContactEmailVerified
+                                                                                                                                ? "verification-button-verified"
+                                                                                                                                : string.Empty)"
+                            type="button"
+                            disabled="@(IsAuditView ||
+                                                                                                                                        IsSaving ||
+                                                                                                                                        string.IsNullOrWhiteSpace(
+                                                                                                                                            CurrentOrganization.ContactEmail))"
+                            @onclick="@(() => OpenEmailVerification(
+                                                                                                                                EmailVerificationPurpose.OrganizationContactEmail,
+                                                                                                                                CurrentOrganization.ContactEmail))">
+                        @(IsContactEmailVerified
+                            ? "Verified"
+                            : "Email To Verify")
+                    </button>
+                </div>
+            }
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Website URL:</strong>
+                </label>
+
+                <InfoPopover Title="WebsiteUrl"
+                             Content="The organization website URL." />
+
+                <input class="form-input"
+                       type="url"
+                       autocomplete="url"
+                       @bind="CurrentOrganization.OrganizationWebsite"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Logo:</strong>
+                </label>
+
+                <InfoPopover Title="Logo"
+                             Content="Upload or replace the organization's logo." />
+
+                <div class="form-input"
+                     style="display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    min-height: 90px;">
+
+                    <div style="display: flex;
+                        flex-direction: column;
+                        gap: 0.5rem;
+                        flex: 1;">
+                        <InputFile OnChange="OnLogoSelectedAsync"
+                                   accept="image/png,image/jpeg,image/webp,image/gif"
+                                   disabled="@(IsAuditView || IsSaving)" />
+
+                        @if (IsSaving && PendingLogoFile is not null)
+                        {
+                            <small>Uploading logo...</small>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(LogoUploadMessage))
+                        {
+                            <small>@LogoUploadMessage</small>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(LogoPreviewUrl))
+                    {
+                        <div style="width: 90px;
+                            height: 70px;
+                            border: 1px solid #ccc;
+                            border-radius: 6px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            padding: 0.25rem;
+                            background: white;">
+
+                            <img src="@LogoPreviewUrl"
+                                 alt="Organization logo preview"
+                                 style="max-width: 100%;
+                            max-height: 100%;
+                            object-fit: contain;" />
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Address:</strong>
+                </label>
+
+                <InfoPopover Title="Address"
+                             Content="The street address of the organization." />
+
+                <input class="form-input"
+                       autocomplete="street-address"
+                       @bind="CurrentOrganization.Address"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>City/Town:</strong>
+                </label>
+
+                <InfoPopover Title="CityTown"
+                             Content="The city or town where the organization is located." />
+
+                <input class="form-input"
+                       autocomplete="address-level2"
+                       @bind="CurrentOrganization.City"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Prov/State:</strong>
+                </label>
+
+                <InfoPopover Title="Prov/State"
+                             Content="Province, state, or regional code." />
+
+                <input class="form-input province-input"
+                       autocomplete="address-level1"
+                       @bind="CurrentOrganization.ProvinceStateCode"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+
+                <label class="form-label postal-label">
+                    <strong>Postal/Zip:</strong>
+                </label>
+
+                <InfoPopover Title="Postal/Zip"
+                             Content="Postal or ZIP code." />
+
+                <input class="form-input postal-input"
+                       autocomplete="postal-code"
+                       @bind="CurrentOrganization.PostalCode"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+
+            <div class="form-row cra-charity-row">
+                <label class="form-label">
+                    <strong>CRA Charity #:</strong>
+                </label>
+
+                <InfoPopover Title="CharityNumber"
+                             Content="The registered CRA charity number." />
+
+                <a class="btn-create cra-charity-lookup"
+                   href="https://www.charitydata.ca/search/"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    Click to Lookup
+                </a>
+
+                <label class="form-label postal-label cra-charity-enter-label">
+                    <strong>Enter #:</strong>
+                </label>
+
+                <input class="form-input cra-charity-number-input"
+                       type="text"
+                       aria-label="CRA Charity Number"
+                       @bind="CurrentOrganization.CRARegisteredCharityNumber"
+                       @bind:event="oninput"
+                       disabled="@IsAuditView" />
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Current ChMS:</strong>
+                </label>
+
+                <InfoPopover Title="ChMS"
+                             Content="The organization's current ChMS." />
+
+                <select class="form-input"
+                        @bind="CurrentOrganization.ChMSID"
+                        disabled="@IsAuditView">
+                    <option value="0">
+                        Please choose an option
+                    </option>
+
+                    @foreach (var chms in ChMSOptions)
+                    {
+                        <option value="@chms.ChMSID">
+                            @chms.ChMSName
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">
+                    <strong>Date Format:</strong>
+                </label>
+
+                <InfoPopover Title="Date Format"
+                             Content="The date format the organization would like to use for reporting." />
+
+                <select class="form-input"
+                        @bind="CurrentOrganization.DateFormatID"
+                        disabled="@IsAuditView">
+                    <option value="">
+                        Please choose an option
+                    </option>
+
+                    @foreach (var dateFormat in DateFormatOptions)
+                    {
+                        <option value="@dateFormat.DateFormatID">
+                            @dateFormat.DateFormatID
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-actions-row">
+                <div>
+                    <div class="arrow-buttons">
+                        <button class="btn-arrow"
+                                type="button"
+                                @onclick="GoOlderAsync"
+                                disabled="@(!CanGoOlder)">
+                            &#9664; Older
+                        </button>
+
+                        <button class="btn-arrow"
+                                type="button"
+                                @onclick="GoNewerAsync"
+                                disabled="@(!CanGoNewer)">
+                            Newer &#9654;
+                        </button>
+                    </div>
+
+                    <div class="audit-info">
+                        <div class="@(IsAuditView
+                                                                                                                                        ? "audit-row"
+                                                                                                                                        : "audit-placeholder")">
+                            @(IsAuditView
+                                ? AuditDateTime
+                                : string.Empty)
+                        </div>
+
+                        <div class="@(IsAuditView
+                                                                                                                                        ? "audit-row"
+                                                                                                                                        : "audit-placeholder")">
+                            @(IsAuditView
+                                ? AuditUserName
+                                : string.Empty)
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    @if (!IsAuditView)
+                    {
+                        <div class="save-buttons">
+                            <button class="btn-save btn-save-more"
+                                    type="button"
+                                    @onclick="SaveStateAsync"
+                                    disabled="@(!HasChanges || IsSaving || IsCheckingEtransferAlias)">
+                                <strong>
+                                    @(IsSaving
+                                        ? "Saving..."
+                                        : "Save")
+                                </strong>
+                            </button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(ValidationMessage))
+                    {
+                        <label class="m-auto validation-message"
+                               role="status"
+                               aria-live="polite">
+                            <strong>
+                                @(IsAuditView
+                                    ? string.Empty
+                                    : ValidationMessage)
+                            </strong>
+                        </label>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<EmailVerificationDialog IsOpen="@IsVerificationDialogOpen"
+                         EmailAddress="@VerificationEmailAddress"
+                         Purpose="@ActiveVerificationPurpose"
+                         ActorID="@EMAOrganizationID"
+                         OnVerified="@OnEmailVerified"
+                         OnClose="@CloseVerificationDialog" />
+
+@code {
+    private enum ContactType
+    {
+        Admin,
+        Organization,
+        Contact
+    }
+
+    private ContactType SelectedContactType =
+        ContactType.Organization;
+
+
+    //TODO: Remove hard coded values
+    private const long MaxLogoFileSize =
+        2 * 1024 * 1024;
+
+    private const string EtransferEmailDomain =
+        "emailmoney.app";
+
+    private const int MinimumEtransferAliasLength =
+        0;
+
+    private const int MaximumEtransferAliasLength =
+        64;
+
+    private static readonly HashSet<string>
+        AllowedLogoContentTypes =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/gif"
+            };
+
+    private OrganizationSummary CurrentOrganization =
+        new();
+
+    private OrganizationSummary SavedOrganization =
+        new();
+
+    private List<OrganizationAuditObject> Audits =
+        new();
+
+    private List<ChMSSummary> ChMSOptions =
+        new();
+
+    private List<DateFormatSummary> DateFormatOptions =
+        new();
+
+    private IBrowserFile? PendingLogoFile;
+
+    private int EMAOrganizationID;
+    private int HistoryIndex = -1;
+
+    private bool IsSaving;
+    private bool IsVerificationDialogOpen;
+    private bool IsCheckingEtransferAlias;
+    private bool? EtransferAliasIsAvailable;
+
+    private string LogoUploadMessage =
+        string.Empty;
+
+    private string LogoPreviewUrl =
+        string.Empty;
+
+    private string AuditDateTime =
+        string.Empty;
+
+    private string AuditUserName =
+        string.Empty;
+
+    private string ValidationMessage =
+        string.Empty;
+
+    private string VerifiedAdminEmail =
+        string.Empty;
+
+    private string VerifiedOrganizationEmail =
+        string.Empty;
+
+    private string VerifiedContactEmail =
+        string.Empty;
+
+    private string EtransferAliasPrefix =
+        string.Empty;
+
+    private string CheckedEtransferAliasPrefix =
+        string.Empty;
+
+    private string VerificationEmailAddress =
+        string.Empty;
+
+    private EmailVerificationPurpose ActiveVerificationPurpose =
+        EmailVerificationPurpose.OrganizationAdminEmail;
+
+    private bool CanGoOlder =>
+        HistoryIndex > 0;
+
+    private bool CanGoNewer =>
+        HistoryIndex < Audits.Count - 1;
+
+    private bool IsAuditView =>
+        HistoryIndex >= 0 &&
+        HistoryIndex < Audits.Count - 1;
+
+    private bool HasChanges =>
+        PendingLogoFile is not null ||
+        !string.IsNullOrWhiteSpace(
+            CurrentOrganization.AdminEmailVerificationToken) ||
+        !string.IsNullOrWhiteSpace(
+            CurrentOrganization.OrganizationEmailVerificationToken) ||
+        !string.IsNullOrWhiteSpace(
+            CurrentOrganization.ContactEmailVerificationToken) ||
+        !OrganizationsAreEqual(
+            CurrentOrganization,
+            SavedOrganization);
+
+    private bool IsAdminEmailVerified =>
+        CurrentOrganization.AdminEmailVerified == 'Y' &&
+        EmailsMatch(
+            CurrentOrganization.AdminEmail,
+            VerifiedAdminEmail);
+
+    private bool IsOrganizationEmailVerified =>
+        CurrentOrganization.OrganizationEmailVerified == 'Y' &&
+        EmailsMatch(
+            CurrentOrganization.OrganizationEmail,
+            VerifiedOrganizationEmail);
+
+    private bool IsContactEmailVerified =>
+        CurrentOrganization.ContactEmailVerified == 'Y' &&
+        EmailsMatch(
+            CurrentOrganization.ContactEmail,
+            VerifiedContactEmail);
+
+    private bool EtransferEmailChanged =>
+        !EmailsMatch(
+            CurrentOrganization.EtransferEmailAddress,
+            SavedOrganization.EtransferEmailAddress);
+
+    private bool IsEtransferAliasAvailableForCurrentValue =>
+        EtransferAliasIsAvailable == true &&
+        string.Equals(
+            NormalizeAliasPrefixForComparison(
+                EtransferAliasPrefix),
+            CheckedEtransferAliasPrefix,
+            StringComparison.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            ChMSOptions =
+                await ChMSService.GetChMSAsync();
+
+            DateFormatOptions =
+                await DateFormatService.GetDateFormatsAsync();
+
+            var selectedOrganization =
+                OrganizationStateService.CurrentOrganization;
+
+            if (selectedOrganization is null ||
+                selectedOrganization.EMAOrganizationID <= 0)
+            {
+                ValidationMessage =
+                    "No organization is selected. Please sign in again.";
+
+                return;
+            }
+
+            EMAOrganizationID =
+                selectedOrganization.EMAOrganizationID;
+
+            var organization =
+                await OrganizationService.GetOrganizationAsync(
+                    EMAOrganizationID);
+
+            if (organization is null)
+            {
+                ValidationMessage =
+                    "The organization could not be loaded.";
+
+                return;
+            }
+
+            CurrentOrganization =
+                organization.Clone();
+
+            SavedOrganization =
+                organization.Clone();
+
+            SyncVerifiedEmailState();
+            SyncEtransferAliasState();
+
+            OrganizationStateService.UpdateOrganization(
+                CurrentOrganization);
+
+            await LoadLogoPreviewAsync();
+            await LoadAuditsAsync();
+        }
+        catch
+        {
+            ValidationMessage =
+                "The organization could not be loaded. Please try again.";
+        }
+    }
+
+    private void SelectContactType(
+        ContactType contactType)
+    {
+        SelectedContactType =
+            contactType;
+    }
+
+    private async Task LoadAuditsAsync()
+    {
+        var result =
+            await OrganizationService
+                .GetOrganizationAuditsAsync(
+                    EMAOrganizationID);
+
+        Audits =
+            result?
+                .OrderBy(audit => audit.Timestamp)
+                .ToList()
+            ?? new List<OrganizationAuditObject>();
+
+        HistoryIndex =
+            Audits.Count - 1;
+
+        AuditDateTime =
+            string.Empty;
+
+        AuditUserName =
+            string.Empty;
+    }
+
+    private async Task SaveStateAsync()
+    {
+        if (IsSaving || !HasChanges)
+        {
+            return;
+        }
+
+        if (!ValidateOrganization())
+        {
+            return;
+        }
+
+        IsSaving =
+            true;
+
+        ValidationMessage =
+            string.Empty;
+
+        LogoUploadMessage =
+            string.Empty;
+
+        var generatedLogoBlobID =
+            false;
+
+        var uploadedLogoBlobID =
+            string.Empty;
+
+        try
+        {
+            if (PendingLogoFile is not null)
+            {
+                if (string.IsNullOrWhiteSpace(
+                        CurrentOrganization.LogoBlobID))
+                {
+                    CurrentOrganization.LogoBlobID =
+                        Guid.NewGuid().ToString("N");
+
+                    generatedLogoBlobID =
+                        true;
+                }
+
+                uploadedLogoBlobID =
+                    CurrentOrganization.LogoBlobID!;
+
+                var uploaded =
+                    await BlobService.BlobPutAsync(
+                        uploadedLogoBlobID,
+                        PendingLogoFile,
+                        MaxLogoFileSize);
+
+                if (!uploaded)
+                {
+                    if (generatedLogoBlobID)
+                    {
+                        CurrentOrganization.LogoBlobID =
+                            SavedOrganization.LogoBlobID;
+                    }
+
+                    ValidationMessage =
+                        "Failed to upload logo.";
+
+                    return;
+                }
+            }
+
+            // Task 22 moved Donation Email to the eTransfer setup page.
+            // Preserve the separately managed value when Basic Info saves so
+            // this form cannot overwrite it with a stale audit/view copy.
+            CurrentOrganization.EtransferEmailAddress =
+                SavedOrganization.EtransferEmailAddress;
+
+            CurrentOrganization.EtransferEmailVerified =
+                SavedOrganization.EtransferEmailVerified;
+
+            CurrentOrganization.EtransferEmailVerificationToken =
+                null;
+
+            CurrentOrganization.DateTimeUpdated =
+                DateTime.UtcNow;
+
+            var saveResult =
+                await OrganizationService
+                    .UpdateOrganizationWithResultAsync(
+                        EMAOrganizationID,
+                        CurrentOrganization);
+
+            if (!saveResult.Succeeded)
+            {
+                if (generatedLogoBlobID &&
+                    !string.IsNullOrWhiteSpace(
+                        uploadedLogoBlobID))
+                {
+                    await BlobService.BlobDeleteAsync(
+                        uploadedLogoBlobID);
+
+                    CurrentOrganization.LogoBlobID =
+                        SavedOrganization.LogoBlobID;
+                }
+
+                if (EtransferEmailChanged)
+                {
+                    InvalidateEtransferAliasAvailability();
+                }
+
+                ValidationMessage =
+                    saveResult.Message;
+
+                return;
+            }
+
+            CurrentOrganization.AdminEmailVerificationToken =
+                null;
+
+            CurrentOrganization.OrganizationEmailVerificationToken =
+                null;
+
+            CurrentOrganization.ContactEmailVerificationToken =
+                null;
+
+            CurrentOrganization.EtransferEmailVerificationToken =
+                null;
+
+            SavedOrganization =
+                            CurrentOrganization.Clone();
+
+            SyncVerifiedEmailState();
+            SyncEtransferAliasState();
+
+            PendingLogoFile =
+                null;
+
+            ValidationMessage =
+                saveResult.Message;
+
+            OrganizationStateService.UpdateOrganization(
+                CurrentOrganization);
+
+            if (!string.IsNullOrWhiteSpace(
+                    LogoPreviewUrl) &&
+                !string.IsNullOrWhiteSpace(
+                    CurrentOrganization.LogoBlobID))
+            {
+                OrganizationStateService.UpdateLogoDataUrl(
+                    CurrentOrganization.LogoBlobID,
+                    LogoPreviewUrl);
+            }
+
+            var auditSaved =
+                await OrganizationService
+                    .PostOrganizationAuditAsync(
+                        EMAOrganizationID,
+                        CurrentOrganization);
+
+            if (!auditSaved)
+            {
+                ValidationMessage =
+                    "Organization saved, but the audit could not be saved.";
+
+                return;
+            }
+
+            await LoadAuditsAsync();
+        }
+        catch
+        {
+            ValidationMessage =
+                "The organization could not be saved. Please try again.";
+        }
+        finally
+        {
+            IsSaving =
+                false;
+        }
+    }
+
+    private async Task ApplyCurrentAsync()
+    {
+        if (HistoryIndex < 0 ||
+            HistoryIndex >= Audits.Count)
+        {
+            return;
+        }
+
+        ClearPendingLogoSelection();
+
+        var audit =
+            Audits[HistoryIndex];
+
+        CurrentOrganization =
+            audit.Payload.Clone();
+
+        // Donation Email is maintained by /etransfers now, not by Basic Info.
+        // Historical Basic Info snapshots must not restore an older alias.
+        CurrentOrganization.EtransferEmailAddress =
+            SavedOrganization.EtransferEmailAddress;
+
+        CurrentOrganization.EtransferEmailVerified =
+            SavedOrganization.EtransferEmailVerified;
+
+        CurrentOrganization.AdminEmailVerificationToken =
+            null;
+
+        CurrentOrganization.OrganizationEmailVerificationToken =
+            null;
+
+        CurrentOrganization.ContactEmailVerificationToken =
+            null;
+
+        CurrentOrganization.EtransferEmailVerificationToken =
+            null;
+
+        SyncVerifiedEmailState();
+        SyncEtransferAliasState();
+
+        AuditDateTime =
+            audit.Timestamp.ToString(
+                "yyyy-MM-dd HH:mm:ss");
+
+        await LoadLogoPreviewAsync();
+    }
+
+    private async Task GoOlderAsync()
+    {
+        if (!CanGoOlder)
+        {
+            return;
+        }
+
+        HistoryIndex--;
+
+        await ApplyCurrentAsync();
+    }
+
+    private async Task GoNewerAsync()
+    {
+        if (!CanGoNewer)
+        {
+            return;
+        }
+
+        HistoryIndex++;
+
+        await ApplyCurrentAsync();
+    }
+
+    private bool ValidateOrganization()
+    {
+        var missingFields =
+            new List<string>();
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.OrganizationName))
+        {
+            missingFields.Add(
+                "Organization Name");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.OrganizationEmail))
+        {
+            missingFields.Add(
+                "Organization Email");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.OrganizationPhone))
+        {
+            missingFields.Add(
+                "Organization Phone #");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.OrganizationWebsite))
+        {
+            missingFields.Add(
+                "Website URL");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.AdminName))
+        {
+            missingFields.Add(
+                "Admin Contact Name");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.AdminPhone))
+        {
+            missingFields.Add(
+                "Admin Phone #");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.AdminEmail))
+        {
+            missingFields.Add(
+                "Admin Email");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.Address))
+        {
+            missingFields.Add(
+                "Address");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.City))
+        {
+            missingFields.Add(
+                "City/Town");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.ProvinceStateCode))
+        {
+            missingFields.Add(
+                "Prov/State");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.PostalCode))
+        {
+            missingFields.Add(
+                "Postal/Zip");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.CRARegisteredCharityNumber))
+        {
+            missingFields.Add(
+                "CRA Charity #");
+        }
+
+        if (CurrentOrganization.ChMSID is null or <= 0)
+        {
+            missingFields.Add(
+                "Current ChMS");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.DateFormatID))
+        {
+            missingFields.Add(
+                "Date Format");
+        }
+
+        if (missingFields.Count > 0)
+        {
+            SelectTabForMissingFields(
+                missingFields);
+
+            ValidationMessage =
+                missingFields.Count == 1
+                    ? $"Please complete the required field: {missingFields[0]}."
+                    : $"Please complete the required fields: {string.Join(", ", missingFields)}.";
+
+            return false;
+        }
+
+        if (!IsValidEmail(
+                CurrentOrganization.OrganizationEmail))
+        {
+            SelectedContactType =
+                ContactType.Organization;
+
+            ValidationMessage =
+                "Please enter a valid organization email address.";
+
+            return false;
+        }
+
+        if (!IsValidEmail(
+                CurrentOrganization.AdminEmail))
+        {
+            SelectedContactType =
+                ContactType.Admin;
+
+            ValidationMessage =
+                "Please enter a valid admin email address.";
+
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+                CurrentOrganization.ContactEmail) &&
+            !IsValidEmail(
+                CurrentOrganization.ContactEmail))
+        {
+            SelectedContactType =
+                ContactType.Contact;
+
+            ValidationMessage =
+                "Please enter a valid contact email address.";
+
+            return false;
+        }
+
+        var adminEmailChanged =
+            !EmailsMatch(
+                CurrentOrganization.AdminEmail,
+                SavedOrganization.AdminEmail);
+
+        if (adminEmailChanged &&
+            !IsAdminEmailVerified)
+        {
+            SelectedContactType =
+                ContactType.Admin;
+
+            ValidationMessage =
+                            "Please verify the new admin email address.";
+
+            return false;
+        }
+
+        var organizationEmailChanged =
+            !EmailsMatch(
+                CurrentOrganization.OrganizationEmail,
+                SavedOrganization.OrganizationEmail);
+
+        if (organizationEmailChanged &&
+            !IsOrganizationEmailVerified)
+        {
+            SelectedContactType =
+                ContactType.Organization;
+
+            ValidationMessage =
+                "Please verify the new organization email address.";
+
+            return false;
+        }
+
+        var contactEmailChanged =
+            !EmailsMatch(
+                CurrentOrganization.ContactEmail,
+                SavedOrganization.ContactEmail);
+
+        if (contactEmailChanged &&
+            !string.IsNullOrWhiteSpace(
+                CurrentOrganization.ContactEmail) &&
+            !IsContactEmailVerified)
+        {
+            SelectedContactType =
+                ContactType.Contact;
+
+            ValidationMessage =
+                "Please verify the new contact email address.";
+
+            return false;
+        }
+
+        ValidationMessage =
+            string.Empty;
+
+        return true;
+    }
+
+    private void SelectTabForMissingFields(
+        List<string> missingFields)
+    {
+        if (missingFields.Contains(
+                "Admin Contact Name") ||
+            missingFields.Contains(
+                "Admin Phone #") ||
+            missingFields.Contains(
+                "Admin Email"))
+        {
+            SelectedContactType =
+                ContactType.Admin;
+
+            return;
+        }
+
+        if (missingFields.Contains(
+                "Organization Name") ||
+            missingFields.Contains(
+                "Organization Phone #") ||
+            missingFields.Contains(
+                "Organization Email"))
+        {
+            SelectedContactType =
+                ContactType.Organization;
+        }
+    }
+
+    private async Task OnLogoSelectedAsync(
+        InputFileChangeEventArgs e)
+    {
+        if (IsAuditView)
+        {
+            return;
+        }
+
+        PendingLogoFile =
+            null;
+
+        LogoUploadMessage =
+            string.Empty;
+
+        ValidationMessage =
+            string.Empty;
+
+        var file =
+            e.File;
+
+        if (file is null)
+        {
+            LogoUploadMessage =
+                "No logo selected.";
+
+            await LoadLogoPreviewAsync();
+
+            return;
+        }
+
+        if (!AllowedLogoContentTypes.Contains(
+                file.ContentType))
+        {
+            LogoUploadMessage =
+                "Logo must be PNG, JPG, WEBP, or GIF.";
+
+            await LoadLogoPreviewAsync();
+
+            return;
+        }
+
+        if (file.Size > MaxLogoFileSize)
+        {
+            LogoUploadMessage =
+                "Logo must be 2 MB or smaller.";
+
+            await LoadLogoPreviewAsync();
+
+            return;
+        }
+
+        try
+        {
+            PendingLogoFile =
+                file;
+
+            LogoPreviewUrl =
+                await BuildLogoPreviewDataUrlAsync(
+                    file);
+
+            LogoUploadMessage =
+                "Logo selected. Press Save to upload it.";
+        }
+        catch
+        {
+            PendingLogoFile =
+                null;
+
+            await LoadLogoPreviewAsync();
+
+            LogoUploadMessage =
+                "Logo preview failed.";
+        }
+    }
+
+    private async Task<string>
+        BuildLogoPreviewDataUrlAsync(
+            IBrowserFile file)
+    {
+        await using var stream =
+            file.OpenReadStream(
+                MaxLogoFileSize);
+
+        using var memoryStream =
+            new MemoryStream();
+
+        await stream.CopyToAsync(
+            memoryStream);
+
+        return
+            $"data:{file.ContentType};base64," +
+            Convert.ToBase64String(
+                memoryStream.ToArray());
+    }
+
+    private async Task LoadLogoPreviewAsync()
+    {
+        LogoPreviewUrl =
+            string.Empty;
+
+        if (string.IsNullOrWhiteSpace(
+                CurrentOrganization.LogoBlobID))
+        {
+            return;
+        }
+
+        if (OrganizationStateService.TryGetLogoDataUrl(
+                CurrentOrganization.LogoBlobID,
+                out var cachedLogoDataUrl))
+        {
+            LogoPreviewUrl =
+                cachedLogoDataUrl;
+
+            return;
+        }
+
+        var dataUrl =
+            await BlobService.BlobGetDataUrlAsync(
+                CurrentOrganization.LogoBlobID);
+
+        if (!string.IsNullOrWhiteSpace(
+                dataUrl))
+        {
+            LogoPreviewUrl =
+                dataUrl;
+
+            OrganizationStateService.UpdateLogoDataUrl(
+                CurrentOrganization.LogoBlobID,
+                dataUrl);
+        }
+    }
+
+    private void ClearPendingLogoSelection()
+    {
+        PendingLogoFile =
+            null;
+
+        LogoUploadMessage =
+            string.Empty;
+    }
+
+    private static bool OrganizationsAreEqual(
+        OrganizationSummary first,
+        OrganizationSummary second)
+    {
+        return
+            first.OrganizationName ==
+                second.OrganizationName &&
+
+            first.OrganizationEmail ==
+                second.OrganizationEmail &&
+
+            first.OrganizationEmailVerified ==
+                second.OrganizationEmailVerified &&
+
+            first.OrganizationPhone ==
+                second.OrganizationPhone &&
+
+            first.OrganizationWebsite ==
+                second.OrganizationWebsite &&
+
+            first.LogoBlobID ==
+                second.LogoBlobID &&
+
+            first.AdminName ==
+                second.AdminName &&
+
+            first.AdminPhone ==
+                second.AdminPhone &&
+
+            first.AdminEmail ==
+                second.AdminEmail &&
+
+            first.AdminEmailVerified ==
+                second.AdminEmailVerified &&
+
+            first.ContactName ==
+                second.ContactName &&
+
+            first.ContactPhone ==
+                second.ContactPhone &&
+
+            first.ContactEmail ==
+                second.ContactEmail &&
+
+            first.ContactEmailVerified ==
+                second.ContactEmailVerified &&
+
+            first.Address ==
+                second.Address &&
+
+            first.City ==
+                second.City &&
+
+            first.ProvinceStateCode ==
+                second.ProvinceStateCode &&
+
+            first.PostalCode ==
+                second.PostalCode &&
+
+            first.EtransferEmailAddress ==
+                second.EtransferEmailAddress &&
+
+            first.EtransferEmailVerified ==
+                second.EtransferEmailVerified &&
+
+            first.CRARegisteredCharityNumber ==
+                second.CRARegisteredCharityNumber &&
+
+            first.AccountingSoftwareID ==
+                second.AccountingSoftwareID && first.ChMSID ==
+                second.ChMSID &&
+
+            first.DateFormatID ==
+                second.DateFormatID &&
+
+            first.OrganizationStatusID ==
+                second.OrganizationStatusID;
+    }
+
+    private void OpenEmailVerification(
+        EmailVerificationPurpose purpose,
+        string? emailAddress)
+    {
+        if (EMAOrganizationID <= 0)
+        {
+            ValidationMessage =
+                "No organization is selected. Please sign in again.";
+
+            return;
+        }
+
+        if (!IsValidEmail(
+                emailAddress))
+        {
+            ValidationMessage =
+                "Please enter a valid email address first.";
+
+            return;
+        }
+
+        ValidationMessage =
+            string.Empty;
+
+        ActiveVerificationPurpose =
+            purpose;
+
+        VerificationEmailAddress =
+            emailAddress!.Trim();
+
+        IsVerificationDialogOpen =
+            true;
+    }
+
+    private void CloseVerificationDialog()
+    {
+        IsVerificationDialogOpen =
+            false;
+    }
+
+    private void OnEmailVerified(
+        EmailVerificationCompleted completed)
+    {
+        switch (ActiveVerificationPurpose)
+        {
+            case EmailVerificationPurpose.OrganizationAdminEmail:
+                CompleteAdminEmailVerification(
+                    completed);
+                break;
+
+            case EmailVerificationPurpose.OrganizationEmail:
+                CompleteOrganizationEmailVerification(
+                    completed);
+                break;
+
+            case EmailVerificationPurpose.OrganizationContactEmail:
+                CompleteContactEmailVerification(
+                    completed);
+                break;
+        }
+    }
+
+    private void CompleteAdminEmailVerification(
+        EmailVerificationCompleted completed)
+    {
+        if (!EmailsMatch(
+                CurrentOrganization.AdminEmail,
+                completed.EmailAddress))
+        {
+            ValidationMessage =
+                "The admin email changed. Please verify it again.";
+
+            return;
+        }
+
+        VerifiedAdminEmail =
+            completed.EmailAddress;
+
+        CurrentOrganization.AdminEmailVerificationToken =
+            completed.VerificationToken;
+
+        CurrentOrganization.AdminEmailVerified =
+            'Y';
+
+        ValidationMessage =
+            "Admin email verified. Press Save to keep the change.";
+    }
+
+    private void CompleteOrganizationEmailVerification(
+        EmailVerificationCompleted completed)
+    {
+        if (!EmailsMatch(
+                CurrentOrganization.OrganizationEmail,
+                completed.EmailAddress))
+        {
+            ValidationMessage =
+                "The organization email changed. Please verify it again.";
+
+            return;
+        }
+
+        VerifiedOrganizationEmail =
+            completed.EmailAddress;
+
+        CurrentOrganization.OrganizationEmailVerificationToken =
+            completed.VerificationToken;
+
+        CurrentOrganization.OrganizationEmailVerified =
+            'Y';
+
+        ValidationMessage =
+            "Organization email verified. Press Save to keep the change.";
+    }
+
+    private void CompleteContactEmailVerification(
+        EmailVerificationCompleted completed)
+    {
+        if (!EmailsMatch(
+                CurrentOrganization.ContactEmail,
+                completed.EmailAddress))
+        {
+            ValidationMessage =
+                "The contact email changed. Please verify it again.";
+
+            return;
+        }
+
+        VerifiedContactEmail =
+            completed.EmailAddress;
+
+        CurrentOrganization.ContactEmailVerificationToken =
+            completed.VerificationToken;
+
+        CurrentOrganization.ContactEmailVerified =
+            'Y';
+
+        ValidationMessage =
+            "Contact email verified. Press Save to keep the change.";
+    }
+
+    private void OnAdminEmailChanged()
+    {
+        var restoredSavedEmail =
+            EmailsMatch(
+                CurrentOrganization.AdminEmail,
+                SavedOrganization.AdminEmail);
+
+        if (restoredSavedEmail &&
+            SavedOrganization.AdminEmailVerified == 'Y')
+        {
+            VerifiedAdminEmail =
+                SavedOrganization.AdminEmail
+                ?? string.Empty;
+
+            CurrentOrganization.AdminEmailVerified =
+                'Y';
+
+            CurrentOrganization.AdminEmailVerificationToken =
+                null;
+
+            return;
+        }
+
+        if (!EmailsMatch(
+                CurrentOrganization.AdminEmail,
+                VerifiedAdminEmail))
+        {
+            VerifiedAdminEmail =
+                string.Empty;
+
+            CurrentOrganization.AdminEmailVerified =
+                'N';
+
+            CurrentOrganization.AdminEmailVerificationToken =
+                null;
+        }
+    }
+
+    private void OnOrganizationEmailChanged()
+    {
+        var restoredSavedEmail =
+            EmailsMatch(
+                CurrentOrganization.OrganizationEmail,
+                SavedOrganization.OrganizationEmail);
+
+        if (restoredSavedEmail &&
+            SavedOrganization.OrganizationEmailVerified == 'Y')
+        {
+            VerifiedOrganizationEmail =
+                SavedOrganization.OrganizationEmail
+                ?? string.Empty;
+
+            CurrentOrganization.OrganizationEmailVerified =
+                'Y';
+
+            CurrentOrganization.OrganizationEmailVerificationToken =
+                null;
+
+            return;
+        }
+
+        if (!EmailsMatch(
+                CurrentOrganization.OrganizationEmail,
+                VerifiedOrganizationEmail))
+        {
+            VerifiedOrganizationEmail =
+                string.Empty;
+
+            CurrentOrganization.OrganizationEmailVerified =
+                'N';
+
+            CurrentOrganization.OrganizationEmailVerificationToken =
+                null;
+        }
+    }
+
+    private void OnContactEmailChanged()
+    {
+        var restoredSavedEmail =
+            EmailsMatch(
+                CurrentOrganization.ContactEmail,
+                SavedOrganization.ContactEmail);
+
+        if (restoredSavedEmail &&
+            SavedOrganization.ContactEmailVerified == 'Y')
+        {
+            VerifiedContactEmail =
+                SavedOrganization.ContactEmail
+                ?? string.Empty;
+
+            CurrentOrganization.ContactEmailVerified =
+                'Y';
+
+            CurrentOrganization.ContactEmailVerificationToken =
+                null;
+
+            return;
+        }
+
+        if (!EmailsMatch(
+                CurrentOrganization.ContactEmail,
+                VerifiedContactEmail))
+        {
+            VerifiedContactEmail =
+                string.Empty;
+
+            CurrentOrganization.ContactEmailVerified =
+                'N';
+
+            CurrentOrganization.ContactEmailVerificationToken =
+                null;
+        }
+    }
+
+    private void OnEtransferAliasPrefixChanged(
+        ChangeEventArgs args)
+    {
+        var enteredValue =
+            args.Value?.ToString()
+            ?? string.Empty;
+
+        var domainSuffix =
+            $"@{EtransferEmailDomain}";
+
+        if (enteredValue.EndsWith(
+                domainSuffix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            enteredValue =
+                enteredValue[..^domainSuffix.Length];
+        }
+
+        EtransferAliasPrefix =
+            enteredValue
+                .Trim()
+                .ToLowerInvariant();
+
+        CurrentOrganization.EtransferEmailAddress =
+            string.IsNullOrWhiteSpace(
+                EtransferAliasPrefix)
+                ? null
+                : $"{EtransferAliasPrefix}@{EtransferEmailDomain}";
+
+        CurrentOrganization.EtransferEmailVerificationToken =
+            null;
+
+        if (EmailsMatch(
+                CurrentOrganization.EtransferEmailAddress,
+                SavedOrganization.EtransferEmailAddress))
+        {
+            CurrentOrganization.EtransferEmailVerified =
+                SavedOrganization.EtransferEmailVerified;
+
+            if (SavedOrganization.EtransferEmailVerified == 'Y')
+            {
+                CheckedEtransferAliasPrefix =
+                    NormalizeAliasPrefixForComparison(
+                        EtransferAliasPrefix);
+
+                EtransferAliasIsAvailable =
+                    true;
+
+                return;
+            }
+        }
+        else
+        {
+            CurrentOrganization.EtransferEmailVerified =
+                'N';
+        }
+
+        InvalidateEtransferAliasAvailability();
+    }
+
+    private async Task CheckEtransferAliasAvailabilityAsync()
+    {
+        if (IsAuditView ||
+            IsSaving ||
+            IsCheckingEtransferAlias)
+        {
+            return;
+        }
+
+        if (!TryBuildEtransferEmailAddress(
+                EtransferAliasPrefix,
+                out var emailAddress,
+                out var validationMessage))
+        {
+            InvalidateEtransferAliasAvailability();
+
+            ValidationMessage =
+                validationMessage;
+
+            return;
+        }
+
+        IsCheckingEtransferAlias =
+            true;
+
+        ValidationMessage =
+            string.Empty;
+
+        try
+        {
+            var normalizedPrefix =
+                emailAddress[..emailAddress.IndexOf('@')];
+
+            EtransferAliasPrefix =
+                normalizedPrefix;
+
+            CurrentOrganization.EtransferEmailAddress =
+                emailAddress;
+
+            var result =
+                await OrganizationService
+                    .CheckEtransferAliasAvailabilityAsync(
+                        EMAOrganizationID,
+                        normalizedPrefix);
+
+            if (!result.CheckSucceeded)
+            {
+                InvalidateEtransferAliasAvailability();
+
+                ValidationMessage =
+                    result.Message;
+
+                return;
+            }
+
+            CheckedEtransferAliasPrefix =
+                NormalizeAliasPrefixForComparison(
+                    result.Prefix);
+
+            EtransferAliasIsAvailable =
+                result.IsAvailable;
+
+            CurrentOrganization.EtransferEmailVerified =
+                result.IsAvailable
+                    ? 'Y'
+                    : 'N';
+
+            CurrentOrganization.EtransferEmailVerificationToken =
+                null;
+
+            ValidationMessage =
+                result.Message;
+        }
+        finally
+        {
+            IsCheckingEtransferAlias =
+                false;
+        }
+    }
+
+    private void SyncEtransferAliasState()
+    {
+        EtransferAliasPrefix =
+            ExtractEtransferAliasPrefix(
+                CurrentOrganization.EtransferEmailAddress);
+
+        CheckedEtransferAliasPrefix =
+            string.Empty;
+
+        EtransferAliasIsAvailable =
+            null;
+
+        if (CurrentOrganization.EtransferEmailVerified == 'Y' &&
+            EmailsMatch(
+                CurrentOrganization.EtransferEmailAddress,
+                SavedOrganization.EtransferEmailAddress) &&
+            !string.IsNullOrWhiteSpace(
+                EtransferAliasPrefix))
+        {
+            CheckedEtransferAliasPrefix =
+                NormalizeAliasPrefixForComparison(
+                    EtransferAliasPrefix);
+
+            EtransferAliasIsAvailable =
+                true;
+        }
+    }
+
+    private void InvalidateEtransferAliasAvailability()
+    {
+        CheckedEtransferAliasPrefix =
+            string.Empty;
+
+        EtransferAliasIsAvailable =
+            null;
+
+        CurrentOrganization.EtransferEmailVerified =
+            'N';
+
+        CurrentOrganization.EtransferEmailVerificationToken =
+            null;
+    }
+
+    private static string ExtractEtransferAliasPrefix(
+        string? emailAddress)
+    {
+        if (string.IsNullOrWhiteSpace(
+                emailAddress))
+        {
+            return string.Empty;
+        }
+
+        var normalized =
+            emailAddress
+                .Trim()
+                .ToLowerInvariant();
+
+        var separatorIndex =
+            normalized.IndexOf('@');
+
+        return separatorIndex > 0
+            ? normalized[..separatorIndex]
+            : normalized;
+    }
+
+    private static bool TryBuildEtransferEmailAddress(
+        string? prefix,
+        out string emailAddress,
+        out string validationMessage)
+    {
+        emailAddress =
+            string.Empty;
+
+        validationMessage =
+            string.Empty;
+
+        var normalizedPrefix =
+            NormalizeAliasPrefixForComparison(
+                prefix);
+
+        if (normalizedPrefix.Length > MaximumEtransferAliasLength)
+        {
+            validationMessage =
+                $"The donation email prefix must be less than {MaximumEtransferAliasLength} characters.";
+
+            return false;
+        }
+
+        if (!char.IsLetterOrDigit(
+                normalizedPrefix[0]) ||
+            !char.IsLetterOrDigit(
+                normalizedPrefix[^1]))
+        {
+            validationMessage =
+                "The donation email prefix must start and end with a letter or number.";
+
+            return false;
+        }
+
+        foreach (var character in normalizedPrefix)
+        {
+            if (!char.IsLetterOrDigit(character) &&
+                character is not '.' and not '-' and not '_')
+            {
+                validationMessage =
+                    "The donation email prefix can only contain letters, numbers, periods, hyphens, and underscores.";
+
+                return false;
+            }
+        }
+
+        if (normalizedPrefix.Contains(
+                "..",
+                StringComparison.Ordinal))
+        {
+            validationMessage =
+                "The donation email prefix cannot contain consecutive periods.";
+
+            return false;
+        }
+
+        emailAddress =
+            $"{normalizedPrefix}@{EtransferEmailDomain}";
+
+        return true;
+    }
+
+    private static string NormalizeAliasPrefixForComparison(
+        string? prefix) =>
+        prefix?
+            .Trim()
+            .ToLowerInvariant()
+        ?? string.Empty;
+
+    private void SyncVerifiedEmailState()
+    {
+        VerifiedAdminEmail =
+            CurrentOrganization.AdminEmailVerified == 'Y'
+                ? CurrentOrganization.AdminEmail
+                    ?? string.Empty
+                : string.Empty;
+
+        VerifiedOrganizationEmail =
+            CurrentOrganization.OrganizationEmailVerified == 'Y'
+                ? CurrentOrganization.OrganizationEmail
+                    ?? string.Empty
+                : string.Empty;
+
+        VerifiedContactEmail =
+            CurrentOrganization.ContactEmailVerified == 'Y'
+                ? CurrentOrganization.ContactEmail
+                    ?? string.Empty
+                : string.Empty;
+    }
+
+    private static bool EmailsMatch(
+        string? first,
+        string? second)
+    {
+        return string.Equals(
+            NormalizeEmail(first),
+            NormalizeEmail(second),
+            StringComparison.Ordinal);
+    }
+
+    private static string NormalizeEmail(
+        string? emailAddress)
+    {
+        return
+            emailAddress?
+                .Trim()
+                .ToLowerInvariant()
+            ?? string.Empty;
+    }
+
+    private static bool IsValidEmail(
+        string? emailAddress)
+    {
+        return
+            !string.IsNullOrWhiteSpace(
+                emailAddress) &&
+            System.Net.Mail.MailAddress.TryCreate(
+                emailAddress.Trim(),
+                out _);
+    }
+}

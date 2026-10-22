@@ -1,0 +1,478 @@
+@inherits Microsoft.AspNetCore.Components.LayoutComponentBase
+@implements IDisposable
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationStateService OrganizationState
+@inject IOrganizationService OrganizationService
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject IMobileMenuStateService MobileMenuState
+@inject NavigationManager Navigation
+
+@if (!_sessionReady)
+{
+    <div class="session-loading"
+         role="status">
+        Restoring session...
+    </div>
+}
+else if (SessionState.CurrentSession is { } session)
+{
+    @if (IsEmbeddedSetupOverlay())
+    {
+        <main class="ema-embedded-setup-content">
+            @Body
+        </main>
+    }
+    else
+    {
+        <div class="ema-shell">
+            @if (IsBrochureCategory(
+                     session.CurrentCategoryID))
+            {
+                <BrochureHeader ShowCategorySwitcher="true"
+                                 CurrentMenuItem="@_currentMenuItem"
+                                 LogoClick="GoToCurrentCategoryLandingAsync" />
+            }
+            else
+            {
+                <header class="app-header">
+                    <div class="app-header-logo-slot">
+                        <button type="button"
+                                class="app-header-logo-button app-header-logo-desktop"
+                                title="Go to current category landing page"
+                                aria-label="Go to current category landing page"
+                                @onclick="GoToCurrentCategoryLandingAsync">
+                            <img src="images/ema-logo.png"
+                                 alt="@AppBranding.ApplicationName"
+                                 class="app-header-logo" />
+                        </button>
+
+                        <button type="button"
+                                class="app-header-logo-button app-header-logo-mobile"
+                                title="@(MobileMenuState.IsExpanded ? "Hide menu" : "Show menu")"
+                                aria-label="@(MobileMenuState.IsExpanded ? "Hide menu" : "Show menu")"
+                                aria-expanded="@MobileMenuState.IsExpanded"
+                                @onclick="ToggleMobileMenu">
+                            @if (MobileMenuState.IsExpanded)
+                            {
+                                <img src="images/ema-logo.png"
+                                     alt="@AppBranding.ApplicationName"
+                                     class="app-header-logo" />
+                            }
+                            else
+                            {
+                                <span class="app-header-show-menu">
+                                    Show Menu
+                                </span>
+                            }
+                        </button>
+                    </div>
+
+                    <section class="org-banner">
+                        @OrgName
+                    </section>
+
+                    <div class="app-header-actions">
+                        <MenuItemPageActions CurrentMenuItem="@_currentMenuItem" />
+                        <ScreenLevelActions CurrentMenuItem="@_currentMenuItem" />
+                        <CategorySwitcher CurrentMenuItem="@_currentMenuItem" />
+                    </div>
+                </header>
+            }
+
+            <DataDrivenNavigation @key="session.CurrentCategoryID"
+                                  EMAOrganizationID="@session.EMAOrganizationID"
+                                  UserId="@session.ActorID"
+                                  CategoryId="@session.CurrentCategoryID"
+                                  IsDonorSession="@session.IsDonorSession"
+                                  CurrentMenuItemChanged="HandleCurrentMenuItemChanged" />
+
+            <main class="@(IsBrochureCategory(
+                               session.CurrentCategoryID)
+                               ? "brochure-content"
+                               : null)">
+                @Body
+            </main>
+        </div>
+    }
+}
+else if (_showPublicLayoutWithoutSession)
+{
+    <LayoutView Layout="@typeof(PublicLayout)">
+        @Body
+    </LayoutView>
+}
+
+@code {
+    private const string PlaceholderName =
+        "Organization";
+
+    private string OrgName =
+        PlaceholderName;
+
+    private bool _sessionReady;
+
+    private bool _showPublicLayoutWithoutSession;
+
+    private MenuItemDto? _currentMenuItem;
+
+    protected override void OnInitialized()
+    {
+        SessionState.OnChange +=
+            HandleStateChanged;
+
+        OrganizationState.OnChange +=
+            HandleStateChanged;
+
+        MobileMenuState.OnChange +=
+            HandleMobileMenuChanged;
+
+        SetOrgNameFromState();
+    }
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await SessionState
+            .InitializeAsync();
+
+        if (SessionState.CurrentSession is { } session)
+        {
+            if (session.IsDonorSession)
+            {
+                // The full organization endpoint contains administrative
+                // and banking fields and is intentionally organization-user only.
+                OrganizationState.Clear();
+            }
+            else
+            {
+                await RestoreOrganizationAsync(
+                    session.EMAOrganizationID);
+            }
+        }
+
+        SetOrgNameFromState();
+
+        _sessionReady = true;
+
+        if (SessionState.CurrentSession is null)
+        {
+            _showPublicLayoutWithoutSession =
+                await IsPublicNoSessionRouteAsync();
+
+            if (!_showPublicLayoutWithoutSession)
+            {
+                NavigateToLoginWithReturnUrl();
+            }
+
+            StateHasChanged();
+
+            return;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreOrganizationAsync(
+        int EMAOrganizationID)
+    {
+        try
+        {
+            var organization =
+                await OrganizationService
+                    .GetOrganizationAsync(
+                        EMAOrganizationID);
+
+            if (organization is not null)
+            {
+                OrganizationState
+                    .UpdateOrganization(
+                        organization);
+            }
+        }
+        catch
+        {
+            // The stored organization name can still
+            // be displayed if this request fails.
+        }
+    }
+
+    private void HandleStateChanged()
+    {
+        if (!_sessionReady)
+        {
+            return;
+        }
+
+        SetOrgNameFromState();
+
+        _ = InvokeAsync(async () =>
+        {
+            if (SessionState.CurrentSession is null)
+            {
+                MobileMenuState.Collapse();
+                _currentMenuItem = null;
+
+                _showPublicLayoutWithoutSession =
+                    await IsPublicNoSessionRouteAsync();
+
+                if (!_showPublicLayoutWithoutSession)
+                {
+                    NavigateToLoginWithReturnUrl();
+                }
+
+                StateHasChanged();
+
+                return;
+            }
+
+            _showPublicLayoutWithoutSession = false;
+
+            StateHasChanged();
+        });
+    }
+
+    private void SetOrgNameFromState()
+    {
+        var session =
+            SessionState.CurrentSession;
+
+        var organizationName =
+            session?.CurrentCategoryID ==
+                MenuNavigationConstants.SupportCategoryID
+                ? AppBranding.InsiderName
+                : session?.IsDonorSession == true
+                    ? session.OrganizationName
+                    : OrganizationState
+                        .CurrentOrganization
+                        ?.OrganizationName;
+
+        if (string.IsNullOrWhiteSpace(
+                organizationName))
+        {
+            organizationName =
+                session?.OrganizationName;
+        }
+
+        OrgName =
+            string.IsNullOrWhiteSpace(
+                organizationName)
+                ? PlaceholderName
+                : organizationName;
+    }
+
+    private async Task GoToCurrentCategoryLandingAsync()
+    {
+        await SessionState
+            .InitializeAsync();
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            if (!IsPublicNoSessionRoute())
+            {
+                NavigateToLoginWithReturnUrl();
+            }
+
+            return;
+        }
+
+        var landingUrl =
+            session.IsDonorSession
+                ? await CategoryLandingPageService
+                    .GetDonorLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.ActorID,
+                        session.CurrentCategoryID)
+                : await CategoryLandingPageService
+                    .GetLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.UserID,
+                        session.CurrentCategoryID);
+
+        if (!IsUnavailableLandingUrl(
+                landingUrl))
+        {
+            Navigation.NavigateTo(
+                landingUrl,
+                replace: true);
+        }
+    }
+
+    private static bool IsUnavailableLandingUrl(
+        string? landingUrl)
+    {
+        if (string.IsNullOrWhiteSpace(
+                landingUrl))
+        {
+            return true;
+        }
+
+        var normalized =
+            landingUrl.Trim().TrimEnd('/');
+
+        return normalized.Equals(
+                   "/access-denied",
+                   StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals(
+                   "/app",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void NavigateToLoginWithReturnUrl()
+    {
+        var currentUri =
+            new Uri(Navigation.Uri);
+
+        var currentLocalUrl =
+            $"{currentUri.AbsolutePath}{currentUri.Query}";
+
+        var loginUrl =
+            SessionState.SessionExpired
+                ? EMA.App.Utilities.LoginReturnUrl
+                    .BuildSessionExpiredLoginUrl(
+                        currentLocalUrl)
+                : EMA.App.Utilities.LoginReturnUrl
+                    .BuildLoginUrl(
+                        currentLocalUrl);
+
+        Navigation.NavigateTo(
+            loginUrl,
+            replace: true);
+    }
+
+
+    private void ToggleMobileMenu()
+    {
+        MobileMenuState.Toggle();
+    }
+
+    private void HandleMobileMenuChanged()
+    {
+        _ = InvokeAsync(
+            StateHasChanged);
+    }
+
+    private void HandleCurrentMenuItemChanged(
+        MenuItemDto? menuItem)
+    {
+        _currentMenuItem = menuItem;
+    }
+
+    private bool IsEmbeddedSetupOverlay()
+    {
+        var query =
+            new Uri(Navigation.Uri)
+                .Query
+                .TrimStart('?');
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        return query
+            .Split(
+                '&',
+                StringSplitOptions.RemoveEmptyEntries)
+            .Any(part =>
+                part.Equals(
+                    "emaOverlay=1",
+                    StringComparison.OrdinalIgnoreCase) ||
+                part.Equals(
+                    "emaOverlay=true",
+                    StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsBrochureCategory(
+        int categoryID)
+    {
+        return categoryID ==
+               MenuNavigationConstants.BrochureCategoryID;
+    }
+
+    private async Task<bool> IsPublicNoSessionRouteAsync()
+    {
+        if (IsPublicNoSessionRoute())
+        {
+            return true;
+        }
+
+        var currentPath =
+            new Uri(Navigation.Uri)
+                .AbsolutePath;
+
+        try
+        {
+            return await CategoryLandingPageService
+                .IsPublicRouteAsync(
+                    currentPath);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsPublicNoSessionRoute()
+    {
+        var relativePath =
+            Navigation
+                .ToBaseRelativePath(
+                    Navigation.Uri)
+                .Split('?')[0]
+                .Trim('/')
+                .ToLowerInvariant();
+
+        if (relativePath is
+    "" or
+    "login" or
+    "organization-login" or
+    "donor-login" or
+    "donor-register" or
+    "giving-history" or
+    "user-sandbox" or
+    "explore-ema-instantly" or
+    "about" or
+    "faqs" or
+    "access-denied")
+        {
+            return true;
+        }
+
+        return relativePath.StartsWith(
+                   "donorlogin/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               relativePath.StartsWith(
+                   "donor-register/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               relativePath.StartsWith(
+                   "donor-directed-changes/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               relativePath.StartsWith(
+                   "explore-ema-instantly/",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        SessionState.OnChange -=
+            HandleStateChanged;
+
+        OrganizationState.OnChange -=
+            HandleStateChanged;
+
+        MobileMenuState.OnChange -=
+            HandleMobileMenuChanged;
+    }
+}

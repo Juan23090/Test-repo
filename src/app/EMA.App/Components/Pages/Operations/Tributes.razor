@@ -1,0 +1,207 @@
+@page "/tribute-report"
+
+@using System.Globalization
+@using EMA.App.Services
+
+@inject ITributeReportService TributeReportService
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject IUserSessionStateService SessionState
+
+<div class="reports-page">
+    <nav class="sub-nav" aria-label="Report type navigation">
+    </nav>
+
+    <main class="reports-body" aria-label="Tribute report">
+        <section class="tribute-filters" aria-label="Tribute report filters">
+            <div class="tribute-field">
+                <span class="tribute-label">Start Date:</span>
+                <input type="date" @bind="StartDate" @bind:after="OnDateChangedAsync" onclick="this.showPicker()" />
+            </div>
+
+            <div class="tribute-field">
+                <span class="tribute-label">End Date:</span>
+                <input type="date" @bind="EndDate" @bind:after="OnDateChangedAsync" onclick="this.showPicker()" />
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text error">@ErrorMessage</p>
+        }
+
+        @if (IsLoading)
+        {
+            <p class="status-text">Loading report...</p>
+        }
+        else if (ReportData is { Count: > 0 })
+        {
+            <p class="tribute-report-range">Tribute Report for @ActiveStartDate - @ActiveEndDate</p>
+            <table class="tribute-table tribute-summary-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Name(s)</th>
+                        <th>#</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in ReportData)
+                    {
+                        <tr>
+                            <td>@item.Type</td>
+                            <td>
+                                <a class="tribute-name-link" href="@DonorsUrl(item)" title="Show the donors for this tribute">
+                                    @if (item.HasName)
+                                    {
+                                        @item.Comment
+                                    }
+                                    else
+                                    {
+                                        <em>(no name given)</em>
+                                    }
+                                </a>
+                            </td>
+                            <td>@item.DonationCount.ToString("N0", CultureInfo.InvariantCulture)</td>
+                            <td>@item.TotalValue.ToString("$#,##0.00", CultureInfo.InvariantCulture)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else if (HasLoadedAtLeastOnce && string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text">No tribute donations found for the selected filters.</p>
+        }
+    </main>
+</div>
+
+@code {
+    // Supplied by the Tribute Donors page's Back link so the report reopens on the same range.
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "startDate")]
+    public string? StartDateQuery { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "endDate")]
+    public string? EndDateQuery { get; set; }
+
+    private int OrgID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+
+    private bool IsLoading { get; set; }
+    private string? ErrorMessage { get; set; }
+    private List<TributeReportItem>? ReportData { get; set; }
+    private string? ActiveStartDate { get; set; }
+    private string? ActiveEndDate { get; set; }
+    private bool HasLoadedAtLeastOnce { get; set; }
+    private string? DateFormatId { get; set; }
+
+    // The range the rows were actually loaded for; drill-down links always use this.
+    private DateOnly LoadedStartDate { get; set; }
+    private DateOnly LoadedEndDate { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        DateFormatId = org?.DateFormatID;
+
+        if (DateOnly.TryParseExact(StartDateQuery, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var start) &&
+            DateOnly.TryParseExact(EndDateQuery, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var end))
+        {
+            StartDate = start.ToDateTime(TimeOnly.MinValue);
+            EndDate = end.ToDateTime(TimeOnly.MinValue);
+            await LoadReportAsync();
+        }
+    }
+
+    private async Task LoadReportAsync()
+    {
+        ErrorMessage = null;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            ReportData = null;
+            ErrorMessage = "Please select both Start Date and End Date.";
+            return;
+        }
+
+        var startDate = DateOnly.FromDateTime(StartDate.Value);
+        var endDate = DateOnly.FromDateTime(EndDate.Value);
+
+        if (endDate < startDate)
+        {
+            ReportData = null;
+            ErrorMessage = "Please ensure the End Date is not before the Start Date.";
+            return;
+        }
+
+        IsLoading = true;
+        ErrorMessage = null;
+
+        var result = await TributeReportService.GetTributeReportAsync(OrgID, startDate, endDate);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            ReportData = result.Data;
+            ErrorMessage = null;
+            HasLoadedAtLeastOnce = true;
+            LoadedStartDate = startDate;
+            LoadedEndDate = endDate;
+            ActiveStartDate = EMA.App.Utilities.OrgDateFormat.Format(startDate, DateFormatId);
+            ActiveEndDate = EMA.App.Utilities.OrgDateFormat.Format(endDate, DateFormatId);
+        }
+        else
+        {
+            ReportData = null;
+            ErrorMessage = result.ErrorMessage ?? "Unable to load report data.";
+            ActiveStartDate = null;
+            ActiveEndDate = null;
+        }
+
+        IsLoading = false;
+    }
+
+    private async Task OnDateChangedAsync()
+    {
+        ErrorMessage = null;
+
+        if (StartDate.HasValue && EndDate.HasValue)
+        {
+            await LoadReportAsync();
+        }
+        else
+        {
+            ReportData = null;
+            ActiveStartDate = null;
+            ActiveEndDate = null;
+            HasLoadedAtLeastOnce = false;
+        }
+    }
+
+    // Unnamed tributes pass hasName=false instead of an empty name, which the donors page and API
+    // treat as "TributeText IS NULL".
+    private string DonorsUrl(TributeReportItem item)
+    {
+        var url =
+            $"/tribute-report/donors?typeID={item.EMATributeTypeID.ToString(CultureInfo.InvariantCulture)}" +
+            $"&hasName={(item.HasName ? "true" : "false")}" +
+            $"&startDate={LoadedStartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}" +
+            $"&endDate={LoadedEndDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+
+        return item.HasName
+            ? url + $"&name={Uri.EscapeDataString(item.Comment)}"
+            : url;
+    }
+}

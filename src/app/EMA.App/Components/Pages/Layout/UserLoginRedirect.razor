@@ -1,0 +1,20 @@
+@page "/user-login"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+@layout PublicLayout
+@inject NavigationManager Navigation
+
+<PageTitle>Login - EMA</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        var currentUri =
+            Navigation.ToAbsoluteUri(
+                Navigation.Uri);
+
+        Navigation.NavigateTo(
+            $"/login{currentUri.Query}",
+            replace: true);
+    }
+}

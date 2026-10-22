@@ -1,0 +1,418 @@
+@page "/je-details"
+@using System.Globalization
+
+@inject NavigationManager Navigation
+@inject IOrganizationService OrganizationService
+@inject IJournalEntryReportService JournalEntryReportService
+@inject IUserSessionStateService SessionState
+@inject IJSRuntime JS
+@inject IUserSessionStateService SessionState
+
+<div class="reports-page">
+    <nav class="sub-nav" aria-label="Report type navigation">
+    </nav>
+
+    <main class="reports-body" aria-label="Journal entry details report">
+        <header class="je-title">
+            <h2>
+                Automated Journal Entry Creation
+                @if (!string.IsNullOrWhiteSpace(AccountingSoftwareName))
+                {
+                    <text>- <span class="je-accounting-name">@AccountingSoftwareName</span></text>
+                }
+            </h2>
+        </header>
+
+        <section class="report-filters" aria-label="Journal entry report filters">
+            <div class="field-row">
+                <label for="start-date">Starting Date:</label>
+                <input id="start-date" type="date" @bind="StartDate" @bind:after="OnDateChangedAsync" />
+            </div>
+
+            <div class="field-row radio-row">
+                <span class="field-label">Summarize by:</span>
+                <div class="radio-options">
+                    <label><input type="radio" name="summarize-by" checked="@(SummarizeBy == "A")"
+                                  @onchange='() => OnSummarizeChanged("A")' /> Account</label>
+                    <label><input type="radio" name="summarize-by" checked="@(SummarizeBy == "D")"
+                                  @onchange='() => OnSummarizeChanged("D")' /> Description</label>
+                </div>
+            </div>
+
+            <div class="field-row">
+                <label for="end-date">Ending Date:</label>
+                <input id="end-date" type="date" @bind="EndDate" @bind:after="OnDateChangedAsync" />
+            </div>
+
+            <div class="field-row radio-row">
+                <span class="field-label">JE By Date:</span>
+                <div class="radio-options">
+                    <label><input type="radio" name="je-by-date" checked="@(JeByDateValue == "Y")"
+                                  @onchange='() => OnJeByDateChanged("Y")' /> Yes</label>
+                    <label><input type="radio" name="je-by-date" checked="@(JeByDateValue == "N")"
+                                  @onchange='() => OnJeByDateChanged("N")' /> No</label>
+                </div>
+            </div>
+        </section>
+
+        @if (IsLoading)
+        {
+            <p class="status-text">Loading report...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text error">@ErrorMessage</p>
+        }
+        else if (ReportData?.Journals is { Count: > 0 } journals)
+        {
+            @foreach (var journal in journals)
+            {
+                <section class="journal-panel" aria-label="Journal entry details table">
+                    <div class="journal-meta">
+                        <div>Journal Date: @FormatJournalDate(journal.JournalDate)</div>
+                        <div>Journal No: @journal.JournalNo</div>
+                    </div>
+
+                    <table class="journal-table">
+                        <thead>
+                            <tr>
+                                <th>ACCOUNT</th>
+                                <th>DEBITS</th>
+                                <th>CREDITS</th>
+                                <th>DESCRIPTION</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in journal.Entries)
+                            {
+                                <tr>
+                                    <td>@entry.Account</td>
+                                    <td class="amount">@FormatAmount(entry.Debits)</td>
+                                    <td class="amount">@FormatAmount(entry.Credits)</td>
+                                    <td>@entry.Description</td>
+                                </tr>
+                            }
+
+                            <tr class="totals-row">
+                                <td></td>
+                                <td class="amount">@FormatAmount(journal.TotalDebits)</td>
+                                <td class="amount">@FormatAmount(journal.TotalCredits)</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+            }
+
+            <p class="status-text">
+                Grand Totals: Debits @FormatAmount(ReportData.TotalDebits) | Credits @FormatAmount(ReportData.TotalCredits)
+            </p>
+        }
+        else if (!HasLoadedAtLeastOnce)
+        {
+            <p class="status-text">Select a starting and ending date to load the report.</p>
+        }
+        else
+        {
+            <p class="status-text">No journal entries found for the selected filters.</p>
+        }
+
+        <div class="report-actions" aria-label="Report actions">
+            <button type="button" @onclick="LoadReportAsync" disabled="@IsLoading">Display</button>
+
+            <button type="button" @onclick="DownloadPdfAsync" disabled="@(IsLoading || IsDownloadingPdf)">
+                @(IsDownloadingPdf ? "Generating PDF..." : "Save PDF")
+            </button>
+
+            <button type="button" @onclick="DownloadCsvAsync" disabled="@(IsLoading || IsDownloadingCsv)">
+                @(IsDownloadingCsv ? "Generating CSV..." : "Save CSV")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(PdfMessage))
+        {
+            <p class="status-text @(PdfMessageHasError ? "error" : string.Empty)">@PdfMessage</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(CsvMessage))
+        {
+            <p class="status-text @(CsvMessageHasError ? "error" : string.Empty)">@CsvMessage</p>
+        }
+    </main>
+</div>
+
+@code {
+    private int OrgID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private string OrganizationName { get; set; } = "Loading organization...";
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+    private string SummarizeBy { get; set; } = "D";   // 'A' = Account, 'D' = Description
+    private string JeByDateValue { get; set; } = "N"; // 'Y' / 'N'
+    private string SortBy => SummarizeBy == "A" ? "account" : "description";
+    private bool JeByDate => JeByDateValue == "Y";
+
+    private string? AccountingSoftwareName { get; set; }
+    private string? DateFormat { get; set; }
+
+    private bool IsLoading { get; set; }
+    private string? ErrorMessage { get; set; }
+    private JournalEntryReportResponse? ReportData { get; set; }
+    private bool HasLoadedAtLeastOnce { get; set; }
+
+    private bool IsDownloadingPdf { get; set; }
+    private bool PdfMessageHasError { get; set; }
+    private string PdfMessage { get; set; } = string.Empty;
+
+    private bool IsDownloadingCsv { get; set; }
+    private bool CsvMessageHasError { get; set; }
+    private string CsvMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var org = await OrganizationService.GetOrganizationAsync(OrgID);
+        OrganizationName = org?.OrganizationName;
+
+        var settings = await OrganizationService.GetJeSettingsAsync(OrgID);
+        if (settings is not null)
+        {
+            SummarizeBy = string.Equals(settings.JESummarizeBy?.Trim(), "A", StringComparison.OrdinalIgnoreCase) ? "A" : "D";
+            JeByDateValue = string.Equals(settings.JEByDate?.Trim(), "Y", StringComparison.OrdinalIgnoreCase) ? "Y" : "N";
+            AccountingSoftwareName = settings.AccountingSoftwareName;
+            DateFormat = settings.DateFormat;
+        }
+    }
+
+    private async Task LoadReportAsync()
+    {
+        PdfMessage = string.Empty;
+        PdfMessageHasError = false;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            ReportData = null;
+            ErrorMessage = "Please select both Starting Date and Ending Date.";
+            return;
+        }
+
+        var startDate = DateOnly.FromDateTime(StartDate.Value);
+        var endDate = DateOnly.FromDateTime(EndDate.Value);
+
+        if (endDate < startDate)
+        {
+            ReportData = null;
+            ErrorMessage = "Ending Date must be on or after Starting Date.";
+            return;
+        }
+
+        IsLoading = true;
+        ErrorMessage = null;
+
+        var result = await JournalEntryReportService.GetJournalEntryDetailsAsync(
+            OrgID,
+            startDate,
+            endDate,
+            SortBy,
+            JeByDate);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            ReportData = result.Data;
+            ErrorMessage = null;
+            HasLoadedAtLeastOnce = true;
+        }
+        else
+        {
+            ReportData = null;
+            ErrorMessage = result.ErrorMessage ?? "Unable to load report data.";
+        }
+
+        IsLoading = false;
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        PdfMessage = string.Empty;
+        PdfMessageHasError = false;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            PdfMessageHasError = true;
+            PdfMessage = "Please select both Starting Date and Ending Date before saving PDF.";
+            return;
+        }
+
+        if (ReportData?.Journals is not { Count: > 0 })
+        {
+            await LoadReportAsync();
+
+            if (ReportData?.Journals is not { Count: > 0 })
+            {
+                PdfMessageHasError = true;
+                PdfMessage = string.IsNullOrWhiteSpace(ErrorMessage)
+                    ? "No journal entries found for the selected filters."
+                    : ErrorMessage;
+                return;
+            }
+        }
+
+        IsDownloadingPdf = true;
+
+        try
+        {
+            var result = await JournalEntryReportService.GetJournalEntryPdfAsync(
+                OrgID,
+                DateOnly.FromDateTime(StartDate.Value),
+                DateOnly.FromDateTime(EndDate.Value),
+                SortBy,
+                JeByDate);
+
+            if (!result.IsSuccess || result.FileBytes is null || result.FileBytes.Length == 0)
+            {
+                PdfMessageHasError = true;
+                PdfMessage = result.ErrorMessage ?? "Could not generate PDF.";
+                return;
+            }
+
+            var fileName = result.FileName ?? $"journal-entry-details-{DateTime.Today:yyyyMMdd}.pdf";
+            var base64 = Convert.ToBase64String(result.FileBytes);
+
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+            await module.InvokeVoidAsync("downloadFileFromBase64", fileName, "application/pdf", base64);
+
+            PdfMessage = "PDF generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            PdfMessageHasError = true;
+            PdfMessage = $"Could not generate PDF. {ex.Message}";
+        }
+        finally
+        {
+            IsDownloadingPdf = false;
+        }
+    }
+
+    private async Task DownloadCsvAsync()
+    {
+        CsvMessage = string.Empty;
+        CsvMessageHasError = false;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            CsvMessageHasError = true;
+            CsvMessage = "Please select both Starting Date and Ending Date before saving CSV.";
+            return;
+        }
+
+        if (ReportData?.Journals is not { Count: > 0 })
+        {
+            await LoadReportAsync();
+
+            if (ReportData?.Journals is not { Count: > 0 })
+            {
+                CsvMessageHasError = true;
+                CsvMessage = string.IsNullOrWhiteSpace(ErrorMessage)
+                    ? "No journal entries found for the selected filters."
+                    : ErrorMessage;
+                return;
+            }
+        }
+
+        IsDownloadingCsv = true;
+
+        try
+        {
+            var result = await JournalEntryReportService.GetJournalEntryCsvAsync(
+                OrgID,
+                DateOnly.FromDateTime(StartDate.Value),
+                DateOnly.FromDateTime(EndDate.Value),
+                SortBy,
+                JeByDate);
+
+            if (!result.IsSuccess || result.FileBytes is null || result.FileBytes.Length == 0)
+            {
+                CsvMessageHasError = true;
+                CsvMessage = result.ErrorMessage ?? "Could not generate CSV.";
+                return;
+            }
+
+            var fileName = result.FileName ?? $"journal-entry-details-{DateTime.Today:yyyyMMdd}.csv";
+            var base64 = Convert.ToBase64String(result.FileBytes);
+
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+            await module.InvokeVoidAsync("downloadFileFromBase64", fileName, "text/csv", base64);
+
+            CsvMessage = "CSV generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            CsvMessageHasError = true;
+            CsvMessage = $"Could not generate CSV. {ex.Message}";
+        }
+        finally
+        {
+            IsDownloadingCsv = false;
+        }
+    }
+
+    private async Task OnFilterChangedAsync()
+    {
+        if (HasLoadedAtLeastOnce && StartDate.HasValue && EndDate.HasValue)
+        {
+            await LoadReportAsync();
+        }
+    }
+
+    private async Task OnSummarizeChanged(string value)
+    {
+        SummarizeBy = value;
+        await OrganizationService.UpdateJeSettingsAsync(OrgID, SummarizeBy, JeByDateValue);
+        await OnFilterChangedAsync();
+    }
+
+    private async Task OnJeByDateChanged(string value)
+    {
+        JeByDateValue = value;
+        await OrganizationService.UpdateJeSettingsAsync(OrgID, SummarizeBy, JeByDateValue);
+        await OnFilterChangedAsync();
+    }
+
+    private string FormatJournalDate(string isoDate)
+    {
+        if (!DateTime.TryParse(isoDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            return isoDate;
+
+        // DateFormat is already a valid .NET format string (from the DateFormat table); use it directly.
+        var pattern = string.IsNullOrWhiteSpace(DateFormat) ? "yyyy-MM-dd" : DateFormat.Trim();
+        try
+        {
+            return dt.ToString(pattern, CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            return dt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private async Task OnDateChangedAsync()
+    {
+        ErrorMessage = null;
+
+        if (StartDate.HasValue && EndDate.HasValue)
+        {
+            await LoadReportAsync();
+        }
+        else
+        {
+            ReportData = null;
+        }
+    }
+
+    private static string FormatAmount(decimal? value)
+        => value.HasValue ? value.Value.ToString("$#,##0.00", CultureInfo.InvariantCulture) : string.Empty;
+
+}

@@ -1,0 +1,1246 @@
+@page "/customization"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@inject ICustomizationService CustomizationService
+@inject IDonorService DonorService
+@inject IUserSessionStateService SessionState
+@inject IJSRuntime JS
+
+<PageTitle>Entities - EMA</PageTitle>
+
+<div class="customization-shell">
+
+    <div class="lookup-selector">
+        <div class="lookup-col-labels">
+            <div class="lookup-col-header"></div>
+            <div class="lookup-label-cell">
+                Donation Campuses
+                <span class="info-icon" @onclick='() => TogglePopover("LabelCampuses")'>&#9432;
+                    @if (ActivePopover == "LabelCampuses")
+                    {
+                        <span class="popover-box">Church campuses that donations can be directed to.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donation Events
+                <span class="info-icon" @onclick='() => TogglePopover("LabelEvents")'>&#9432;
+                    @if (ActivePopover == "LabelEvents")
+                    {
+                        <span class="popover-box">Organization events that donations can be associated with.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donation Funds
+                <span class="info-icon" @onclick='() => TogglePopover("LabelFunds")'>&#9432;
+                    @if (ActivePopover == "LabelFunds")
+                    {
+                        <span class="popover-box">Funds available for donation distribution.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donation Giving Methods
+                <span class="info-icon" @onclick='() => TogglePopover("LabelMethods")'>&#9432;
+                    @if (ActivePopover == "LabelMethods")
+                    {
+                        <span class="popover-box">Methods of giving available to donors (e.g. e-Transfer, Credit Card).</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donation Source
+                <span class="info-icon" @onclick='() => TogglePopover("LabelSources")'>&#9432;
+                    @if (ActivePopover == "LabelSources")
+                    {
+                        <span class="popover-box">Where a donation originated (e.g. website, event, mail-in).</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donation Tribute Types
+                <span class="info-icon" @onclick='() => TogglePopover("LabelTributeTypes")'>&#9432;
+                    @if (ActivePopover == "LabelTributeTypes")
+                    {
+                        <span class="popover-box">Tribute categories a donation can be given under (e.g. In Honour, In Memory).</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Donor Status
+                <span class="info-icon" @onclick='() => TogglePopover("LabelDonorStatus")'>&#9432;
+                    @if (ActivePopover == "LabelDonorStatus")
+                    {
+                        <span class="popover-box">Stages a donor/member moves through with the organization (e.g. Prospect, Active, Lapsed). Replaces the old active/inactive switch on a donor.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Anonymous Donors
+                <span class="info-icon" @onclick='() => TogglePopover("LabelAnonymous")'>&#9432;
+                    @if (ActivePopover == "LabelAnonymous")
+                    {
+                        <span class="popover-box">The donor record used to receive anonymous donations. Turning this on prompts you to pick that donor.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Entity Aliases
+                <span class="info-icon" @onclick='() => TogglePopover("LabelAliases")'>&#9432;
+                    @if (ActivePopover == "LabelAliases")
+                    {
+                        <span class="popover-box">Custom display names this organization uses for each entity, pulled from your ChMS-linked entity list.</span>
+                    }
+                </span>
+            </div>
+            <div class="lookup-label-cell">
+                Interaction Types
+                <span class="info-icon" @onclick='() => TogglePopover("LabelInteraction")'>&#9432;
+                    @if (ActivePopover == "LabelInteraction")
+                    {
+                        <span class="popover-box">For the future EMA Journey App. Programmed and ready &mdash; activates once the database table is created.</span>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="lookup-col-checks">
+            <div class="lookup-col-header">Use</div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@CampusesActive" @onchange='e => OnToggleTable(e, "Campuses")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@EventsActive" @onchange='e => OnToggleTable(e, "Events")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@FundsActive" @onchange='e => OnToggleTable(e, "Funds")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@MethodsActive" @onchange='e => OnToggleTable(e, "Methods")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@SourcesActive" @onchange='e => OnToggleTable(e, "Sources")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@TributeTypesActive" @onchange='e => OnToggleTable(e, "TributeTypes")' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@DonorStatusActive" @onchange='e => OnToggleDonorStatusUse(e)' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@AnonymousActive" @onchange='e => OnToggleAnonymous(e)' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@AliasesActive" @onchange='e => OnToggleAliasesActive(e)' /></div>
+            <div class="lookup-check-cell"><input type="checkbox" checked="@InteractionTypesActive" @onchange='e => OnToggleInteractionTypesActive(e)' /></div>
+        </div>
+        <div class="lookup-col-defaults">
+            <div class="lookup-col-header"></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("Campuses", "Donation Campuses")'>Default Campuses</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("Events", "Donation Events")'>Default Events</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("Funds", "Donation Funds")'>Default Funds</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("Methods", "Donation Giving Methods")'>Default Methods</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("Sources", "Donation Source")'>Default Sources</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("TributeTypes", "Donation Tribute Types")'>Default Tribute Types</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("DonorStatus", "Donor Statuses")'>Default Statuses</button></div>
+            <div class="lookup-btn-cell">
+                <div class="anon-donor-display @(AnonymousActive ? "" : "disabled")">
+                    <span class="anon-donor-current @(_anonDonorID is null ? "none" : "")">@AnonDonorDisplay</span>
+                    <button class="icon-btn" title="@(AnonymousActive ? "Change anonymous donor" : "Enable Anonymous Donors to change the donor")" @onclick="OpenAnonDonorPickerFromPencil" disabled="@(!AnonymousActive)">&#9999;&#65039;</button>
+                </div>
+            </div>
+            <div class="lookup-btn-cell"><button class="default-btn disabled" disabled title="Not applicable for Entity Aliases &mdash; edit alias values directly below.">Default Aliases</button></div>
+            <div class="lookup-btn-cell"><button class="default-btn" @onclick='() => RequestCopyDefaults("InteractionTypes", "Interaction Types")'>Default Interaction Types</button></div>
+        </div>
+        <div class="lookup-col-buttons">
+            <div class="lookup-col-header"></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(CampusesActive, "Campuses")" @onclick='() => SetActiveTable("Campuses")' disabled="@(!CampusesActive)">Edit Campuses</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(EventsActive, "Events")" @onclick='() => SetActiveTable("Events")' disabled="@(!EventsActive)">Edit Events</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(FundsActive, "Funds")" @onclick='() => SetActiveTable("Funds")' disabled="@(!FundsActive)">Edit Funds</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(MethodsActive, "Methods")" @onclick='() => SetActiveTable("Methods")' disabled="@(!MethodsActive)">Edit Methods</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(SourcesActive, "Sources")" @onclick='() => SetActiveTable("Sources")' disabled="@(!SourcesActive)">Edit Sources</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(TributeTypesActive, "TributeTypes")" @onclick='() => SetActiveTable("TributeTypes")' disabled="@(!TributeTypesActive)">Edit Tribute Types</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(DonorStatusActive, "DonorStatus")" @onclick='() => SetActiveTable("DonorStatus")' disabled="@(!DonorStatusActive)">Edit Statuses</button></div>
+            <div class="lookup-btn-cell"></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(AliasesActive, "Aliases")" @onclick='() => SetActiveTable("Aliases")' disabled="@(!AliasesActive)">Edit Aliases</button></div>
+            <div class="lookup-btn-cell"><button class="@GetEditBtnClass(InteractionTypesActive, "InteractionTypes")" @onclick='() => SetActiveTable("InteractionTypes")' disabled="@(!InteractionTypesActive)">Edit Interaction Types</button></div>
+        </div>
+    </div>
+
+    @if (_showAnonDonorOverlay)
+    {
+        <div class="anon-donor-overlay">
+            <label class="message-overlay-label">Select Anonymous Donor</label>
+            <input type="text" class="anon-donor-search" placeholder="Search by name or email..."
+                   @bind="_anonDonorSearch" @bind:event="oninput" />
+            <div class="anon-donor-list">
+                @foreach (var d in FilteredAnonDonors)
+                {
+                    <div class="anon-donor-row" @onclick="() => SelectAnonDonor(d)">
+                        <span class="anon-donor-name">@d.Name</span>
+                        <span class="anon-donor-email">@d.Email</span>
+                    </div>
+                }
+                @if (!FilteredAnonDonors.Any())
+                {
+                    <div class="anon-donor-empty">No donors found.</div>
+                }
+            </div>
+            <div class="message-overlay-actions">
+                <button class="default-btn" @onclick="CancelAnonOverlay">Cancel</button>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(CopyMessage))
+    {
+        <div class="copy-status @(CopyError ? "error" : "")">@CopyMessage</div>
+    }
+
+    @if (string.IsNullOrEmpty(ActiveTable))
+    {
+        <p class="empty-state">Please select a table to edit.</p>
+    }
+    else if (IsLoading)
+    {
+        <p class="empty-state">Loading...</p>
+    }
+    else
+    {
+        <div class="lookup-grid-wrapper" id="entities-edit-grid">
+            <table class="lookup-grid">
+                <thead>
+                    <tr>
+                        @if (ActiveTable == "Aliases")
+                        {
+                            <th>Entity Name</th>
+                            <th>Alias
+                                <span class="info-icon" @onclick='() => TogglePopover("Alias")'>&#9432;
+                                    @if (ActivePopover == "Alias")
+                                    {
+                                        <span class="popover-box">The custom display name this organization uses instead of the default entity name.</span>
+                                    }
+                                </span>
+                            </th>
+                        }
+                        else
+                        {
+                        <th class="col-seq">Sequence
+                            <span class="info-icon" @onclick='() => TogglePopover("Seq")'>&#9432;
+                                @if (ActivePopover == "Seq")
+                                {
+                                    <span class="popover-box">The display order of this entry in the list.</span>
+                                }
+                            </span>
+                        </th>
+                        <th>Description
+                            <span class="info-icon" @onclick='() => TogglePopover("Description")'>&#9432;
+                                @if (ActivePopover == "Description")
+                                {
+                                    <span class="popover-box">The display name shown to users and donors.</span>
+                                }
+                            </span>
+                        </th>
+                        <th class="cell-center">Is Active?
+                            <span class="info-icon" @onclick='() => TogglePopover("Use")'>&#9432;
+                                @if (ActivePopover == "Use")
+                                {
+                                    <span class="popover-box">Toggle whether this entry is active and available for selection.</span>
+                                }
+                            </span>
+                        </th>
+                        }
+                        @if (ActiveTable == "Methods" || ActiveTable == "Campuses" || ActiveTable == "Funds")
+                        {
+                            <th class="cell-center">Default
+                                <span class="info-icon" @onclick='() => TogglePopover("Default")'>&#9432;
+                                    @if (ActivePopover == "Default")
+                                    {
+                                        <span class="popover-box">Only one entry can be the default. Selecting a new default clears the previous one.</span>
+                                    }
+                                </span>
+                            </th>
+                        }
+                        @if (ActiveTable == "Campuses")
+                        {
+                            <th class="cell-center">Default Fund
+                                <span class="info-icon" @onclick='() => TogglePopover("DefaultCampusFund")'>&#9432;
+                                    @if (ActivePopover == "DefaultCampusFund")
+                                    {
+                                        <span class="popover-box">The fund donations to this campus default to when no fund is specified.</span>
+                                    }
+                                </span>
+                            </th>
+                        }
+                        @if (ActiveTable == "Methods")
+                        {
+                            <th class="cell-center">CRA Receiptable
+                                <span class="info-icon" @onclick='() => TogglePopover("CRAReceiptable")'>&#9432;
+                                    @if (ActivePopover == "CRAReceiptable")
+                                    {
+                                        <span class="popover-box">Whether donations using this method qualify for a CRA tax receipt.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th class="cell-center">Journal Entry In Detail
+                                <span class="info-icon" @onclick='() => TogglePopover("JournalEntryInDetail")'>&#9432;
+                                    @if (ActivePopover == "JournalEntryInDetail")
+                                    {
+                                        <span class="popover-box">Whether journal entries for this method are recorded line-by-line rather than summarized.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th class="cell-center">Acknowledge To Donor
+                                <span class="info-icon" @onclick='() => TogglePopover("AckDonor")'>&#9432;
+                                    @if (ActivePopover == "AckDonor")
+                                    {
+                                        <span class="popover-box">Send an acknowledgement to the donor for donations using this method.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th class="cell-center">Acknowledge To Organization
+                                <span class="info-icon" @onclick='() => TogglePopover("AckOrg")'>&#9432;
+                                    @if (ActivePopover == "AckOrg")
+                                    {
+                                        <span class="popover-box">Send an acknowledgement to the organization for donations using this method.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th class="cell-center">Acknowledge To EMA Support
+                                <span class="info-icon" @onclick='() => TogglePopover("AckEMA")'>&#9432;
+                                    @if (ActivePopover == "AckEMA")
+                                    {
+                                        <span class="popover-box">Send an acknowledgement to EMA Support for donations using this method.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th class="cell-center">Message
+                                <span class="info-icon" @onclick='() => TogglePopover("AckMessage")'>&#9432;
+                                    @if (ActivePopover == "AckMessage")
+                                    {
+                                        <span class="popover-box">Open an inline editor for the acknowledgement message sent for this method.</span>
+                                    }
+                                </span>
+                            </th>
+                        }
+                        @if (ActiveTable == "Funds")
+                        {
+                            <th class="cell-center">Deductible
+                                <span class="info-icon" @onclick='() => TogglePopover("TaxDeductible")'>&#9432;
+                                    @if (ActivePopover == "TaxDeductible")
+                                    {
+                                        <span class="popover-box">Indicates whether donations to this fund qualify for a tax receipt.</span>
+                                    }
+                                </span>
+                            </th>
+                            <th>Campus</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (ActiveTable == "Events")
+                    {
+                        var seq = 0;
+                        @foreach (var item in Events)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                @* Events.Sequence is an IDENTITY column (insertion order) and cannot be reordered. *@
+                                <td class="col-seq">@seq</td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveEvent(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleEventActive(item, (bool)e.Value!)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "Methods")
+                    {
+                        var seq = 0;
+                        @foreach (var item in MethodsOfGiving)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(MethodsOfGiving.IndexOf(item) == 0)" @onclick="() => MoveMethodOfGiving(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(MethodsOfGiving.IndexOf(item) == MethodsOfGiving.Count - 1)" @onclick="() => MoveMethodOfGiving(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveMethodOfGiving(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleMethodActive(item, (bool)e.Value!)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsDefault"
+                                           @onchange="e => OnSetMethodDefault(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.CRAReceiptable"
+                                           @onchange="async e => { item.CRAReceiptable = (bool)e.Value!; await SaveMethodOfGiving(item); }" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@(item.JournalEntryInDetail == true)"
+                                           @onchange="async e => { item.JournalEntryInDetail = (bool)e.Value!; await SaveMethodOfGiving(item); }" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@(item.AcknowledgeToDonor == true)"
+                                           @onchange="async e => { item.AcknowledgeToDonor = (bool)e.Value!; await SaveMethodOfGiving(item); }" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@(item.AcknowledgeToOrganization == true)"
+                                           @onchange="async e => { item.AcknowledgeToOrganization = (bool)e.Value!; await SaveMethodOfGiving(item); }" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@(item.AcknowledgeToEMASupport == true)"
+                                           @onchange="async e => { item.AcknowledgeToEMASupport = (bool)e.Value!; await SaveMethodOfGiving(item); }" />
+                                </td>
+                                <td class="cell-center">
+                                    <button class="icon-btn" title="Edit acknowledgement message"
+                                            @onclick="() => OpenMessageOverlay(item)">&#128269;</button>
+                                </td>
+                                <td class="col-delete">
+                                    <button class="delete-btn" @onclick='() => { var id = item.EMAMethodOfGivingID; var orgID = item.EMAOrganizationID; _ = DeleteRow(id, orgID, "Methods"); }'>X</button>
+                                </td>
+                            </tr>
+                            @if (_activeMessageOverlayID == item.EMAMethodOfGivingID)
+                            {
+                                <tr class="message-overlay-row">
+                                    <td colspan="11">
+                                        <div class="message-overlay">
+                                            <label class="message-overlay-label">Acknowledgement Message</label>
+                                            <textarea class="message-overlay-textarea" rows="4" @bind="_messageDraft"></textarea>
+                                            <div class="message-overlay-actions">
+                                                <button class="add-btn" @onclick="() => SaveMessageOverlay(item)">Save</button>
+                                                <button class="default-btn" @onclick="CancelMessageOverlay">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    }
+                    @if (ActiveTable == "Campuses")
+                    {
+                        var seq = 0;
+                        @foreach (var item in Campuses)
+                        {
+                            seq++;
+                            <tr class="@(!item.CampusActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(Campuses.IndexOf(item) == 0)" @onclick="() => MoveCampus(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(Campuses.IndexOf(item) == Campuses.Count - 1)" @onclick="() => MoveCampus(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.CampusName"
+                                           @bind:after="() => SaveCampus(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.CampusActive"
+                                           @onchange="e => OnToggleCampusActive(item, (bool)e.Value!)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsDefault"
+                                           @onchange="e => OnSetCampusDefault(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <select @bind="item.DefaultCampusFundID" @bind:after="() => SaveCampus(item)">
+                                        <option value="">(none)</option>
+                                        @foreach (var f in Funds)
+                                        {
+                                            <option value="@f.EMAFundID">@f.FundName</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="col-delete">
+                                    <button class="delete-btn" @onclick='() => { var id = item.EMACampusID; var orgID = item.EMAOrganizationID; _ = DeleteRow(id, orgID, "Campuses"); }'>X</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "Funds")
+                    {
+                        var seq = 0;
+                        @foreach (var item in Funds)
+                        {
+                            seq++;
+                            <tr class="@(!item.FundActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(Funds.IndexOf(item) == 0)" @onclick="() => MoveFund(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(Funds.IndexOf(item) == Funds.Count - 1)" @onclick="() => MoveFund(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.FundName"
+                                           @bind:after="() => SaveFund(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.FundActive"
+                                           @onchange="e => OnToggleFundActive(item, (bool)e.Value!)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsDefault"
+                                           @onchange="e => OnSetFundDefault(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.TaxDeductible"
+                                           @onchange="e => OnToggleTaxDeductible(item, (bool)e.Value!)" />
+                                </td>
+                                <td>
+                                    <select @bind="item.EMACampusID" @bind:after="() => SaveFund(item)">
+                                        <option value="0">-- None --</option>
+                                        @foreach (var c in Campuses.Where(c => c.CampusActive))
+                                        {
+                                            <option value="@c.EMACampusID">@c.CampusName</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="col-delete">
+                                    <button class="delete-btn" @onclick='() => { var id = item.EMAFundID; var orgID = item.EMAOrganizationID; _ = DeleteRow(id, orgID, "Funds"); }'>X</button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "Sources")
+                    {
+                        var seq = 0;
+                        @foreach (var item in Sources)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(Sources.IndexOf(item) == 0)" @onclick="() => MoveDonationSource(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(Sources.IndexOf(item) == Sources.Count - 1)" @onclick="() => MoveDonationSource(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveDonationSource(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleDonationSourceActive(item, (bool)e.Value!)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "TributeTypes")
+                    {
+                        var seq = 0;
+                        @foreach (var item in TributeTypes)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(TributeTypes.IndexOf(item) == 0)" @onclick="() => MoveTributeType(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(TributeTypes.IndexOf(item) == TributeTypes.Count - 1)" @onclick="() => MoveTributeType(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveTributeType(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleTributeTypeActive(item, (bool)e.Value!)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "Aliases")
+                    {
+                        @foreach (var item in EntityAliases)
+                        {
+                            <tr>
+                                <td>@item.EntityName</td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.AliasName"
+                                           @bind:after="() => SaveEntityAlias(item)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "InteractionTypes")
+                    {
+                        var seq = 0;
+                        @foreach (var item in InteractionTypes)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(InteractionTypes.IndexOf(item) == 0)" @onclick="() => MoveInteractionType(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(InteractionTypes.IndexOf(item) == InteractionTypes.Count - 1)" @onclick="() => MoveInteractionType(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveInteractionType(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleInteractionTypeActive(item, (bool)e.Value!)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (ActiveTable == "DonorStatus")
+                    {
+                        var seq = 0;
+                        @foreach (var item in DonorStatuses)
+                        {
+                            seq++;
+                            <tr class="@(!item.IsActive ? "row-inactive" : "")">
+                                <td class="col-seq">
+                                    <span class="seq-num">@seq</span>
+                                    <button class="seq-btn" title="Move up" disabled="@(DonorStatuses.IndexOf(item) == 0)" @onclick="() => MoveDonorStatus(item, -1)">&#9650;</button>
+                                    <button class="seq-btn" title="Move down" disabled="@(DonorStatuses.IndexOf(item) == DonorStatuses.Count - 1)" @onclick="() => MoveDonorStatus(item, 1)">&#9660;</button>
+                                </td>
+                                <td>
+                                    <input type="text"
+                                           @bind="item.Description"
+                                           @bind:after="() => SaveDonorStatus(item)" />
+                                </td>
+                                <td class="cell-center">
+                                    <input type="checkbox"
+                                           checked="@item.IsActive"
+                                           @onchange="e => OnToggleDonorStatusActive(item, (bool)e.Value!)" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (ActiveTable != "Aliases")
+        {
+        <div class="lookup-add-row">
+            <button class="add-btn" @onclick="AddNewRow">+ Add New</button>
+        </div>
+        }
+    }
+
+    <ConfirmDialog Visible="@ShowConfirm"
+                   Title="Copy EMA default entries"
+                   Message="@ConfirmMessage"
+                   OnConfirm="ConfirmCopyDefaults"
+                   OnCancel="CancelConfirm" />
+
+</div>
+
+@code {
+    private int OrgID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private string ActiveTable = "";
+    private string ActivePopover = "";
+    private bool IsLoading = false;
+    private bool _pendingScrollToGrid = false;
+
+    // Copy-from-EMA ("Default [Entity]") confirm flow
+    private bool ShowConfirm = false;
+    private string PendingEntityKey = "";
+    private string PendingEntityLabel = "";
+    private string? CopyMessage;
+    private bool CopyError;
+    private string ConfirmMessage =>
+        $"This deactivates this organization's current {PendingEntityLabel} and replaces them with the configured EMA defaults. Existing entries stay in the database but become inactive. Continue?";
+
+    private bool EventsActive = true;
+    private bool MethodsActive = true;
+    private bool CampusesActive = true;
+    private bool FundsActive = true;
+    private bool SourcesActive = true;
+    private bool TributeTypesActive = true;
+
+    // Local-only toggles: there is no Organization column for these yet, so they
+    // aren't persisted through GetOrgSettingsAsync/SaveUseFlags.
+    private bool AliasesActive = true;
+    private bool InteractionTypesActive = true;
+    // DonorStatus has no UseDonorStatus column on Organization yet, so its "Use" toggle
+    // is local-only too (like Aliases/Interaction Types).
+    private bool DonorStatusActive = true;
+
+    // Anonymous donor: persisted via UseAnonymous + EMADonorIDForAnonymous on Organization.
+    private bool AnonymousActive;
+    private int? _anonDonorID;
+    private string? _anonDonorName;
+    private bool _showAnonDonorOverlay;
+    // True when the picker was opened by the Use toggle (selecting should enable);
+    // false when opened by the row's pencil (just change the donor, leave on/off alone).
+    private bool _anonPickerEnablesOnSelect;
+    private string _anonDonorSearch = "";
+    private List<AnonDonorOption> _donors = new();
+    private record AnonDonorOption(int ID, string Name, string Email);
+
+    private string AnonDonorDisplay =>
+        _anonDonorID is null ? "None set"
+        : string.IsNullOrWhiteSpace(_anonDonorName) ? $"Donor #{_anonDonorID}"
+        : _anonDonorName!;
+
+    private IEnumerable<AnonDonorOption> FilteredAnonDonors =>
+        string.IsNullOrWhiteSpace(_anonDonorSearch)
+            ? _donors
+            : _donors.Where(d =>
+                (d.Name?.Contains(_anonDonorSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (d.Email?.Contains(_anonDonorSearch, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    private List<EventItem> Events = new();
+    private List<MethodOfGivingItem> MethodsOfGiving = new();
+    private List<CampusItem> Campuses = new();
+    private List<FundItem> Funds = new();
+    private List<DonationSourceItem> Sources = new();
+    private List<TributeTypeItem> TributeTypes = new();
+    private List<EntityAliasItem> EntityAliases = new();
+    private List<InteractionTypeItem> InteractionTypes = new();
+    private List<DonorStatusItem> DonorStatuses = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await CustomizationService.GetOrgSettingsAsync(OrgID);
+        if (settings.HasValue)
+        {
+            var s = settings.Value;
+            EventsActive = s.TryGetProperty("UseEvents", out var ue) && ue.GetString() == "Y";
+            MethodsActive = s.TryGetProperty("UseMethodsOfGiving", out var umg) && umg.GetString() == "Y";
+            CampusesActive = s.TryGetProperty("UseCampuses", out var uc) && uc.GetString() == "Y";
+            FundsActive = s.TryGetProperty("UseFunds", out var uf) && uf.GetString() == "Y";
+            SourcesActive = s.TryGetProperty("UseSources", out var us) && us.GetString() == "Y";
+            TributeTypesActive = s.TryGetProperty("UseTributeTypes", out var utt) && utt.GetString() == "Y";
+            AnonymousActive = s.TryGetProperty("UseAnonymous", out var uan) && uan.GetString() == "Y";
+            _anonDonorID = s.TryGetProperty("EMADonorIDForAnonymous", out var adi) && adi.ValueKind == System.Text.Json.JsonValueKind.Number
+                ? adi.GetInt32()
+                : (int?)null;
+        }
+
+        // If a donor is designated, resolve its name for the row display.
+        if (_anonDonorID is int anonID)
+        {
+            var donors = await DonorService.GetAllAsync(OrgID);
+            _anonDonorName = donors.FirstOrDefault(d => d.EMADonorID == anonID)?.OfficialDonorName;
+        }
+    }
+
+    private async Task SetActiveTable(string table)
+    {
+        if (ActiveTable == table)
+        {
+            // Already the active table — just re-scroll to it, no need to reload.
+            _pendingScrollToGrid = true;
+            return;
+        }
+        ActiveTable = table;
+        ActivePopover = "";
+        await LoadTableAsync(table);
+        _pendingScrollToGrid = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingScrollToGrid && !IsLoading && !string.IsNullOrEmpty(ActiveTable))
+        {
+            _pendingScrollToGrid = false;
+            try
+            {
+                await JS.InvokeVoidAsync("emaUi.scrollIntoView", "entities-edit-grid");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error scrolling to entity edit grid: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task LoadTableAsync(string table)
+    {
+        IsLoading = true;
+        StateHasChanged();
+        switch (table)
+        {
+            case "Events":
+                Events = await CustomizationService.GetEventsAsync(OrgID);
+                break;
+            case "Methods":
+                MethodsOfGiving = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+                break;
+            case "Campuses":
+                Campuses = await CustomizationService.GetCampusesAsync(OrgID);
+                Funds = await CustomizationService.GetFundsAsync(OrgID); // for the Default Fund dropdown
+                break;
+            case "Funds":
+                Campuses = await CustomizationService.GetCampusesAsync(OrgID);
+                Funds = await CustomizationService.GetFundsAsync(OrgID);
+                break;
+            case "Sources":
+                Sources = await CustomizationService.GetDonationSourcesAsync(OrgID);
+                break;
+            case "TributeTypes":
+                TributeTypes = await CustomizationService.GetTributeTypesAsync(OrgID);
+                break;
+            case "Aliases":
+                EntityAliases = await CustomizationService.GetEntityAliasesAsync(OrgID);
+                break;
+            case "InteractionTypes":
+                InteractionTypes = await CustomizationService.GetInteractionTypesAsync(OrgID);
+                break;
+            case "DonorStatus":
+                DonorStatuses = await CustomizationService.GetDonorStatusesAsync(OrgID);
+                break;
+        }
+        IsLoading = false;
+    }
+
+    private void OnToggleAliasesActive(ChangeEventArgs e)
+    {
+        AliasesActive = (bool)e.Value!;
+        if (!AliasesActive && ActiveTable == "Aliases") ActiveTable = "";
+    }
+
+    private void OnToggleInteractionTypesActive(ChangeEventArgs e)
+    {
+        InteractionTypesActive = (bool)e.Value!;
+        if (!InteractionTypesActive && ActiveTable == "InteractionTypes") ActiveTable = "";
+    }
+
+    private void OnToggleDonorStatusUse(ChangeEventArgs e)
+    {
+        DonorStatusActive = (bool)e.Value!;
+        if (!DonorStatusActive && ActiveTable == "DonorStatus") ActiveTable = "";
+    }
+
+    private async Task OnToggleAnonymous(ChangeEventArgs e)
+    {
+        var turningOn = (bool)e.Value!;
+        if (turningOn && _anonDonorID is null)
+        {
+            // Can't enable without a designated donor — keep it off and prompt for one.
+            AnonymousActive = false;
+            _anonPickerEnablesOnSelect = true;
+            await OpenAnonDonorPicker();
+            return;
+        }
+        AnonymousActive = turningOn;
+        await SaveUseFlags();
+    }
+
+    // Pencil in the row: change the designated donor without touching the on/off state.
+    private async Task OpenAnonDonorPickerFromPencil()
+    {
+        _anonPickerEnablesOnSelect = false;
+        await OpenAnonDonorPicker();
+    }
+
+    private async Task OpenAnonDonorPicker()
+    {
+        _donors = (await DonorService.GetAllAsync(OrgID))
+            .Select(d => new AnonDonorOption(d.EMADonorID, d.OfficialDonorName ?? "", d.EmailAddress ?? ""))
+            .ToList();
+        _anonDonorSearch = "";
+        _showAnonDonorOverlay = true;
+    }
+
+    private async Task SelectAnonDonor(AnonDonorOption d)
+    {
+        await CustomizationService.UpdateOrgAnonymousDonorAsync(OrgID, d.ID);
+        _anonDonorID = d.ID;
+        _anonDonorName = d.Name;          // update the row display immediately
+        if (_anonPickerEnablesOnSelect)
+        {
+            AnonymousActive = true;
+            await SaveUseFlags();
+        }
+        _showAnonDonorOverlay = false;
+    }
+
+    private void CancelAnonOverlay()
+    {
+        _showAnonDonorOverlay = false;
+        // Only revert the checkbox if this was a toggle-on attempt awaiting a donor;
+        // a pencil-opened picker must leave the existing on/off state untouched.
+        if (_anonPickerEnablesOnSelect) AnonymousActive = false;
+    }
+
+    private async Task OnToggleTable(ChangeEventArgs e, string table)
+    {
+        var isActive = (bool)e.Value!;
+        switch (table)
+        {
+            case "Events":       EventsActive       = isActive; break;
+            case "Methods":      MethodsActive      = isActive; break;
+            case "Campuses":     CampusesActive     = isActive; break;
+            case "Funds":        FundsActive        = isActive; break;
+            case "Sources":      SourcesActive      = isActive; break;
+            case "TributeTypes": TributeTypesActive = isActive; break;
+        }
+        if (!isActive && ActiveTable == table) ActiveTable = "";
+        await SaveUseFlags();
+    }
+
+    private async Task SaveUseFlags()
+    {
+        var payload = new
+        {
+            UseCampuses = CampusesActive ? "Y" : "N",
+            UseEvents = EventsActive ? "Y" : "N",
+            UseFunds = FundsActive ? "Y" : "N",
+            UseMethodsOfGiving = MethodsActive ? "Y" : "N",
+            UseSources = SourcesActive ? "Y" : "N",
+            UseTributeTypes = TributeTypesActive ? "Y" : "N",
+            UseAnonymous = AnonymousActive ? "Y" : "N"
+        };
+        await CustomizationService.UpdateOrgSettingsAsync(OrgID, payload);
+    }
+
+    private async Task SaveEvent(EventItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateEventAsync(item);
+    }
+
+    private async Task SaveMethodOfGiving(MethodOfGivingItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateMethodOfGivingAsync(item);
+    }
+
+    // Inline acknowledgement-message overlay (one row open at a time).
+    private int? _activeMessageOverlayID;
+    private string? _messageDraft;
+
+    private void OpenMessageOverlay(MethodOfGivingItem item)
+    {
+        if (_activeMessageOverlayID == item.EMAMethodOfGivingID)
+        {
+            // Clicking the same row's icon closes the open overlay.
+            _activeMessageOverlayID = null;
+            _messageDraft = null;
+            return;
+        }
+        _messageDraft = item.AcknowledgementMessage;
+        _activeMessageOverlayID = item.EMAMethodOfGivingID;
+    }
+
+    private async Task SaveMessageOverlay(MethodOfGivingItem item)
+    {
+        item.AcknowledgementMessage = _messageDraft;
+        await SaveMethodOfGiving(item);
+        _activeMessageOverlayID = null;
+        _messageDraft = null;
+    }
+
+    private void CancelMessageOverlay()
+    {
+        // Discard the draft without saving.
+        _activeMessageOverlayID = null;
+        _messageDraft = null;
+    }
+
+    private async Task SaveCampus(CampusItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateCampusAsync(item);
+    }
+
+    private async Task SaveFund(FundItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateFundAsync(item);
+    }
+
+    private async Task OnToggleEventActive(EventItem item, bool value)
+    {
+        item.IsActive = value;
+        await CustomizationService.UpdateEventAsync(item);
+    }
+
+    private async Task OnToggleMethodActive(MethodOfGivingItem item, bool value)
+    {
+        item.IsActive = value;
+        await CustomizationService.UpdateMethodOfGivingAsync(item);
+    }
+
+    private async Task OnToggleCampusActive(CampusItem item, bool value)
+    {
+        item.CampusActive = value;
+        await CustomizationService.UpdateCampusAsync(item);
+    }
+
+    private async Task OnToggleFundActive(FundItem item, bool value)
+    {
+        item.FundActive = value;
+        await CustomizationService.UpdateFundAsync(item);
+    }
+
+    private async Task OnToggleTaxDeductible(FundItem item, bool value)
+    {
+        item.TaxDeductible = value;
+        await CustomizationService.UpdateFundAsync(item);
+    }
+
+    private async Task SaveDonationSource(DonationSourceItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateDonationSourceAsync(item);
+    }
+
+    private async Task OnToggleDonationSourceActive(DonationSourceItem item, bool value)
+    {
+        item.IsActive = value;
+        await CustomizationService.UpdateDonationSourceAsync(item);
+    }
+
+    private async Task SaveTributeType(TributeTypeItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateTributeTypeAsync(item);
+    }
+
+    private async Task OnToggleTributeTypeActive(TributeTypeItem item, bool value)
+    {
+        item.IsActive = value;
+        await CustomizationService.UpdateTributeTypeAsync(item);
+    }
+
+    private async Task SaveEntityAlias(EntityAliasItem item)
+    {
+        // AliasName is NOT NULL in OrganizationEntityAliase, so don't try to persist a
+        // blank value — it would fail the insert. A blank field just means "no override".
+        if (string.IsNullOrWhiteSpace(item.AliasName)) return;
+        await CustomizationService.UpsertEntityAliasAsync(OrgID, item);
+    }
+
+    private async Task SaveInteractionType(InteractionTypeItem item)
+    {
+        item.DateTimeUpdated = DateTime.UtcNow;
+        item.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+        await CustomizationService.UpdateInteractionTypeAsync(item);
+    }
+
+    private async Task OnToggleInteractionTypeActive(InteractionTypeItem item, bool value)
+    {
+        item.IsActive = value;
+        await CustomizationService.SetInteractionTypeActiveAsync(item.EMAInteractionTypeID, value);
+    }
+
+    private async Task SaveDonorStatus(DonorStatusItem item)
+    {
+        await CustomizationService.UpdateDonorStatusAsync(item);
+    }
+
+    // Reorder: swap an entity's Sequence with its neighbour (dir -1 = up, +1 = down), persist
+    // both, then reload the list (which re-sorts by Sequence). Shared by every sequenced entity.
+    private async Task MoveEntityAsync<T>(List<T> list, T item, int dir,
+        Func<T, int> getSeq, Action<T, int> setSeq, Func<T, Task> saveAsync, Func<Task> reloadAsync)
+    {
+        var idx = list.IndexOf(item);
+        var newIdx = idx + dir;
+        if (idx < 0 || newIdx < 0 || newIdx >= list.Count) return;
+
+        // Move the row within the list, then renumber the whole list to distinct 1..N
+        // by position and persist only the rows whose Sequence actually changed.
+        //
+        // This is deliberately NOT a two-value swap: swapping only works when the two
+        // sequences are distinct, and a single failed save leaves a duplicate that can
+        // never be swapped apart again ("works a few times then stops"). Renumbering by
+        // position is self-healing — it normalizes duplicate/NULL sequences on the next
+        // move and a failed save is corrected on the following one.
+        list.RemoveAt(idx);
+        list.Insert(newIdx, item);
+
+        for (int k = 0; k < list.Count; k++)
+        {
+            if (getSeq(list[k]) != k + 1)
+            {
+                setSeq(list[k], k + 1);
+                await saveAsync(list[k]);
+            }
+        }
+        await reloadAsync();
+    }
+
+    private Task MoveDonorStatus(DonorStatusItem item, int dir) =>
+        MoveEntityAsync(DonorStatuses, item, dir,
+            x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveDonorStatus, () => LoadTableAsync("DonorStatus"));
+
+    // No MoveEvent: OrganizationEvent.Sequence is an IDENTITY column and cannot be reordered.
+
+    private Task MoveMethodOfGiving(MethodOfGivingItem item, int dir) =>
+        MoveEntityAsync(MethodsOfGiving, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveMethodOfGiving, () => LoadTableAsync("Methods"));
+
+    private Task MoveCampus(CampusItem item, int dir) =>
+        MoveEntityAsync(Campuses, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveCampus, () => LoadTableAsync("Campuses"));
+
+    private Task MoveFund(FundItem item, int dir) =>
+        MoveEntityAsync(Funds, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveFund, () => LoadTableAsync("Funds"));
+
+    private Task MoveTributeType(TributeTypeItem item, int dir) =>
+        MoveEntityAsync(TributeTypes, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveTributeType, () => LoadTableAsync("TributeTypes"));
+
+    private Task MoveInteractionType(InteractionTypeItem item, int dir) =>
+        MoveEntityAsync(InteractionTypes, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveInteractionType, () => LoadTableAsync("InteractionTypes"));
+
+    private Task MoveDonationSource(DonationSourceItem item, int dir) =>
+        MoveEntityAsync(Sources, item, dir, x => x.Sequence ?? 0, (x, s) => x.Sequence = s, SaveDonationSource, () => LoadTableAsync("Sources"));
+
+    private async Task OnToggleDonorStatusActive(DonorStatusItem item, bool value)
+    {
+        // Full-row update (not a set-active call) so the NOT NULL Description is always sent.
+        item.IsActive = value;
+        await CustomizationService.UpdateDonorStatusAsync(item);
+    }
+
+    private async Task OnSetMethodDefault(MethodOfGivingItem selected)
+    {
+        await CustomizationService.SetMethodOfGivingDefaultAsync(OrgID, selected.EMAMethodOfGivingID);
+        foreach (var item in MethodsOfGiving)
+            item.IsDefault = item.EMAMethodOfGivingID == selected.EMAMethodOfGivingID;
+        StateHasChanged();
+    }
+
+    private async Task OnSetCampusDefault(CampusItem selected)
+    {
+        await CustomizationService.SetCampusDefaultAsync(OrgID, selected.EMACampusID);
+        foreach (var item in Campuses)
+            item.IsDefault = item.EMACampusID == selected.EMACampusID;
+        StateHasChanged();
+    }
+
+    private async Task OnSetFundDefault(FundItem selected)
+    {
+        await CustomizationService.SetFundDefaultAsync(OrgID, selected.EMAFundID);
+        foreach (var item in Funds)
+            item.IsDefault = item.EMAFundID == selected.EMAFundID;
+        StateHasChanged();
+    }
+
+    private async Task DeleteRow(int id, int orgID, string table)
+    {
+        switch (table)
+        {
+            case "Methods":
+                await CustomizationService.DeleteMethodOfGivingAsync(orgID, id);
+                MethodsOfGiving = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+                break;
+            case "Campuses":
+                await CustomizationService.DeleteCampusAsync(orgID, id);
+                Campuses = await CustomizationService.GetCampusesAsync(OrgID);
+                break;
+            case "Funds":
+                await CustomizationService.DeleteFundAsync(orgID, id);
+                Funds = await CustomizationService.GetFundsAsync(OrgID);
+                break;
+        }
+        StateHasChanged();
+    }
+
+    private async Task AddNewRow()
+    {
+        switch (ActiveTable)
+        {
+            case "Events":
+                await CustomizationService.InsertEventAsync(OrgID, "New Event");
+                Events = await CustomizationService.GetEventsAsync(OrgID);
+                break;
+            case "Methods":
+                await CustomizationService.InsertMethodOfGivingAsync(OrgID, "New Method");
+                MethodsOfGiving = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+                break;
+            case "Campuses":
+                await CustomizationService.InsertCampusAsync(OrgID, "New Campus");
+                Campuses = await CustomizationService.GetCampusesAsync(OrgID);
+                break;
+            case "Funds":
+                await CustomizationService.InsertFundAsync(OrgID, "New Fund");
+                Funds = await CustomizationService.GetFundsAsync(OrgID);
+                break;
+            case "Sources":
+                await CustomizationService.InsertDonationSourceAsync(OrgID, "New Source");
+                Sources = await CustomizationService.GetDonationSourcesAsync(OrgID);
+                break;
+            case "TributeTypes":
+                await CustomizationService.InsertTributeTypeAsync(OrgID, "New Tribute Type");
+                TributeTypes = await CustomizationService.GetTributeTypesAsync(OrgID);
+                break;
+            case "InteractionTypes":
+                await CustomizationService.InsertInteractionTypeAsync(OrgID, "New Interaction Type");
+                InteractionTypes = await CustomizationService.GetInteractionTypesAsync(OrgID);
+                break;
+            case "DonorStatus":
+                await CustomizationService.InsertDonorStatusAsync(OrgID, "New Status");
+                DonorStatuses = await CustomizationService.GetDonorStatusesAsync(OrgID);
+                break;
+        }
+        StateHasChanged();
+    }
+
+    private void RequestCopyDefaults(string entityKey, string label)
+    {
+        PendingEntityKey = entityKey;
+        PendingEntityLabel = label;
+        ShowConfirm = true;
+    }
+
+    private void CancelConfirm() => ShowConfirm = false;
+
+    private async Task ConfirmCopyDefaults()
+    {
+        ShowConfirm = false;
+        var (ok, copied, message) = await CustomizationService.CopyDefaultEntitiesAsync(OrgID, EntitySlug(PendingEntityKey));
+        CopyError = !ok;
+        CopyMessage = ok
+            ? (message ?? $"Copied {copied} {PendingEntityLabel} from the EMA defaults.")
+            : $"Could not copy {PendingEntityLabel} from the EMA defaults. No changes were made.";
+        // Reload the grid for the affected entity so any copied rows are shown.
+        ActiveTable = PendingEntityKey;
+        await LoadTableAsync(PendingEntityKey);
+    }
+
+    private static string EntitySlug(string key) => key switch
+    {
+        "Events" => "events",
+        "Methods" => "methods",
+        "Campuses" => "campuses",
+        "Funds" => "funds",
+        "Sources" => "donation-sources",
+        "TributeTypes" => "tribute-types",
+        "InteractionTypes" => "interaction-types",
+        "DonorStatus" => "donor-statuses",
+        _ => key.ToLowerInvariant()
+    };
+
+    private void TogglePopover(string key)
+    {
+        ActivePopover = ActivePopover == key ? "" : key;
+    }
+
+    private string GetEditBtnClass(bool isActive, string table)
+    {
+        if (!isActive) return "edit-btn disabled";
+        if (ActiveTable == table) return "edit-btn selected";
+        return "edit-btn";
+    }
+}
+   

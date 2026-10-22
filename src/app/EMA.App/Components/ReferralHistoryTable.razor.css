@@ -1,0 +1,59 @@
+/*
+    Self-contained styles for the shared referral history table.
+
+    Blazor CSS isolation scopes the host pages' stylesheets to their own markup,
+    so this component carries the table styling it needs rather than relying on
+    SendReferrals.razor.css or ReferralDetails.razor.css.
+*/
+
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #a6a6a6;
+    background: #ffffff;
+}
+
+.ema-data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ema-data-table th,
+.ema-data-table td {
+    padding: 0.5rem 0.65rem;
+    border-right: 1px solid #d0d0d0;
+    border-bottom: 1px solid #d0d0d0;
+    vertical-align: middle;
+}
+
+.ema-data-table th:last-child,
+.ema-data-table td:last-child {
+    border-right: 0;
+}
+
+.ema-data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.history-table th,
+.history-table td {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.35rem;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.history-table th {
+    background: #d9d9d9;
+    color: #111111;
+    font-weight: 700;
+    font-size: 0.73rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    text-align: left;
+}
+
+.credit-cell {
+    font-weight: 700;
+    color: #166534;
+}

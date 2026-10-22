@@ -1,0 +1,181 @@
+.referral-details-page {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 0 1rem 2.5rem;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.referrals-shell {
+    width: min(100%, 1020px);
+    border: 1px solid #a6a6a6;
+    background: #f2f2f2;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.shell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
+    background: #d9d9d9;
+    border-bottom: 1px solid #a6a6a6;
+}
+
+.shell-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.shell-org-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #444444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.shell-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.btn-action-top {
+    background: #2748d8;
+    border: 1px solid #1a38b8;
+    color: #ffffff;
+    font-weight: 700;
+    border-radius: 0;
+    font-size: 0.85rem;
+}
+
+.btn-action-top:hover {
+    background: #1e3bb5;
+}
+
+.header-link-btn {
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #8d8d8d;
+    color: #222222;
+    font-size: 0.85rem;
+}
+
+.header-link-btn:hover {
+    background: #e6e6e6;
+    color: #000000;
+}
+
+.shell-body {
+    padding: 1.25rem 1.5rem 1.75rem;
+}
+
+.shell-intro {
+    font-size: 0.95rem;
+    color: #333333;
+    line-height: 1.45;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #d0d0d0;
+    padding-bottom: 0.85rem;
+}
+
+/* KPI Tiles Grid */
+.kpi-tiles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 0.85rem;
+}
+
+.kpi-tile {
+    background: #ffffff;
+    border: 1px solid #a6a6a6;
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-tile.credit-tile {
+    border-color: #16a34a;
+    background: #f0fdf4;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #555555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.kpi-val {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: #111111;
+    line-height: 1.1;
+    margin-bottom: 0.25rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.kpi-sub {
+    font-size: 0.78rem;
+    color: #666666;
+}
+
+/* History Panel */
+.history-table-panel {
+    border: 1px solid #a6a6a6;
+    background: #ffffff;
+}
+
+.panel-header-bar {
+    background: #d9d9d9;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #a6a6a6;
+}
+
+.panel-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-accepted {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-credited {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-expired {
+    background: #f3f4f6;
+    color: #6b7280;
+}

@@ -1,0 +1,275 @@
+﻿@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IEmailVerificationService EmailVerificationService
+
+@if (IsOpen)
+{
+    <div class="email-verification-backdrop">
+        <section class="email-verification-dialog"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-labelledby="email-verification-title">
+
+            <h3 id="email-verification-title">
+                Verify Email Address
+            </h3>
+
+            <p class="email-verification-address">
+                @EmailAddress
+            </p>
+
+            @if (IsSending)
+            {
+                <p class="email-verification-message">
+                    Sending verification code...
+                </p>
+            }
+            else if (!string.IsNullOrWhiteSpace(
+                         VerificationID))
+            {
+                <p class="email-verification-message">
+                    Enter the 6-digit code we sent to this
+                    email address. The code expires in 5 minutes.
+                </p>
+
+                <input class="email-verification-code"
+                       inputmode="numeric"
+                       autocomplete="one-time-code"
+                       maxlength="6"
+                       aria-label="Six-digit verification code"
+                       @bind="Code"
+                       @bind:event="oninput" />
+
+                <div class="email-verification-actions">
+                    <button class="login-submit-button"
+                            type="button"
+                            disabled="@(IsVerifying || !IsCodeValid)"
+                            @onclick="VerifyAsync">
+                        @(IsVerifying
+                            ? "Verifying..."
+                            : "Verify Email")
+                    </button>
+
+                    <button class="login-secondary-button"
+                            type="button"
+                            disabled="@(IsSending || IsVerifying)"
+                            @onclick="SendCodeAsync">
+                        Send another code
+                    </button>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Message))
+            {
+                <p class="email-verification-status">
+                    @Message
+                </p>
+            }
+
+            <button class="email-verification-cancel"
+                    type="button"
+                    disabled="@(IsSending || IsVerifying)"
+                    @onclick="CloseAsync">
+                Cancel
+            </button>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public string EmailAddress { get; set; } =
+        string.Empty;
+
+    [Parameter]
+    public EmailVerificationPurpose Purpose { get; set; }
+
+    [Parameter]
+    public int ActorID { get; set; }
+
+    [Parameter]
+    public EventCallback<EmailVerificationCompleted>
+        OnVerified
+    { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private string VerificationID =
+        string.Empty;
+
+    private string Code =
+        string.Empty;
+
+    private string Message =
+        string.Empty;
+
+    private string RequestKey =
+        string.Empty;
+
+    private bool IsSending;
+    private bool IsVerifying;
+
+    private bool IsCodeValid =>
+        Code.Length == 6 &&
+        Code.All(char.IsDigit);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!IsOpen)
+        {
+            RequestKey =
+                string.Empty;
+
+            return;
+        }
+
+        var nextRequestKey =
+            $"{(int)Purpose}:{ActorID}:{EmailAddress.Trim().ToLowerInvariant()}";
+
+        if (string.Equals(
+                RequestKey,
+                nextRequestKey,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        RequestKey =
+            nextRequestKey;
+
+        VerificationID =
+            string.Empty;
+
+        Code =
+            string.Empty;
+
+        Message =
+            string.Empty;
+
+        await SendCodeAsync();
+    }
+
+    private async Task SendCodeAsync()
+    {
+        if (IsSending ||
+            string.IsNullOrWhiteSpace(
+                EmailAddress))
+        {
+            return;
+        }
+
+        IsSending =
+            true;
+
+        Message =
+            string.Empty;
+
+        Code =
+            string.Empty;
+
+        try
+        {
+            var result =
+                await EmailVerificationService.StartAsync(
+                    Purpose,
+                    ActorID,
+                    EmailAddress);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                Message =
+                    result.ErrorMessage;
+
+                return;
+            }
+
+            VerificationID =
+                result.Value.VerificationID;
+
+            Message =
+                result.Value.Message;
+        }
+        finally
+        {
+            IsSending =
+                false;
+        }
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (IsVerifying ||
+            string.IsNullOrWhiteSpace(
+                VerificationID) ||
+            !IsCodeValid)
+        {
+            return;
+        }
+
+        IsVerifying =
+            true;
+
+        Message =
+            string.Empty;
+
+        try
+        {
+            var result =
+                await EmailVerificationService.VerifyAsync(
+                    Purpose,
+                    ActorID,
+                    EmailAddress,
+                    VerificationID,
+                    Code);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                Message =
+                    result.ErrorMessage;
+
+                return;
+            }
+
+            await OnVerified.InvokeAsync(
+                new EmailVerificationCompleted
+                {
+                    EmailAddress =
+                        EmailAddress.Trim(),
+
+                    VerificationToken =
+                        result.Value.VerificationToken
+                });
+
+            await CloseAsync();
+        }
+        finally
+        {
+            IsVerifying =
+                false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        VerificationID =
+            string.Empty;
+
+        Code =
+            string.Empty;
+
+        Message =
+            string.Empty;
+
+        RequestKey =
+            string.Empty;
+
+        await OnClose.InvokeAsync();
+    }
+}

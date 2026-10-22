@@ -1,0 +1,213 @@
+@page "/pads"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationOnboardingService OnboardingService
+@inject ICustomizationService CustomizationService
+
+<PageTitle>Set Up Pre-Authorized Debits - EMA</PageTitle>
+
+<section class="task22-page">
+    <header class="task22-header">
+        <h1>Set Up Pre-Authorized Debits (PADs)</h1>
+    </header>
+
+    @if (IsLoading)
+    {
+        <p class="task22-status">Loading...</p>
+    }
+    else
+    {
+        @if (HasVisibleAttributeRows)
+        {
+        <div class="task22-card">
+            @if (Settings.UseEvents)
+            {
+            <div class="task22-row">
+                <label for="pads-event">Default Event for Pre-Authorized Debits:</label>
+                <div class="task22-control">
+                    <select id="pads-event" class="task22-select" @bind="Settings.EMAEventIDForPADs">
+                        <option value="">Select an Event</option>
+                        @foreach (var item in Events)
+                        {
+                            <option value="@item.EMAEventID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseSources)
+            {
+            <div class="task22-row">
+                <label for="pads-source">Default Source for Pre-Authorized Debits:</label>
+                <div class="task22-control">
+                    <select id="pads-source" class="task22-select" @bind="Settings.EMASourceIDForPADs">
+                        <option value="">Select a Source</option>
+                        @foreach (var item in Sources)
+                        {
+                            <option value="@item.EMADonationSourceID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseMethodsOfGiving)
+            {
+            <div class="task22-row">
+                <label for="pads-method">Default Method of Giving for Pre-Authorized Debits:</label>
+                <div class="task22-control">
+                    <select id="pads-method" class="task22-select" @bind="Settings.EMAMethodOfGivingIDForPADs">
+                        <option value="">Select a Method</option>
+                        @foreach (var item in Methods)
+                        {
+                            <option value="@item.EMAMethodOfGivingID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseFunds)
+            {
+            <div class="task22-row">
+                <label for="pads-fund">Default Fund for Pre-Authorized Debits:</label>
+                <div class="task22-control">
+                    <select id="pads-fund" class="task22-select" @bind="Settings.EMAFundIDForPADs">
+                        <option value="">Select a Fund</option>
+                        @foreach (var item in Funds)
+                        {
+                            <option value="@item.EMAFundID">@item.FundName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseCampuses)
+            {
+            <div class="task22-row">
+                <label for="pads-campus">Default Campus for Pre-Authorized Debits:</label>
+                <div class="task22-control">
+                    <select id="pads-campus" class="task22-select" @bind="Settings.EMACampusIDForPADs">
+                        <option value="">Select a Campus</option>
+                        @foreach (var item in Campuses)
+                        {
+                            <option value="@item.EMACampusID">@item.CampusName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+        </div>
+        }
+
+        <div class="task22-actions">
+            <button type="button"
+                    class="task22-save-button"
+                    disabled="@IsSaving"
+                    @onclick="SaveAsync">
+                @(IsSaving ? "Saving..." : "Save")
+            </button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <p class="task22-status @(IsError ? "task22-status-error" : "task22-status-success")" role="status">
+            @StatusMessage
+        </p>
+    }
+</section>
+
+@code {
+    private int OrganizationID => SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private bool HasVisibleAttributeRows =>
+        Settings.UseEvents ||
+        Settings.UseSources ||
+        Settings.UseMethodsOfGiving ||
+        Settings.UseFunds ||
+        Settings.UseCampuses;
+
+    private OrganizationOnboardingSettings Settings = new();
+    private List<EventItem> Events = new();
+    private List<DonationSourceItem> Sources = new();
+    private List<MethodOfGivingItem> Methods = new();
+    private List<FundItem> Funds = new();
+    private List<CampusItem> Campuses = new();
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsError;
+    private string StatusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage = "An organization session is required.";
+            IsLoading = false;
+            return;
+        }
+
+        var settingsTask = OnboardingService.GetAsync(OrganizationID);
+        var eventsTask = CustomizationService.GetEventsAsync(OrganizationID, true);
+        var sourcesTask = CustomizationService.GetDonationSourcesAsync(OrganizationID, true);
+        var methodsTask = CustomizationService.GetMethodsOfGivingAsync(OrganizationID, true);
+        var fundsTask = CustomizationService.GetFundsAsync(OrganizationID, true);
+        var campusesTask = CustomizationService.GetCampusesAsync(OrganizationID, true);
+
+        await Task.WhenAll(settingsTask, eventsTask, sourcesTask, methodsTask, fundsTask, campusesTask);
+
+        var settings = await settingsTask;
+        if (settings is null)
+        {
+            IsError = true;
+            StatusMessage = "The PAD setup could not be loaded.";
+            IsLoading = false;
+            return;
+        }
+
+        Settings = settings;
+        Events = await eventsTask;
+        Sources = await sourcesTask;
+        Methods = await methodsTask;
+        Funds = await fundsTask;
+        Campuses = await campusesTask;
+        IsLoading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (IsSaving)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var result = await OnboardingService.SaveAsync(
+            OrganizationID,
+            "pads",
+            new SaveOrganizationOnboardingSettingsRequest
+            {
+                EMAEventIDForPADs = Settings.EMAEventIDForPADs,
+                EMASourceIDForPADs = Settings.EMASourceIDForPADs,
+                EMAMethodOfGivingIDForPADs = Settings.EMAMethodOfGivingIDForPADs,
+                EMAFundIDForPADs = Settings.EMAFundIDForPADs,
+                EMACampusIDForPADs = Settings.EMACampusIDForPADs
+            });
+
+        IsSaving = false;
+        IsError = !result.Succeeded;
+        StatusMessage = result.Message;
+    }
+}

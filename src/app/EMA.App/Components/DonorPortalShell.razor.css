@@ -1,0 +1,47 @@
+.donor-portal-shell {
+    width: min(100%, 980px);
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+
+.donor-portal-card {
+    border: 1px solid #c9c9c9;
+    background: #ffffff;
+    padding: 2rem;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.donor-portal-eyebrow {
+    margin-bottom: 0.5rem;
+    color: #555555;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.donor-portal-card h1 {
+    margin-bottom: 0.75rem;
+    font-size: 2rem;
+}
+
+.donor-portal-description {
+    max-width: 760px;
+    margin-bottom: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.donor-portal-content {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+}
+
+.donor-portal-content ul {
+    margin-left: 1.25rem;
+}
+
+.donor-portal-content li {
+    margin-bottom: 0.35rem;
+}

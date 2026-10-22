@@ -1,0 +1,86 @@
+.terms-of-service-page {
+    width: min(100%, 56.5rem);
+    margin: 0 auto;
+    padding: 0 0 2.5rem;
+    color: #111111;
+    font-family: var(--ema-ui-font);
+}
+
+.terms-of-service-header {
+    margin-bottom: 1.25rem;
+}
+
+.terms-of-service-header h2 {
+    margin: 0 0 0.65rem;
+    font-size: clamp(1.65rem, 3vw, 2.15rem);
+    line-height: 1.2;
+}
+
+.terms-last-updated {
+    margin: 0;
+    font-weight: 700;
+}
+
+.terms-of-service-page > p,
+.terms-section p,
+.terms-section li {
+    font-size: 1.05rem;
+    line-height: 1.55;
+}
+
+.terms-of-service-page > p {
+    margin: 0 0 1rem;
+}
+
+.terms-section {
+    margin-top: 1.5rem;
+}
+
+.terms-section h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1.35rem;
+    line-height: 1.3;
+}
+
+.terms-section ul {
+    margin: 0;
+    padding-left: 2rem;
+}
+
+.terms-section li {
+    margin-bottom: 0.45rem;
+}
+
+.terms-core-principles {
+    margin-top: 0.85rem;
+}
+
+.terms-principle-list {
+    margin-top: 0.75rem;
+}
+
+.terms-principle-list p {
+    margin: 0 0 0.85rem;
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+    .terms-of-service-page {
+        width: min(100%, 37.75rem);
+    }
+}
+
+@media (max-width: 700px) {
+    .terms-of-service-header h2 {
+        font-size: 1.55rem;
+    }
+
+    .terms-section h3 {
+        font-size: 1.2rem;
+    }
+
+    .terms-of-service-page > p,
+    .terms-section p,
+    .terms-section li {
+        font-size: 1rem;
+    }
+}

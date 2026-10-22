@@ -1,0 +1,576 @@
+@page "/etransfers"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationOnboardingService OnboardingService
+@inject IOrganizationService OrganizationService
+@inject ICustomizationService CustomizationService
+
+<PageTitle>Set Up eTransfers - EMA</PageTitle>
+
+<section class="task22-page">
+    <header class="task22-header">
+        <h1>Set Up eTransfers</h1>
+    </header>
+
+    @if (IsLoading)
+    {
+        <p class="task22-status">Loading...</p>
+    }
+    else
+    {
+        @if (HasVisibleAttributeRows)
+        {
+        <div class="task22-card">
+            @if (Settings.UseEvents)
+            {
+            <div class="task22-row">
+                <label for="etransfer-event">Default Event for eTransfers:</label>
+                <div class="task22-control">
+                    <select id="etransfer-event" class="task22-select" @bind="Settings.EMAEventIDForEtransfers">
+                        <option value="">Select an Event</option>
+                        @foreach (var item in Events)
+                        {
+                            <option value="@item.EMAEventID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseSources)
+            {
+            <div class="task22-row">
+                <label for="etransfer-source">Default Source for eTransfers:</label>
+                <div class="task22-control">
+                    <select id="etransfer-source" class="task22-select" @bind="Settings.EMASourceIDForEtransfers">
+                        <option value="">Select a Source</option>
+                        @foreach (var item in Sources)
+                        {
+                            <option value="@item.EMADonationSourceID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseMethodsOfGiving)
+            {
+            <div class="task22-row">
+                <label for="etransfer-method">Default Method of Giving for eTransfers:</label>
+                <div class="task22-control">
+                    <select id="etransfer-method" class="task22-select" @bind="Settings.EMAMethodOfGivingIDForETransfers">
+                        <option value="">Select a Method</option>
+                        @foreach (var item in Methods)
+                        {
+                            <option value="@item.EMAMethodOfGivingID">@item.Description</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseFunds)
+            {
+            <div class="task22-row">
+                <label for="etransfer-fund">Default Fund for eTransfers:</label>
+                <div class="task22-control">
+                    <select id="etransfer-fund" class="task22-select" @bind="Settings.EMAFundIDForEtransfer">
+                        <option value="">Select a Fund</option>
+                        @foreach (var item in Funds)
+                        {
+                            <option value="@item.EMAFundID">@item.FundName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+
+            @if (Settings.UseCampuses)
+            {
+            <div class="task22-row">
+                <label for="etransfer-campus">Default Campus for eTransfers:</label>
+                <div class="task22-control">
+                    <select id="etransfer-campus" class="task22-select" @bind="Settings.EMACampusIDForEtransfers">
+                        <option value="">Select a Campus</option>
+                        @foreach (var item in Campuses)
+                        {
+                            <option value="@item.EMACampusID">@item.CampusName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            }
+        </div>
+        }
+
+        <div class="task22-email-panel">
+            <label for="etransfer-email-prefix">Donation Email:</label>
+
+            <span class="task22-email-info"
+                  title="Set the eTransfer Method of Giving and Fund before configuring the donation email."
+                  aria-label="Donation email setup information">
+                i
+            </span>
+
+            <input id="etransfer-email-prefix"
+                   class="task22-email-input"
+                   value="@AliasPrefix"
+                   @oninput="OnAliasChanged"
+                   autocomplete="off"
+                   disabled="@(!HasEmailPrerequisites)"
+                   aria-describedby="etransfer-email-requirements" />
+
+            <strong class="task22-email-domain">@@emailmoney.app</strong>
+
+            <button type="button"
+                    class="task22-check-button @(AliasAvailableForCurrentValue ? "task22-check-button-success" : string.Empty)"
+                    disabled="@(!HasEmailPrerequisites || IsCheckingAlias || string.IsNullOrWhiteSpace(AliasPrefix))"
+                    @onclick="CheckAvailabilityAsync">
+                @(IsCheckingAlias
+                    ? "Checking..."
+                    : AliasAvailableForCurrentValue
+                        ? "Available"
+                        : "Check Availability")
+            </button>
+        </div>
+
+        <p id="etransfer-email-requirements" class="task22-email-requirements">
+            @if (HasEmailPrerequisites)
+            {
+                <span>Method of Giving and Fund are configured, so the donation email can be set.</span>
+            }
+            else
+            {
+                <span>Select the Method of Giving and Fund for eTransfers before setting the donation email.</span>
+            }
+        </p>
+
+        <div class="task22-actions">
+            <button type="button"
+                    class="task22-save-button"
+                    disabled="@IsSaving"
+                    @onclick="SaveAsync">
+                @(IsSaving ? "Saving..." : "Save")
+            </button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <p class="task22-status @(IsError ? "task22-status-error" : "task22-status-success")" role="status">
+            @StatusMessage
+        </p>
+    }
+</section>
+
+@code {
+    private const string EmailDomain = "emailmoney.app";
+    private const int MaximumAliasLength = 64;
+
+    private int OrganizationID => SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private bool HasVisibleAttributeRows =>
+        Settings.UseEvents ||
+        Settings.UseSources ||
+        Settings.UseMethodsOfGiving ||
+        Settings.UseFunds ||
+        Settings.UseCampuses;
+
+    private OrganizationOnboardingSettings Settings = new();
+    private List<EventItem> Events = new();
+    private List<DonationSourceItem> Sources = new();
+    private List<MethodOfGivingItem> Methods = new();
+    private List<FundItem> Funds = new();
+    private List<CampusItem> Campuses = new();
+
+    private string AliasPrefix = string.Empty;
+    private string SavedEtransferEmail = string.Empty;
+    private string CheckedAliasPrefix = string.Empty;
+    private bool? AliasIsAvailable;
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsCheckingAlias;
+    private bool IsError;
+    private string StatusMessage = string.Empty;
+
+    private bool HasEmailPrerequisites =>
+        Settings.EMAMethodOfGivingIDForETransfers is > 0 &&
+        Settings.EMAFundIDForEtransfer is > 0;
+
+    private bool AliasAvailableForCurrentValue =>
+        AliasIsAvailable == true &&
+        string.Equals(
+            NormalizeAlias(
+                AliasPrefix),
+            CheckedAliasPrefix,
+            StringComparison.Ordinal);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage = "An organization session is required.";
+            IsLoading = false;
+            return;
+        }
+
+        var settingsTask = OnboardingService.GetAsync(OrganizationID);
+        var organizationTask = OrganizationService.GetOrganizationAsync(OrganizationID);
+        var eventsTask = CustomizationService.GetEventsAsync(OrganizationID, true);
+        var sourcesTask = CustomizationService.GetDonationSourcesAsync(OrganizationID, true);
+        var methodsTask = CustomizationService.GetMethodsOfGivingAsync(OrganizationID, true);
+        var fundsTask = CustomizationService.GetFundsAsync(OrganizationID, true);
+        var campusesTask = CustomizationService.GetCampusesAsync(OrganizationID, true);
+
+        await Task.WhenAll(
+            settingsTask,
+            organizationTask,
+            eventsTask,
+            sourcesTask,
+            methodsTask,
+            fundsTask,
+            campusesTask);
+
+        var settings = await settingsTask;
+        var organization = await organizationTask;
+
+        if (settings is null ||
+            organization is null)
+        {
+            IsError = true;
+            StatusMessage = "The eTransfer setup could not be loaded.";
+            IsLoading = false;
+            return;
+        }
+
+        Settings = settings;
+        Events = await eventsTask;
+        Sources = await sourcesTask;
+        Methods = await methodsTask;
+        Funds = await fundsTask;
+        Campuses = await campusesTask;
+
+        SavedEtransferEmail =
+            organization.EtransferEmailAddress?.Trim()
+            ?? string.Empty;
+
+        AliasPrefix =
+            ExtractAlias(
+                SavedEtransferEmail);
+
+        if (!string.IsNullOrWhiteSpace(
+                AliasPrefix))
+        {
+            CheckedAliasPrefix =
+                NormalizeAlias(
+                    AliasPrefix);
+
+            AliasIsAvailable = true;
+        }
+
+        IsLoading = false;
+    }
+
+    private void OnAliasChanged(
+        ChangeEventArgs args)
+    {
+        var entered =
+            args.Value?.ToString()
+            ?? string.Empty;
+
+        var suffix =
+            $"@{EmailDomain}";
+
+        if (entered.EndsWith(
+                suffix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            entered =
+                entered[..^suffix.Length];
+        }
+
+        AliasPrefix =
+            NormalizeAlias(
+                entered);
+
+        CheckedAliasPrefix = string.Empty;
+        AliasIsAvailable = null;
+        StatusMessage = string.Empty;
+    }
+
+    private async Task CheckAvailabilityAsync()
+    {
+        if (IsCheckingAlias ||
+            !HasEmailPrerequisites)
+        {
+            return;
+        }
+
+        if (!TryBuildEmail(
+                AliasPrefix,
+                out _,
+                out var validationMessage))
+        {
+            AliasIsAvailable = null;
+            CheckedAliasPrefix = string.Empty;
+            IsError = true;
+            StatusMessage = validationMessage;
+            return;
+        }
+
+        IsCheckingAlias = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var result =
+            await OrganizationService.CheckEtransferAliasAvailabilityAsync(
+                OrganizationID,
+                AliasPrefix);
+
+        IsCheckingAlias = false;
+
+        if (!result.CheckSucceeded)
+        {
+            AliasIsAvailable = null;
+            CheckedAliasPrefix = string.Empty;
+            IsError = true;
+            StatusMessage = result.Message;
+            return;
+        }
+
+        AliasPrefix = result.Prefix;
+        CheckedAliasPrefix = NormalizeAlias(result.Prefix);
+        AliasIsAvailable = result.IsAvailable;
+        IsError = !result.IsAvailable;
+        StatusMessage = result.Message;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (IsSaving)
+        {
+            return;
+        }
+
+        var requestedEmail =
+            string.IsNullOrWhiteSpace(
+                AliasPrefix)
+                ? string.Empty
+                : $"{NormalizeAlias(AliasPrefix)}@{EmailDomain}";
+
+        var emailChanged =
+            !EmailsMatch(
+                requestedEmail,
+                SavedEtransferEmail);
+
+        if (emailChanged &&
+            !string.IsNullOrWhiteSpace(
+                requestedEmail))
+        {
+            if (!HasEmailPrerequisites)
+            {
+                IsError = true;
+                StatusMessage =
+                    "Set the Method of Giving and Fund for eTransfers before setting the donation email.";
+                return;
+            }
+
+            if (!AliasAvailableForCurrentValue)
+            {
+                IsError = true;
+                StatusMessage =
+                    "Check that the new donation email is available before saving.";
+                return;
+            }
+        }
+
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var defaultsResult =
+            await OnboardingService.SaveAsync(
+                OrganizationID,
+                "etransfers",
+                new SaveOrganizationOnboardingSettingsRequest
+                {
+                    EMAEventIDForEtransfers = Settings.EMAEventIDForEtransfers,
+                    EMASourceIDForEtransfers = Settings.EMASourceIDForEtransfers,
+                    EMAMethodOfGivingIDForETransfers = Settings.EMAMethodOfGivingIDForETransfers,
+                    EMAFundIDForEtransfer = Settings.EMAFundIDForEtransfer,
+                    EMACampusIDForEtransfers = Settings.EMACampusIDForEtransfers
+                });
+
+        if (!defaultsResult.Succeeded)
+        {
+            IsSaving = false;
+            IsError = true;
+            StatusMessage = defaultsResult.Message;
+            return;
+        }
+
+        if (emailChanged)
+        {
+            if (!string.IsNullOrWhiteSpace(requestedEmail) &&
+                !TryBuildEmail(
+                    AliasPrefix,
+                    out requestedEmail,
+                    out var validationMessage))
+            {
+                IsSaving = false;
+                IsError = true;
+                StatusMessage = validationMessage;
+                return;
+            }
+
+            var latestOrganization =
+                await OrganizationService.GetOrganizationAsync(
+                    OrganizationID);
+
+            if (latestOrganization is null)
+            {
+                IsSaving = false;
+                IsError = true;
+                StatusMessage =
+                    "The eTransfer defaults were saved, but the donation email could not be updated because the organization could not be reloaded.";
+                return;
+            }
+
+            latestOrganization.EtransferEmailAddress =
+                string.IsNullOrWhiteSpace(
+                    requestedEmail)
+                    ? null
+                    : requestedEmail;
+
+            var organizationResult =
+                await OrganizationService.UpdateOrganizationWithResultAsync(
+                    OrganizationID,
+                    latestOrganization);
+
+            if (!organizationResult.Succeeded)
+            {
+                IsSaving = false;
+                IsError = true;
+                StatusMessage =
+                    $"The eTransfer defaults were saved, but the donation email was not updated. {organizationResult.Message}";
+                return;
+            }
+
+            SavedEtransferEmail = requestedEmail;
+            CheckedAliasPrefix = NormalizeAlias(AliasPrefix);
+            AliasIsAvailable = !string.IsNullOrWhiteSpace(requestedEmail);
+        }
+
+        IsSaving = false;
+        IsError = false;
+        StatusMessage =
+            "Your eTransfer setup has been saved.";
+    }
+
+    private static string ExtractAlias(
+        string? email)
+    {
+        if (string.IsNullOrWhiteSpace(
+                email))
+        {
+            return string.Empty;
+        }
+
+        var normalized =
+            email.Trim().ToLowerInvariant();
+
+        var at =
+            normalized.IndexOf('@');
+
+        return at > 0
+            ? normalized[..at]
+            : normalized;
+    }
+
+    private static string NormalizeAlias(
+        string? value) =>
+        value?.Trim().ToLowerInvariant()
+        ?? string.Empty;
+
+    private static bool TryBuildEmail(
+        string? prefix,
+        out string email,
+        out string message)
+    {
+        email = string.Empty;
+        message = string.Empty;
+
+        var normalized =
+            NormalizeAlias(
+                prefix);
+
+        if (string.IsNullOrWhiteSpace(
+                normalized))
+        {
+            message =
+                "Enter a donation email prefix.";
+            return false;
+        }
+
+        if (normalized.Length >
+            MaximumAliasLength)
+        {
+            message =
+                $"The donation email prefix must be no more than {MaximumAliasLength} characters.";
+            return false;
+        }
+
+        if (!char.IsLetterOrDigit(
+                normalized[0]) ||
+            !char.IsLetterOrDigit(
+                normalized[^1]))
+        {
+            message =
+                "The donation email prefix must start and end with a letter or number.";
+            return false;
+        }
+
+        if (normalized.Any(
+                character =>
+                    !char.IsLetterOrDigit(
+                        character) &&
+                    character is not '.' and not '-' and not '_'))
+        {
+            message =
+                "The donation email prefix can only contain letters, numbers, periods, hyphens, and underscores.";
+            return false;
+        }
+
+        if (normalized.Contains(
+                "..",
+                StringComparison.Ordinal))
+        {
+            message =
+                "The donation email prefix cannot contain consecutive periods.";
+            return false;
+        }
+
+        email =
+            $"{normalized}@{EmailDomain}";
+
+        return true;
+    }
+
+    private static bool EmailsMatch(
+        string? left,
+        string? right) =>
+        string.Equals(
+            string.IsNullOrWhiteSpace(left)
+                ? null
+                : left.Trim(),
+            string.IsNullOrWhiteSpace(right)
+                ? null
+                : right.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+}

@@ -1,0 +1,67 @@
+@using EMA.App.Models
+
+@*
+    Shared 12-column referral history table used by both the Send Referrals and
+    Referral Details screens so the two stay in step.
+
+    The "Ref. Amt" and "Rcpt. Amt" columns are reserved for the billing credit
+    run, which is not implemented yet. sp_Referral_GetHistory returns them as
+    NULL, so they render as em dashes until crediting lands.
+*@
+
+<div class="table-wrap">
+    <table class="ema-data-table history-table">
+        <thead>
+            <tr>
+                <th>Date Sent</th>
+                <th>Referring Org</th>
+                <th>Sent By</th>
+                <th>Referred To</th>
+                <th>Email</th>
+                <th>Recipient Org</th>
+                <th>Recipient User</th>
+                <th>Accepted</th>
+                <th>Credited</th>
+                <th style="text-align: right;">Ref. Amt</th>
+                <th style="text-align: right;">Rcpt. Amt</th>
+                <th style="text-align: right;">Credit</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Items)
+            {
+                <tr>
+                    <td>@item.DateReferred.ToString("yyyy-MM-dd")</td>
+                    <td><strong>@item.ReferringOrganization</strong></td>
+                    <td>@OrDash(item.ReferredByUser)</td>
+                    <td>@OrDash(item.ReferredTo)</td>
+                    <td>@item.EmailAddress</td>
+                    <td><strong>@item.RecipientOrganization</strong></td>
+                    <td>@OrDash(item.RecipientUser)</td>
+                    <td>@OrDash(item.DateAccepted)</td>
+                    <td>@OrDash(item.DateCredited)</td>
+                    <td style="text-align: right;">@OrDash(item.ReferringAmount)</td>
+                    <td style="text-align: right;">@OrDash(item.RecipientAmount)</td>
+                    <td style="text-align: right;" class="credit-cell">@OrDash(item.CreditAmount)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private const string Dash = "—";
+
+    [Parameter]
+    [EditorRequired]
+    public IReadOnlyList<ReferralHistoryItemDto> Items { get; set; } = Array.Empty<ReferralHistoryItemDto>();
+
+    private static string OrDash(string? value)
+        => string.IsNullOrWhiteSpace(value) ? Dash : value;
+
+    private static string OrDash(DateTime? value)
+        => value.HasValue ? value.Value.ToString("yyyy-MM-dd") : Dash;
+
+    private static string OrDash(decimal? value)
+        => value.HasValue && value.Value > 0 ? $"${value.Value:N2}" : Dash;
+}

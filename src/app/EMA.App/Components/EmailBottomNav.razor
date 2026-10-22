@@ -1,0 +1,41 @@
+@using EMA.App.Models
+
+<div class="email-bottom-section">
+    <div class="email-nav-left">
+        <div class="email-arrow-buttons">
+            <button class="btn-arrow" @onclick="OnOlder">&#9664; Older</button>
+            <button class="btn-arrow" @onclick="OnNewer">Newer &#9654;</button>
+        </div>
+        <div class="email-audit-info">
+            <div class="@(string.IsNullOrEmpty(AuditDateTime) ? "email-audit-placeholder" : "email-audit-row")">@(string.IsNullOrEmpty(AuditDateTime) ? "Date & Time" : AuditDateTime)</div>
+            <div class="@(string.IsNullOrEmpty(AuditUserName) ? "email-audit-placeholder" : "email-audit-row")">@(string.IsNullOrEmpty(AuditUserName) ? "User Name" : AuditUserName)</div>
+        </div>
+        <div class="email-step-log-scroll">
+            @foreach (var log in StepLogs)
+            {
+                <div><small>@log</small></div>
+            }
+        </div>
+    </div>
+    <div class="email-totals">
+        <div class="email-total-row">
+            <span><strong><u>Total:</u></strong></span>
+            <input class="email-input email-rolling-sum" value="@Total.ToString("C")" disabled />
+        </div>
+        <div class="email-total-row">
+            <span><strong><u>Default:</u></strong></span>
+            <input type="checkbox" class="email-checkbox" disabled="@ReadOnly" @bind="IsDefault" />
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<string> StepLogs { get; set; } = new();
+    [Parameter] public decimal Total { get; set; }
+    [Parameter] public bool IsDefault { get; set; }
+    [Parameter] public bool ReadOnly { get; set; } = true;
+    [Parameter] public string AuditDateTime { get; set; } = string.Empty;
+    [Parameter] public string AuditUserName { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnOlder { get; set; }
+    [Parameter] public EventCallback OnNewer { get; set; }
+}

@@ -1,0 +1,76 @@
+/* ── Page container ─────────────────────────────────────────────────────── */
+/* Matches the padding/max-width/centering pattern used by the other app pages
+   (e.g. .donors-container, .donations-container, .reports-body). */
+.dashboard-container {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 12px;
+    }
+}
+
+/* ── Filter sidebar ─────────────────────────────────────────────────────── */
+.filter-sidebar {
+    width: 140px;
+    min-width: 140px;
+    border-right: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+.btn-filter {
+    background-color: rgb(5, 39, 103);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.85rem;
+    transition: background-color 0.15s ease;
+}
+
+.btn-filter:hover,
+.btn-filter:focus {
+    background-color: #3a0647;
+    color: #fff;
+}
+
+/* Small white dot in top-right corner when a filter has an active value */
+.btn-filter--active {
+    position: relative;
+}
+
+.btn-filter--active::after {
+    content: '';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #fff;
+    opacity: 0.9;
+    pointer-events: none;
+}
+
+/* ── Modal overlay ──────────────────────────────────────────────────────── */
+.ema-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 1040;
+}
+
+.ema-modal-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1050;
+    width: 100%;
+    max-width: 420px;
+    background-color: #fff;
+    border-radius: 6px;
+}

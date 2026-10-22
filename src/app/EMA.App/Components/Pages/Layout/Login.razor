@@ -1,0 +1,986 @@
+@page "/login"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using System.Net.Http.Json
+@using EMA.App.Models
+
+@inject HttpClient Http
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject IMenuNavigationService MenuNavigationService
+@inject NavigationManager Navigation
+
+<PageTitle>Login - @AppBranding.ApplicationName</PageTitle>
+
+<LoginPageFrame>
+    <div class="login-page">
+        <section class="login-card">
+            <h1 class="login-title">
+                Login
+            </h1>
+
+            @if (VerificationStart is null)
+            {
+                <div class="login-lookup-section">
+                    <label class="login-input-label ema-login-phone-label"
+                           for="login-identifier">
+                        Email address or phone number
+                    </label>
+
+                    <div class="login-input-row ema-login-phone-row">
+                        <input id="login-identifier"
+                               class="login-input login-identifier-input"
+                               type="text"
+                               autocomplete="username"
+                               inputmode="text"
+                               placeholder="name@example.com or 123-456-7890"
+                               @bind="Identifier"
+                               @bind:event="oninput"
+                               disabled="@IsBusy" />
+
+                        <button type="button"
+                                class="login-button"
+                                @onclick="StartLoginVerificationAsync"
+                                disabled="@IsBusy">
+                            @(IsStartingVerification
+                                ? "Checking..."
+                                : "Continue")
+                        </button>
+                    </div>
+                </div>
+            }
+
+            @if (ShowSessionExpiredMessage)
+            {
+                <div class="login-session-expired"
+                     role="status">
+                    Your session has timed out. Please log in again.
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(
+                    ErrorMessage))
+            {
+                <div class="login-error"
+                     role="alert">
+                    @ErrorMessage
+                </div>
+            }
+
+            @if (VerificationStart is not null &&
+                 LookupResult is null)
+            {
+                <section class="login-selection-panel">
+                    <p class="login-verification-message">
+                        @VerificationStart.Message
+                    </p>
+
+                    <label class="login-input-label"
+                           for="login-code">
+                        Enter the 6-digit code
+                    </label>
+
+                    <div class="login-input-row login-code-row">
+                        <input id="login-code"
+                               class="login-input login-code-input"
+                               type="text"
+                               inputmode="numeric"
+                               maxlength="6"
+                               autocomplete="one-time-code"
+                               placeholder="123456"
+                               @bind="VerificationCode"
+                               @bind:event="oninput"
+                               disabled="@IsBusy" />
+
+                        <button type="button"
+                                class="login-button login-verify-button"
+                                @onclick="VerifyCodeAsync"
+                                disabled="@(!CanVerify)">
+                            @(IsVerifying
+                                ? "Verifying..."
+                                : "Verify Code")
+                        </button>
+                    </div>
+
+                    <label class="login-trusted-device-option">
+                        <input type="checkbox"
+                               @bind="TrustThisDevice"
+                               disabled="@IsBusy" />
+
+                        <span>
+                            Trust this device for 90 days
+                        </span>
+                    </label>
+
+                    <button type="button"
+                            class="login-secondary-button"
+                            @onclick="ResetAll"
+                            disabled="@IsBusy">
+                        Use a different email address or phone number
+                    </button>
+                </section>
+            }
+
+            @if (LookupResult is not null)
+            {
+                <section class="login-selection-panel">
+                    @if (LookupResult.HasUserMatches &&
+                         LookupResult.HasDonorMatches &&
+                         SelectedLoginType ==
+                         LoginActorType.None)
+                    {
+                        <div class="login-found-message">
+                            More than one login type is available.
+                        </div>
+
+                        <p class="login-choice-description">
+                            Choose how you want to continue.
+                        </p>
+
+                        <div class="login-choice-actions">
+                            <button type="button"
+                                    class="login-button login-choice-button"
+                                    @onclick="@(() => SelectLoginType(LoginActorType.OrganizationUser))"
+                                    disabled="@IsBusy">
+                                Organization Login
+                            </button>
+
+                            <button type="button"
+                                    class="login-button login-choice-button"
+                                    @onclick="@(() => SelectLoginType(LoginActorType.Donor))"
+                                    disabled="@IsBusy">
+                                Donor Login
+                            </button>
+                        </div>
+                    }
+                    else if (SelectedLoginType ==
+                             LoginActorType.OrganizationUser)
+                    {
+                        <div class="login-found-message">
+                            Select your organization account:
+                        </div>
+
+                        <div class="login-organization-list">
+                            @foreach (var userChoice in
+                                      LookupResult.Users)
+                            {
+                                <label class="login-organization-option">
+                                    <input type="radio"
+                                           name="selected-user-login"
+                                           checked="@IsSelectedUser(userChoice)"
+                                           @onclick="@(() => SelectUserChoice(userChoice))"
+                                           disabled="@IsBusy" />
+
+                                    <span>
+                                        @userChoice.OrganizationName
+                                        <small>
+                                            (@userChoice.UserName)
+                                        </small>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+
+                        <button type="button"
+                                class="login-button login-submit-button"
+                                @onclick="CompleteSelectedLoginAsync"
+                                disabled="@(!CanComplete)">
+                            @(IsCompleting
+                                ? "Signing in..."
+                                : "Continue")
+                        </button>
+                    }
+                    else if (SelectedLoginType ==
+                             LoginActorType.Donor)
+                    {
+                        <div class="login-found-message">
+                            Select your donor account:
+                        </div>
+
+                        <div class="login-organization-list">
+                            @foreach (var donorChoice in
+                                      LookupResult.Donors)
+                            {
+                                <label class="login-organization-option">
+                                    <input type="radio"
+                                           name="selected-donor-login"
+                                           checked="@IsSelectedDonor(donorChoice)"
+                                           @onclick="@(() => SelectDonorChoice(donorChoice))"
+                                           disabled="@IsBusy" />
+
+                                    <span>
+                                        @donorChoice.OrganizationName
+                                        <small>
+                                            (@donorChoice.DonorName)
+                                        </small>
+                                    </span>
+                                </label>
+                            }
+                        </div>
+
+                        <button type="button"
+                                class="login-button login-submit-button"
+                                @onclick="CompleteSelectedLoginAsync"
+                                disabled="@(!CanComplete)">
+                            @(IsCompleting
+                                ? "Signing in..."
+                                : "Continue")
+                        </button>
+                    }
+
+                    @if (LookupResult.HasUserMatches &&
+                         LookupResult.HasDonorMatches &&
+                         SelectedLoginType !=
+                         LoginActorType.None)
+                    {
+                        <button type="button"
+                                class="login-secondary-button"
+                                @onclick="ClearLoginType"
+                                disabled="@IsBusy">
+                            Choose a different login type
+                        </button>
+                    }
+
+                    <button type="button"
+                            class="login-secondary-button"
+                            @onclick="ResetAll"
+                            disabled="@IsBusy">
+                        Use a different email address or phone number
+                    </button>
+                </section>
+            }
+
+            @if (VerificationStart is null)
+            {
+                <button type="button"
+                        class="login-secondary-button"
+                        @onclick="GoToGlobalDonorRegistration"
+                        disabled="@IsBusy">
+                    Register as a donor
+                </button>
+            }
+        </section>
+    </div>
+</LoginPageFrame>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "sessionExpired")]
+    public string? SessionExpiredQuery { get; set; }
+
+    private bool ShowSessionExpiredMessage =>
+        string.Equals(
+            SessionExpiredQuery,
+            "true",
+            StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(
+            SessionExpiredQuery,
+            "1",
+            StringComparison.OrdinalIgnoreCase);
+
+    private string Identifier { get; set; } =
+        string.Empty;
+
+    private string VerificationCode { get; set; } =
+        string.Empty;
+
+    private SecureUnifiedLoginLookupResponse?
+        LookupResult;
+
+    private SecureLoginVerificationStartResponse?
+        VerificationStart;
+
+    private UnifiedOrganizationUserChoice? SelectedUser;
+
+    private UnifiedDonorChoice? SelectedDonor;
+
+    private LoginActorType SelectedLoginType =
+        LoginActorType.None;
+
+    private bool IsStartingVerification;
+
+    private bool IsVerifying;
+
+    private bool IsCompleting;
+
+    private bool TrustThisDevice;
+
+    private string? ErrorMessage;
+
+    private bool IsBusy =>
+        IsStartingVerification ||
+        IsVerifying ||
+        IsCompleting;
+
+    private bool CanVerify =>
+        VerificationStart is not null &&
+        LookupResult is null &&
+        VerificationStart
+            .VerificationIDs
+            .Count > 0 &&
+        GetDigits(
+            VerificationCode).Length == 6 &&
+        !IsBusy;
+
+    private bool CanComplete =>
+        LookupResult is not null &&
+        (
+            LookupResult.IsTrustedDeviceLogin ||
+            !string.IsNullOrWhiteSpace(
+                LookupResult.VerificationID)
+        ) &&
+        !IsBusy &&
+        (
+            SelectedLoginType ==
+                LoginActorType.OrganizationUser &&
+            SelectedUser is not null ||
+            SelectedLoginType ==
+                LoginActorType.Donor &&
+            SelectedDonor is not null
+        );
+
+    private async Task StartLoginVerificationAsync()
+    {
+        ErrorMessage = null;
+        LookupResult = null;
+        VerificationStart = null;
+        SelectedUser = null;
+        SelectedDonor = null;
+        SelectedLoginType =
+            LoginActorType.None;
+        VerificationCode =
+            string.Empty;
+
+        if (!LoginIdentifierFormatter
+                .TryNormalize(
+                    Identifier,
+                    out var normalizedIdentifier,
+                    out _,
+                    out var validationMessage))
+        {
+            ErrorMessage =
+                validationMessage;
+
+            return;
+        }
+
+        Identifier =
+            normalizedIdentifier;
+
+        IsStartingVerification =
+            true;
+
+        try
+        {
+            var response =
+                await Http.PostAsJsonAsync(
+                    "/api/login/unified-lookup",
+                    new
+                    {
+                        Identifier
+                    });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage =
+                    await ReadErrorMessageAsync(
+                        response,
+                        "Unable to start login verification.");
+
+                return;
+            }
+
+            VerificationStart =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        SecureLoginVerificationStartResponse>();
+
+            if (VerificationStart is null)
+            {
+                ErrorMessage =
+                    "The login service returned an empty response.";
+
+                return;
+            }
+
+            if (!VerificationStart
+                    .RequiresVerification &&
+                VerificationStart
+                    .TrustedLogin is not null)
+            {
+                LookupResult =
+                    VerificationStart
+                        .TrustedLogin;
+
+                ApplyDefaultSelection();
+            }
+        }
+        catch
+        {
+            ErrorMessage =
+                "Unable to start login verification. Please try again.";
+        }
+        finally
+        {
+            IsStartingVerification =
+                false;
+        }
+    }
+
+    private async Task VerifyCodeAsync()
+    {
+        ErrorMessage = null;
+
+        if (VerificationStart is null)
+        {
+            ErrorMessage =
+                "Please request a verification code first.";
+
+            return;
+        }
+
+        var codeDigits =
+            GetDigits(
+                VerificationCode);
+
+        if (codeDigits.Length != 6)
+        {
+            ErrorMessage =
+                "Please enter the 6-digit code.";
+
+            return;
+        }
+
+        IsVerifying =
+            true;
+
+        try
+        {
+            var response =
+                await Http.PostAsJsonAsync(
+                    "/api/login/unified-verify",
+                    new
+                    {
+                        Identifier,
+                        VerificationStart
+                            .VerificationIDs,
+                        Code =
+                            codeDigits
+                    });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage =
+                    await ReadErrorMessageAsync(
+                        response,
+                        "The verification code is invalid or expired.");
+
+                return;
+            }
+
+            LookupResult =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        SecureUnifiedLoginLookupResponse>();
+
+            if (LookupResult is null)
+            {
+                ErrorMessage =
+                    "The login service returned an empty response.";
+
+                return;
+            }
+
+            ApplyDefaultSelection();
+        }
+        catch
+        {
+            ErrorMessage =
+                "The verification code could not be checked. Please try again.";
+        }
+        finally
+        {
+            IsVerifying =
+                false;
+        }
+    }
+
+    private void ApplyDefaultSelection()
+    {
+        if (LookupResult is null)
+        {
+            return;
+        }
+
+        if (LookupResult.HasUserMatches &&
+            !LookupResult.HasDonorMatches)
+        {
+            SelectedLoginType =
+                LoginActorType.OrganizationUser;
+
+            if (LookupResult.Users.Count == 1)
+            {
+                SelectedUser =
+                    LookupResult.Users[0];
+            }
+        }
+        else if (!LookupResult.HasUserMatches &&
+                 LookupResult.HasDonorMatches)
+        {
+            SelectedLoginType =
+                LoginActorType.Donor;
+
+            if (LookupResult.Donors.Count == 1)
+            {
+                SelectedDonor =
+                    LookupResult.Donors[0];
+            }
+        }
+    }
+
+    private void SelectLoginType(
+        LoginActorType loginType)
+    {
+        SelectedLoginType =
+            loginType;
+
+        SelectedUser = null;
+        SelectedDonor = null;
+        ErrorMessage = null;
+
+        if (LookupResult is null)
+        {
+            return;
+        }
+
+        if (loginType ==
+                LoginActorType.OrganizationUser &&
+            LookupResult.Users.Count == 1)
+        {
+            SelectedUser =
+                LookupResult.Users[0];
+        }
+        else if (loginType ==
+                     LoginActorType.Donor &&
+                 LookupResult.Donors.Count == 1)
+        {
+            SelectedDonor =
+                LookupResult.Donors[0];
+        }
+    }
+
+    private void ClearLoginType()
+    {
+        SelectedLoginType =
+            LoginActorType.None;
+
+        SelectedUser = null;
+        SelectedDonor = null;
+        ErrorMessage = null;
+    }
+
+    private void SelectUserChoice(
+        UnifiedOrganizationUserChoice userChoice)
+    {
+        SelectedUser =
+            userChoice;
+
+        ErrorMessage = null;
+    }
+
+    private void SelectDonorChoice(
+        UnifiedDonorChoice donorChoice)
+    {
+        SelectedDonor =
+            donorChoice;
+
+        ErrorMessage = null;
+    }
+
+    private async Task CompleteSelectedLoginAsync()
+    {
+        ErrorMessage = null;
+
+        if (LookupResult is null ||
+            (
+                !LookupResult.IsTrustedDeviceLogin &&
+                string.IsNullOrWhiteSpace(
+                    LookupResult.VerificationID)
+            ))
+        {
+            ErrorMessage =
+                "Please restart login verification.";
+
+            return;
+        }
+
+        string actorType;
+        int organizationID;
+        int? userID;
+        int? donorID;
+
+        if (SelectedLoginType ==
+                LoginActorType.OrganizationUser &&
+            SelectedUser is not null)
+        {
+            actorType =
+                nameof(
+                    LoginActorType
+                        .OrganizationUser);
+
+            organizationID =
+                SelectedUser
+                    .EMAOrganizationID;
+
+            userID =
+                SelectedUser.UserID;
+
+            donorID =
+                null;
+        }
+        else if (SelectedLoginType ==
+                     LoginActorType.Donor &&
+                 SelectedDonor is not null)
+        {
+            actorType =
+                nameof(
+                    LoginActorType.Donor);
+
+            organizationID =
+                SelectedDonor
+                    .EMAOrganizationID;
+
+            userID =
+                null;
+
+            donorID =
+                SelectedDonor.DonorID;
+        }
+        else
+        {
+            ErrorMessage =
+                "Please select an account.";
+
+            return;
+        }
+
+        IsCompleting =
+            true;
+
+        try
+        {
+            var response =
+                await Http.PostAsJsonAsync(
+                    "/api/login/unified-complete",
+                    new
+                    {
+                        Identifier,
+                        LookupResult
+                            .VerificationID,
+                        UseTrustedDevice =
+                            LookupResult
+                                .IsTrustedDeviceLogin,
+                        TrustThisDevice,
+                        ActorType =
+                            actorType,
+                        EMAOrganizationID =
+                            organizationID,
+                        UserID =
+                            userID,
+                        DonorID =
+                            donorID
+                    });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ErrorMessage =
+                    await ReadErrorMessageAsync(
+                        response,
+                        "The verified login selection is invalid or expired.");
+
+                return;
+            }
+
+            var loginResponse =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        LoginResponse>();
+
+            if (loginResponse is null)
+            {
+                ErrorMessage =
+                    "The login service returned an empty response.";
+
+                return;
+            }
+
+            await CompleteLoginAsync(
+                loginResponse);
+        }
+        catch
+        {
+            ErrorMessage =
+                "Login could not be completed. Please restart and try again.";
+        }
+        finally
+        {
+            IsCompleting =
+                false;
+        }
+    }
+
+    private async Task CompleteLoginAsync(
+        LoginResponse loginResponse)
+    {
+        await SessionState
+            .SignInAsync(
+                loginResponse);
+
+        var organization =
+            await OrganizationService
+                .GetOrganizationAsync(
+                    loginResponse
+                        .EMAOrganizationID);
+
+        if (organization is not null)
+        {
+            OrganizationState
+                .UpdateOrganization(
+                    organization);
+        }
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            ErrorMessage =
+                "The signed-in session could not be initialized. Please try again.";
+
+            return;
+        }
+
+        var categoryID =
+            session.CurrentCategoryID;
+
+        var menuItems =
+            await MenuNavigationService
+                .GetMenuItemsAsync(
+                    session.EMAOrganizationID,
+                    session.ActorID,
+                    categoryID,
+                    session.IsDonorSession);
+
+        if (menuItems.Count == 0)
+        {
+            ErrorMessage =
+                "Your navigation could not be loaded. Please try again.";
+
+            return;
+        }
+
+        if (EMA.App.Utilities.LoginReturnUrl.TryGetSafeLocalUrl(
+                ReturnUrl,
+                out var safeReturnUrl))
+        {
+            Navigation.NavigateTo(
+                safeReturnUrl,
+                forceLoad: true,
+                replace: true);
+
+            return;
+        }
+
+        var landingUrl =
+            session.IsDonorSession
+                ? await CategoryLandingPageService
+                    .GetDonorLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.ActorID,
+                        categoryID)
+                : await CategoryLandingPageService
+                    .GetLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.UserID,
+                        categoryID);
+
+        if (IsUnavailableLandingUrl(
+                landingUrl))
+        {
+            ErrorMessage =
+                "Your organization's configured home page could not be loaded. Please try again.";
+
+            return;
+        }
+
+        // Start the authenticated shell from the persisted session only after
+        // the permitted navigation and configured landing page are available.
+        Navigation.NavigateTo(
+            landingUrl,
+            forceLoad: true,
+            replace: true);
+    }
+
+    private static bool IsUnavailableLandingUrl(
+        string? landingUrl)
+    {
+        if (string.IsNullOrWhiteSpace(
+                landingUrl))
+        {
+            return true;
+        }
+
+        var normalized =
+            landingUrl.Trim().TrimEnd('/');
+
+        return normalized.Equals(
+                   "/access-denied",
+                   StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals(
+                   "/app",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void GoToGlobalDonorRegistration()
+    {
+        var phoneDigits =
+            Identifier.Contains('@')
+                ? string.Empty
+                : GetDigits(
+                    Identifier);
+
+        var url =
+            "/donor-register";
+
+        if (phoneDigits.Length == 10)
+        {
+            url +=
+                $"?phone={phoneDigits}";
+        }
+
+        Navigation.NavigateTo(
+            url);
+    }
+
+    private void ResetAll()
+    {
+        Identifier =
+            string.Empty;
+
+        LookupResult = null;
+        VerificationStart = null;
+        SelectedUser = null;
+        SelectedDonor = null;
+        SelectedLoginType =
+            LoginActorType.None;
+        VerificationCode =
+            string.Empty;
+        TrustThisDevice =
+            false;
+        ErrorMessage = null;
+    }
+
+    private bool IsSelectedUser(
+        UnifiedOrganizationUserChoice userChoice)
+    {
+        return SelectedUser is not null &&
+               SelectedUser.UserID ==
+               userChoice.UserID &&
+               SelectedUser.EMAOrganizationID ==
+               userChoice.EMAOrganizationID;
+    }
+
+    private bool IsSelectedDonor(
+        UnifiedDonorChoice donorChoice)
+    {
+        return SelectedDonor is not null &&
+               SelectedDonor.DonorID ==
+               donorChoice.DonorID &&
+               SelectedDonor.EMAOrganizationID ==
+               donorChoice.EMAOrganizationID;
+    }
+
+    private static async Task<string>
+        ReadErrorMessageAsync(
+            HttpResponseMessage response,
+            string fallbackMessage)
+    {
+        try
+        {
+            var error =
+                await response.Content
+                    .ReadFromJsonAsync<
+                        LoginApiError>();
+
+            return string.IsNullOrWhiteSpace(
+                error?.Message)
+                ? fallbackMessage
+                : error.Message;
+        }
+        catch
+        {
+            return fallbackMessage;
+        }
+    }
+
+    private static string GetDigits(
+        string value)
+    {
+        return new string(
+            value
+                .Where(char.IsDigit)
+                .ToArray());
+    }
+
+    private sealed class
+        SecureLoginVerificationStartResponse
+    {
+        public bool RequiresVerification { get; set; } =
+            true;
+
+        public List<string> VerificationIDs { get; set; } =
+            new();
+
+        public string Message { get; set; } =
+            string.Empty;
+
+        public SecureUnifiedLoginLookupResponse?
+            TrustedLogin { get; set; }
+    }
+
+    private sealed class
+        SecureUnifiedLoginLookupResponse
+    {
+        public string VerificationID { get; set; } =
+            string.Empty;
+
+        public bool IsTrustedDeviceLogin { get; set; }
+
+        public List<UnifiedOrganizationUserChoice> Users { get; set; } =
+            new();
+
+        public List<UnifiedDonorChoice> Donors { get; set; } =
+            new();
+
+        public bool HasUserMatches =>
+            Users.Count > 0;
+
+        public bool HasDonorMatches =>
+            Donors.Count > 0;
+    }
+
+    private enum LoginActorType
+    {
+        None = 0,
+        OrganizationUser = 1,
+        Donor = 2
+    }
+}

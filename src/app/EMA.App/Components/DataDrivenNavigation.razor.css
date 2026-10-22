@@ -1,0 +1,381 @@
+.ema-dropdown-navigation {
+    position: relative;
+    width: 100%;
+    z-index: 500;
+    padding-top: 0;
+}
+
+.ema-dropdown-menu-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.85rem;
+    width: 100%;
+    margin: 0.65rem 0 0.35rem;
+}
+
+.ema-menu-group {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 110px;
+}
+
+/* Shared top-level menu style.
+   This applies to both dropdown parents and direct links,
+   so any SQL row 1 item with no children still looks like a normal menu button. */
+.ema-menu-button,
+.ema-menu-trigger,
+.ema-menu-direct-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 110px;
+    min-height: 38px;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid #8a8a8a;
+    border-radius: 0;
+    background: #e9e9e9;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+    .ema-menu-button:hover,
+    .ema-menu-button:focus-visible,
+    .ema-menu-trigger:hover,
+    .ema-menu-trigger:focus-visible,
+    .ema-menu-direct-link:hover,
+    .ema-menu-direct-link:focus-visible {
+        border-color: #626262;
+        background: #dfdfdf;
+        color: #000000;
+        outline: none;
+        text-decoration: none;
+    }
+
+    .ema-menu-button:visited,
+    .ema-menu-button:active,
+    .ema-menu-trigger:visited,
+    .ema-menu-trigger:active,
+    .ema-menu-direct-link:visited,
+    .ema-menu-direct-link:active {
+        color: #000000;
+        text-decoration: none;
+    }
+
+    /* Do not make active direct links blue.
+   They should visually match the rest of the SQL-driven menu buttons. */
+    .ema-menu-direct-link.active,
+    .ema-menu-button.active {
+        border-color: #8a8a8a;
+        background: #e9e9e9;
+        color: #000000;
+    }
+
+/* A childless top-level item renders via <NavLink>, whose <a> does NOT receive this
+   component's CSS-isolation scope attribute — so the .ema-menu-direct-link rule above
+   never reaches it and it renders as plain text. Re-apply the button styling via ::deep
+   so it matches the dropdown trigger buttons. */
+::deep a.ema-menu-direct-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 110px;
+    min-height: 38px;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid #8a8a8a;
+    border-radius: 0;
+    background: #e9e9e9;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+    ::deep a.ema-menu-direct-link:hover,
+    ::deep a.ema-menu-direct-link:focus-visible {
+        border-color: #626262;
+        background: #dfdfdf;
+        color: #000000;
+        outline: none;
+    }
+
+    /* No active-page highlight: the dropdown trigger buttons (Tables/Auth/DataPort) never
+       show one, so a childless direct-link shouldn't either — keep it consistent. */
+
+.ema-menu-label {
+    min-width: 0;
+    overflow: hidden;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+}
+
+/* Top-level menu headers use MenuName (short label). */
+.ema-menu-label-short {
+    display: inline;
+}
+
+.ema-menu-label-long {
+    display: none;
+}
+
+/* Pulldown entries use ScreenTitle (long description),
+   falling back to MenuName when ScreenTitle is blank. */
+.ema-menu-dropdown-item .ema-menu-label-short {
+    display: none;
+}
+
+.ema-menu-dropdown-item .ema-menu-label-long {
+    display: inline;
+}
+
+.ema-menu-arrow {
+    width: 0;
+    height: 0;
+    flex: 0 0 auto;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid currentColor;
+    transition: transform 0.15s ease;
+}
+
+.ema-menu-group:hover .ema-menu-arrow,
+.ema-menu-group:focus-within .ema-menu-arrow,
+.ema-menu-group.is-open .ema-menu-arrow {
+    transform: rotate(180deg);
+}
+
+.ema-menu-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 215px;
+    padding: 0.35rem;
+    border: 1px solid #8a8a8a;
+    background: #ffffff;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s ease;
+    z-index: 1000;
+}
+
+.ema-menu-group:hover .ema-menu-dropdown,
+.ema-menu-group:focus-within .ema-menu-dropdown,
+.ema-menu-group.is-open .ema-menu-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.ema-menu-group:last-child .ema-menu-dropdown {
+    right: 0;
+    left: auto;
+}
+
+/* Shared dropdown style.
+   Internal and external URL rows both use this class. */
+.ema-menu-dropdown-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 38px;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid transparent;
+    background: #ffffff;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: left;
+    text-decoration: none;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+    .ema-menu-dropdown-item:hover,
+    .ema-menu-dropdown-item:focus-visible {
+        border-color: #b0b0b0;
+        background: #e9e9e9;
+        color: #000000;
+        outline: none;
+        text-decoration: none;
+    }
+
+    .ema-menu-dropdown-item:visited,
+    .ema-menu-dropdown-item:active {
+        color: #000000;
+        text-decoration: none;
+    }
+
+    .ema-menu-dropdown-item.active {
+        color: #000000;
+        background: #ffffff;
+    }
+
+.ema-menu-item-disabled {
+    color: #777777;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.ema-navigation-message {
+    width: 100%;
+    margin: 1rem 0;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.ema-navigation-error {
+    color: #a00000;
+}
+
+.ema-screen-title {
+    width: min(100%, 1100px);
+    margin: 0.8rem auto;
+    padding: 0 1rem;
+    color: #000000;
+    text-align: center;
+    font-family: var(--ema-ui-font);
+    font-size: clamp(1.45rem, 3vw, 2.15rem);
+    line-height: 1.15;
+    font-weight: 800;
+}
+
+@media (min-width: 901px) {
+    .ema-menu-group {
+        min-width: 170px;
+    }
+
+    .ema-menu-button,
+    .ema-menu-trigger,
+    .ema-menu-direct-link {
+        min-width: 170px;
+        max-width: 260px;
+        min-height: 46px;
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+    }
+
+    ::deep a.ema-menu-direct-link {
+        min-width: 170px;
+        max-width: 260px;
+        min-height: 46px;
+        padding: 0.65rem 1rem;
+        font-size: 0.8rem;
+    }
+
+    .ema-menu-dropdown {
+        min-width: 260px;
+    }
+
+    .ema-menu-dropdown-item {
+        min-height: 42px;
+        font-size: 0.82rem;
+    }
+
+    .ema-menu-label-short {
+        display: inline;
+    }
+
+    .ema-menu-label-long {
+        display: none;
+    }
+
+    .ema-menu-dropdown-item .ema-menu-label-short {
+        display: none;
+    }
+
+    .ema-menu-dropdown-item .ema-menu-label-long {
+        display: inline;
+    }
+}
+
+@media (max-width: 700px) {
+    .ema-dropdown-menu-bar {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.55rem;
+        padding: 0 0.75rem;
+        box-sizing: border-box;
+    }
+
+    .ema-menu-group,
+    .ema-menu-button,
+    .ema-menu-direct-link {
+        width: min(100%, 320px);
+        max-width: 320px;
+    }
+
+    .ema-menu-trigger {
+        width: 100%;
+    }
+
+    .ema-menu-dropdown {
+        position: static;
+        display: none;
+        width: 100%;
+        min-width: 0;
+        padding: 0;
+        border-top: 0;
+        box-shadow: none;
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        pointer-events: auto;
+        box-sizing: border-box;
+    }
+
+    .ema-menu-group:hover .ema-menu-dropdown,
+    .ema-menu-group:focus-within .ema-menu-dropdown,
+    .ema-menu-group.is-open .ema-menu-dropdown {
+        display: flex;
+    }
+
+    .ema-menu-dropdown-item {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .ema-screen-title {
+        margin: 0.65rem auto;
+        font-size: clamp(1.3rem, 6vw, 1.8rem);
+    }
+}
+
+
+/* BEGIN: Task 40.1 mobile menu collapse */
+@media (max-width: 700px) {
+    .ema-dropdown-navigation.mobile-menu-collapsed .ema-dropdown-menu-bar,
+    .ema-dropdown-navigation.mobile-menu-collapsed .ema-navigation-message {
+        display: none;
+    }
+
+    .ema-dropdown-navigation.mobile-menu-expanded .ema-dropdown-menu-bar {
+        display: flex;
+    }
+}
+/* END: Task 40.1 mobile menu collapse */

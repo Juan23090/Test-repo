@@ -1,0 +1,132 @@
+.login-lookup-section,
+.login-selection-panel {
+    width: min(100%, 34rem);
+    margin-right: auto;
+    margin-left: auto;
+    text-align: center;
+}
+
+.login-input-label {
+    display: block;
+    margin-bottom: 0.45rem;
+    color: #3f3f3f;
+    font-weight: 600;
+    text-align: left;
+}
+
+.login-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.login-input {
+    width: 100%;
+    min-height: 2.75rem;
+}
+
+.login-identifier-input {
+    min-width: 0;
+    text-align: center;
+}
+
+.login-code-row {
+    width: min(100%, 20rem);
+    margin-right: auto;
+    margin-left: auto;
+    grid-template-columns: 8rem max-content;
+}
+
+.login-code-input {
+    text-align: center;
+    letter-spacing: 0.18em;
+}
+
+.login-code-input::placeholder {
+    color: #d8d8d8;
+    opacity: 1;
+}
+
+.login-code-input::-webkit-input-placeholder {
+    color: #d8d8d8;
+    opacity: 1;
+}
+
+.login-code-input::-moz-placeholder {
+    color: #d8d8d8;
+    opacity: 1;
+}
+
+.login-button,
+.login-verify-button {
+    min-height: 2.75rem;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.login-choice-description {
+    max-width: 31rem;
+    margin: 0.85rem auto 0;
+    color: #666666;
+    line-height: 1.45;
+    text-align: center;
+}
+
+.login-verification-message {
+    max-width: 31rem;
+    margin-right: auto;
+    margin-left: auto;
+    text-align: center;
+}
+
+.login-selection-panel .login-input-label {
+    width: min(100%, 20rem);
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.login-trusted-device-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.9rem auto 0;
+    color: #4b4b4b;
+    cursor: pointer;
+}
+
+.login-trusted-device-option input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+}
+
+.login-secondary-button {
+    display: block;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+@media (max-width: 560px) {
+    .login-input-row,
+    .login-code-row {
+        grid-template-columns: 1fr;
+        width: 100%;
+    }
+
+    .login-button,
+    .login-verify-button {
+        width: 100%;
+    }
+
+    .login-input-label,
+    .login-selection-panel .login-input-label {
+        width: 100%;
+    }
+}
+
+/* Centre the main login identifier label */
+.login-lookup-section > .login-input-label {
+    text-align: center !important;
+}
+

@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/api/" />
+  <Folder Name="/src/api/EMA.Api/">
+    <Project Path="src/api/EMA.Api/EMA_Api.csproj" />
+  </Folder>
+  <Folder Name="/src/app/">
+    <Project Path="src/app/EMA.App/EMA.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EMA.Api.Tests/EMA.Api.Tests.csproj" />
+    <Project Path="tests/EMA.App.Tests/EMA.App.Tests.csproj" />
+    <Project Path="tests/EMA.Api.Tests.Security/EMA.Api.Tests.Security.csproj" />
+  </Folder>
+</Solution>

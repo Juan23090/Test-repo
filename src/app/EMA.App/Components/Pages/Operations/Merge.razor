@@ -1,0 +1,544 @@
+@page "/merge-data"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@using System.Net.Http.Json
+@using EMA.App.Components
+
+@inject HttpClient Http
+@inject IDonorService DonorService
+@inject ICustomizationService CustomizationService
+@inject IOrganizationStateService OrganizationState
+@inject IUserSessionStateService SessionState
+
+<PageTitle>Merge Data - EMA</PageTitle>
+
+<div class="merge-container">
+    <div class="merge-card">
+        <div class="merge-selector-row">
+            <div class="select-wrapper">
+                <select class="merge-select" @value="SelectedEntityType" @onchange="OnEntityTypeChanged">
+                    <option value="Donors">Donors</option>
+                    <option value="Funds">Funds</option>
+                    <option value="GivingMethods">Giving Methods</option>
+                    <option value="Sources">Source</option>
+                </select>
+            </div>
+            <button class="btn-go" @onclick="OnGoClicked">Go</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="alert alert-success">@SuccessMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger">@ErrorMessage</div>
+        }
+
+        <div class="merge-columns">
+            <div class="merge-column">
+                <h3 class="column-header-text">Merge From:</h3>
+                <div class="search-wrapper">
+                    <div class="search-input-container">
+                        <input class="form-input typeahead" placeholder="Type to find..." value="@FromSearchText" @oninput="OnFromSearchInput" />
+                        @if (!string.IsNullOrEmpty(FromSearchText))
+                        {
+                            <button type="button" class="btn-clear-search" @onclick="ClearFromSelection">X</button>
+                        }
+                    </div>
+                    @if (FromSearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown merge-dropdown">
+                            @foreach (var item in FromSearchResults)
+                            {
+                                <div class="typeahead-item" @onclick="() => SelectFromItem(item)">
+                                    @item.DisplayName
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="details-box readonly-box">
+                    <div class="details-header">Record Details</div>
+                    @if (SelectedFromItem != null)
+                    {
+                        @if (SelectedEntityType == "Donors" && FromDonor != null)
+                        {
+                            <div class="details-row"><span class="label">Name:</span> <span class="val">@FromDonor.OfficialDonorName</span></div>
+                            <div class="details-row"><span class="label">Email:</span> <span class="val">@FromDonor.EmailAddress</span></div>
+                            <div class="details-row"><span class="label">Address:</span> <span class="val">@FromDonor.Address</span></div>
+                            <div class="details-row"><span class="label">City:</span> <span class="val">@FromDonor.City</span></div>
+                            <div class="details-row"><span class="label">Province:</span> <span class="val">@FromDonor.ProvinceStateCode</span></div>
+                            <div class="details-row"><span class="label">Postal Code:</span> <span class="val">@FromDonor.PostalCode</span></div>
+                            <div class="details-row"><span class="label">Phone:</span> <span class="val">@FromDonor.PhoneNumber</span></div>
+                            <div class="details-row"><span class="label">Giving Number:</span> <span class="val">@FromDonor.GivingNumber</span></div>
+                        }
+                        else if (SelectedEntityType == "Funds" && FromFund != null)
+                        {
+                            <div class="details-row"><span class="label">Name:</span> <span class="val">@FromFund.FundName</span></div>
+                            <div class="details-row"><span class="label">Tax Deductible:</span> <span class="val">@(FromFund.TaxDeductible ? "Yes" : "No")</span></div>
+                            <div class="details-row"><span class="label">Active:</span> <span class="val">@(FromFund.FundActive ? "Yes" : "No")</span></div>
+                        }
+                        else if (SelectedEntityType == "GivingMethods" && FromMethod != null)
+                        {
+                            <div class="details-row"><span class="label">Description:</span> <span class="val">@FromMethod.Description</span></div>
+                            <div class="details-row"><span class="label">Receiptable:</span> <span class="val">@(FromMethod.CRAReceiptable ? "Yes" : "No")</span></div>
+                            <div class="details-row"><span class="label">Active:</span> <span class="val">@(FromMethod.IsActive ? "Yes" : "No")</span></div>
+                        }
+                        else if (SelectedEntityType == "Sources" && FromSource != null)
+                        {
+                            <div class="details-row"><span class="label">Description:</span> <span class="val">@FromSource.Description</span></div>
+                            <div class="details-row"><span class="label">Active:</span> <span class="val">@(FromSource.IsActive ? "Yes" : "No")</span></div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="details-placeholder">Select a record above to show details.</div>
+                    }
+                </div>
+            </div>
+
+            <div class="merge-column">
+                <h3 class="column-header-text">Merge To:</h3>
+                <div class="search-wrapper">
+                    <div class="search-input-container">
+                        <input class="form-input typeahead" placeholder="Type to find..." value="@ToSearchText" @oninput="OnToSearchInput" />
+                        @if (!string.IsNullOrEmpty(ToSearchText))
+                        {
+                            <button type="button" class="btn-clear-search" @onclick="ClearToSelection">X</button>
+                        }
+                    </div>
+                    @if (ToSearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown merge-dropdown">
+                            @foreach (var item in ToSearchResults)
+                            {
+                                <div class="typeahead-item" @onclick="() => SelectToItem(item)">
+                                    @item.DisplayName
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="details-box editable-box">
+                    <div class="details-header">Record Details</div>
+                    @if (SelectedToItem != null)
+                    {
+                        @if (SelectedEntityType == "Donors" && ToDonor != null)
+                        {
+                            <div class="details-row-editable"><span class="label">Name:</span> <input class="merge-input-small" @bind="ToDonor.OfficialDonorName" /></div>
+                            <div class="details-row-editable"><span class="label">Email:</span> <input class="merge-input-small" @bind="ToDonor.EmailAddress" /></div>
+                            <div class="details-row-editable"><span class="label">Address:</span> <input class="merge-input-small" @bind="ToDonor.Address" /></div>
+                            <div class="details-row-editable"><span class="label">City:</span> <input class="merge-input-small" @bind="ToDonor.City" /></div>
+                            <div class="details-row-editable"><span class="label">Province:</span> <input class="merge-input-small" @bind="ToDonor.ProvinceStateCode" /></div>
+                            <div class="details-row-editable"><span class="label">Postal Code:</span> <input class="merge-input-small" @bind="ToDonor.PostalCode" /></div>
+                            <div class="details-row-editable"><span class="label">Phone:</span> <input class="merge-input-small" @bind="ToDonor.PhoneNumber" /></div>
+                            <div class="details-row-editable"><span class="label">Giving Number:</span> <input class="merge-input-small" @bind="ToDonor.GivingNumber" /></div>
+                        }
+                        else if (SelectedEntityType == "Funds" && ToFund != null)
+                        {
+                            <div class="details-row-editable"><span class="label">Name:</span> <input class="merge-input-small" @bind="ToFund.FundName" /></div>
+                            <div class="details-row-editable"><span class="label">Tax Deductible:</span> <input type="checkbox" @bind="ToFund.TaxDeductible" /></div>
+                            <div class="details-row-editable"><span class="label">Active:</span> <input type="checkbox" @bind="ToFund.FundActive" /></div>
+                        }
+                        else if (SelectedEntityType == "GivingMethods" && ToMethod != null)
+                        {
+                            <div class="details-row-editable"><span class="label">Description:</span> <input class="merge-input-small" @bind="ToMethod.Description" /></div>
+                            <div class="details-row-editable"><span class="label">Receiptable:</span> <input type="checkbox" @bind="ToMethod.CRAReceiptable" /></div>
+                            <div class="details-row-editable"><span class="label">Active:</span> <input type="checkbox" @bind="ToMethod.IsActive" /></div>
+                        }
+                        else if (SelectedEntityType == "Sources" && ToSource != null)
+                        {
+                            <div class="details-row-editable"><span class="label">Description:</span> <input class="merge-input-small" @bind="ToSource.Description" /></div>
+                            <div class="details-row-editable"><span class="label">Active:</span> <input type="checkbox" @bind="ToSource.IsActive" /></div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="details-placeholder">Select a record above to show details.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="merge-actions">
+            <button class="btn-merge" @onclick="ConfirmMerge" disabled="@(!CanMerge)">Execute Merge</button>
+        </div>
+    </div>
+</div>
+
+<ConfirmDialog Visible="IsConfirmVisible"
+               Title="Execute Merge Operation"
+               Message="@($"Are you sure you want to merge \'{SelectedFromItem?.DisplayName}\' into \'{SelectedToItem?.DisplayName}\'? This action cannot be undone and will permanently consolidate all database records.")"
+               OnConfirm="ExecuteMerge"
+               OnCancel="CancelMerge" />
+
+@code {
+    private string SelectedEntityType = "Donors";
+    private int OrgID;
+
+    private string FromSearchText = string.Empty;
+    private string ToSearchText = string.Empty;
+    private List<MergeListItem> AllItems = new();
+    private List<MergeListItem> FromSearchResults = new();
+    private List<MergeListItem> ToSearchResults = new();
+    private MergeListItem? SelectedFromItem;
+    private MergeListItem? SelectedToItem;
+
+    private DonorItem? FromDonor;
+    private DonorItem? ToDonor;
+    private FundItem? FromFund;
+    private FundItem? ToFund;
+    private MethodOfGivingItem? FromMethod;
+    private MethodOfGivingItem? ToMethod;
+    private DonationSourceItem? FromSource;
+    private DonationSourceItem? ToSource;
+
+    private string SuccessMessage = string.Empty;
+    private string ErrorMessage = string.Empty;
+    private bool IsConfirmVisible = false;
+
+    private bool CanMerge => SelectedFromItem != null && SelectedToItem != null && SelectedFromItem.ID != SelectedToItem.ID;
+
+    protected override async Task OnInitializedAsync()
+    {
+        OrgID = OrganizationState.CurrentOrganization?.EMAOrganizationID
+            ?? SessionState.CurrentSession?.EMAOrganizationID
+            ?? 0;
+        await LoadEntityData();
+    }
+
+    private async Task OnEntityTypeChanged(ChangeEventArgs e)
+    {
+        SelectedEntityType = e.Value?.ToString() ?? "Donors";
+        ResetSelections();
+        await LoadEntityData();
+    }
+
+    private async Task OnGoClicked()
+    {
+        ResetSelections();
+        await LoadEntityData();
+    }
+
+    private void ResetSelections()
+    {
+        FromSearchText = string.Empty;
+        ToSearchText = string.Empty;
+        SelectedFromItem = null;
+        SelectedToItem = null;
+        FromDonor = null;
+        ToDonor = null;
+        FromFund = null;
+        ToFund = null;
+        FromMethod = null;
+        ToMethod = null;
+        FromSource = null;
+        ToSource = null;
+        SuccessMessage = string.Empty;
+        ErrorMessage = string.Empty;
+    }
+
+    private async Task LoadEntityData()
+    {
+        AllItems.Clear();
+        try
+        {
+            if (SelectedEntityType == "Donors")
+            {
+                var donors = await DonorService.GetAllAsync(OrgID);
+                AllItems = donors.Select(d => new MergeListItem { ID = d.EMADonorID, DisplayName = d.OfficialDonorName ?? d.InteracDonorName ?? $"Donor #{d.EMADonorID}" }).ToList();
+            }
+            else if (SelectedEntityType == "Funds")
+            {
+                var funds = await CustomizationService.GetFundsAsync(OrgID);
+                AllItems = funds.Select(f => new MergeListItem { ID = f.EMAFundID, DisplayName = f.FundName }).ToList();
+            }
+            else if (SelectedEntityType == "GivingMethods")
+            {
+                var methods = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+                AllItems = methods.Select(m => new MergeListItem { ID = m.EMAMethodOfGivingID, DisplayName = m.Description }).ToList();
+            }
+            else if (SelectedEntityType == "Sources")
+            {
+                var sources = await CustomizationService.GetDonationSourcesAsync(OrgID);
+                AllItems = sources.Select(s => new MergeListItem { ID = s.EMADonationSourceID, DisplayName = s.Description }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error loading {SelectedEntityType} list: {ex.Message}";
+        }
+    }
+
+    private void OnFromSearchInput(ChangeEventArgs e)
+    {
+        FromSearchText = e.Value?.ToString() ?? string.Empty;
+        if (FromSearchText.Length >= 1)
+        {
+            FromSearchResults = AllItems
+                .Where(i => !string.IsNullOrEmpty(i.DisplayName) && i.DisplayName.Contains(FromSearchText, StringComparison.OrdinalIgnoreCase))
+                .Take(8)
+                .ToList();
+        }
+        else
+        {
+            FromSearchResults.Clear();
+        }
+    }
+
+    private void OnToSearchInput(ChangeEventArgs e)
+    {
+        ToSearchText = e.Value?.ToString() ?? string.Empty;
+        if (ToSearchText.Length >= 1)
+        {
+            ToSearchResults = AllItems
+                .Where(i => !string.IsNullOrEmpty(i.DisplayName) && i.DisplayName.Contains(ToSearchText, StringComparison.OrdinalIgnoreCase))
+                .Take(8)
+                .ToList();
+        }
+        else
+        {
+            ToSearchResults.Clear();
+        }
+    }
+
+    private async Task SelectFromItem(MergeListItem item)
+    {
+        SelectedFromItem = item;
+        FromSearchText = item.DisplayName;
+        FromSearchResults.Clear();
+        await LoadFromDetails(item.ID);
+
+        if (SelectedToItem != null && item.ID == SelectedToItem.ID)
+        {
+            ErrorMessage = "From and To records cannot be the same.";
+        }
+        else
+        {
+            ErrorMessage = string.Empty;
+            AutoPrefillEmptyToFields();
+        }
+    }
+
+    private async Task SelectToItem(MergeListItem item)
+    {
+        SelectedToItem = item;
+        ToSearchText = item.DisplayName;
+        ToSearchResults.Clear();
+        await LoadToDetails(item.ID);
+
+        if (SelectedFromItem != null && item.ID == SelectedFromItem.ID)
+        {
+            ErrorMessage = "From and To records cannot be the same.";
+        }
+        else
+        {
+            ErrorMessage = string.Empty;
+            AutoPrefillEmptyToFields();
+        }
+    }
+
+    private void ClearFromSelection()
+    {
+        FromSearchText = string.Empty;
+        SelectedFromItem = null;
+        FromDonor = null;
+        FromFund = null;
+        FromMethod = null;
+        FromSource = null;
+        FromSearchResults.Clear();
+        ErrorMessage = string.Empty;
+    }
+
+    private void ClearToSelection()
+    {
+        ToSearchText = string.Empty;
+        SelectedToItem = null;
+        ToDonor = null;
+        ToFund = null;
+        ToMethod = null;
+        ToSource = null;
+        ToSearchResults.Clear();
+        ErrorMessage = string.Empty;
+    }
+
+    private async Task LoadFromDetails(int id)
+    {
+        if (SelectedEntityType == "Donors")
+        {
+            var donors = await DonorService.GetAllAsync(OrgID);
+            FromDonor = donors.FirstOrDefault(d => d.EMADonorID == id);
+        }
+        else if (SelectedEntityType == "Funds")
+        {
+            var funds = await CustomizationService.GetFundsAsync(OrgID);
+            FromFund = funds.FirstOrDefault(f => f.EMAFundID == id);
+        }
+        else if (SelectedEntityType == "GivingMethods")
+        {
+            var methods = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+            FromMethod = methods.FirstOrDefault(m => m.EMAMethodOfGivingID == id);
+        }
+        else if (SelectedEntityType == "Sources")
+        {
+            var sources = await CustomizationService.GetDonationSourcesAsync(OrgID);
+            FromSource = sources.FirstOrDefault(s => s.EMADonationSourceID == id);
+        }
+    }
+
+    private async Task LoadToDetails(int id)
+    {
+        if (SelectedEntityType == "Donors")
+        {
+            var donors = await DonorService.GetAllAsync(OrgID);
+            ToDonor = donors.FirstOrDefault(d => d.EMADonorID == id);
+        }
+        else if (SelectedEntityType == "Funds")
+        {
+            var funds = await CustomizationService.GetFundsAsync(OrgID);
+            ToFund = funds.FirstOrDefault(f => f.EMAFundID == id);
+        }
+        else if (SelectedEntityType == "GivingMethods")
+        {
+            var methods = await CustomizationService.GetMethodsOfGivingAsync(OrgID);
+            ToMethod = methods.FirstOrDefault(m => m.EMAMethodOfGivingID == id);
+        }
+        else if (SelectedEntityType == "Sources")
+        {
+            var sources = await CustomizationService.GetDonationSourcesAsync(OrgID);
+            ToSource = sources.FirstOrDefault(s => s.EMADonationSourceID == id);
+        }
+    }
+
+    private void AutoPrefillEmptyToFields()
+    {
+        if (SelectedFromItem == null || SelectedToItem == null) return;
+
+        if (SelectedEntityType == "Donors" && FromDonor != null && ToDonor != null)
+        {
+            if (string.IsNullOrWhiteSpace(ToDonor.EmailAddress)) ToDonor.EmailAddress = FromDonor.EmailAddress;
+            if (string.IsNullOrWhiteSpace(ToDonor.Address)) ToDonor.Address = FromDonor.Address;
+            if (string.IsNullOrWhiteSpace(ToDonor.City)) ToDonor.City = FromDonor.City;
+            if (string.IsNullOrWhiteSpace(ToDonor.ProvinceStateCode)) ToDonor.ProvinceStateCode = FromDonor.ProvinceStateCode;
+            if (string.IsNullOrWhiteSpace(ToDonor.PostalCode)) ToDonor.PostalCode = FromDonor.PostalCode;
+            if (string.IsNullOrWhiteSpace(ToDonor.PhoneNumber)) ToDonor.PhoneNumber = FromDonor.PhoneNumber;
+            if (string.IsNullOrWhiteSpace(ToDonor.GivingNumber)) ToDonor.GivingNumber = FromDonor.GivingNumber;
+        }
+        else if (SelectedEntityType == "Funds" && FromFund != null && ToFund != null)
+        {
+            if (!ToFund.TaxDeductible && FromFund.TaxDeductible) ToFund.TaxDeductible = true;
+            if (!ToFund.FundActive && FromFund.FundActive) ToFund.FundActive = true;
+        }
+        else if (SelectedEntityType == "GivingMethods" && FromMethod != null && ToMethod != null)
+        {
+            if (!ToMethod.CRAReceiptable && FromMethod.CRAReceiptable) ToMethod.CRAReceiptable = true;
+            if (!ToMethod.IsActive && FromMethod.IsActive) ToMethod.IsActive = true;
+        }
+        else if (SelectedEntityType == "Sources" && FromSource != null && ToSource != null)
+        {
+            if (!ToSource.IsActive && FromSource.IsActive) ToSource.IsActive = true;
+        }
+    }
+
+    private void ConfirmMerge()
+    {
+        if (!CanMerge) return;
+        SuccessMessage = string.Empty;
+        ErrorMessage = string.Empty;
+        IsConfirmVisible = true;
+    }
+
+    private void CancelMerge()
+    {
+        IsConfirmVisible = false;
+    }
+
+    private async Task ExecuteMerge()
+    {
+        IsConfirmVisible = false;
+        SuccessMessage = string.Empty;
+        ErrorMessage = string.Empty;
+
+        try
+        {
+            if (SelectedEntityType == "Donors" && ToDonor != null)
+            {
+                await DonorService.UpdateAsync(ToDonor);
+            }
+            else if (SelectedEntityType == "Funds" && ToFund != null)
+            {
+                await CustomizationService.UpdateFundAsync(ToFund);
+            }
+            else if (SelectedEntityType == "GivingMethods" && ToMethod != null)
+            {
+                await CustomizationService.UpdateMethodOfGivingAsync(ToMethod);
+            }
+            else if (SelectedEntityType == "Sources" && ToSource != null)
+            {
+                await CustomizationService.UpdateDonationSourceAsync(ToSource);
+            }
+
+            var payload = new
+            {
+                EntityType = SelectedEntityType,
+                FromID = SelectedFromItem!.ID,
+                ToID = SelectedToItem!.ID,
+                UpdatedByUserID = SessionState.CurrentSession?.UserID ?? 0
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/operations/merge", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                SuccessMessage = $"{(SelectedEntityType == "GivingMethods" ? "Giving Methods" : SelectedEntityType)} merged successfully!";
+                SelectedFromItem = null;
+                SelectedToItem = null;
+                FromSearchText = string.Empty;
+                ToSearchText = string.Empty;
+                FromDonor = null;
+                ToDonor = null;
+                FromFund = null;
+                ToFund = null;
+                FromMethod = null;
+                ToMethod = null;
+                FromSource = null;
+                ToSource = null;
+                await LoadEntityData();
+                _ = ClearSuccessMessageAsync();
+            }
+            else
+            {
+                var errorObj = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                if (errorObj.TryGetProperty("error", out var errProp))
+                {
+                    ErrorMessage = errProp.GetString() ?? "An error occurred during the merge.";
+                }
+                else
+                {
+                    ErrorMessage = "An error occurred during the merge.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"System Error: {ex.Message}";
+        }
+    }
+
+    private async Task ClearSuccessMessageAsync()
+    {
+        await Task.Delay(4000);
+        SuccessMessage = string.Empty;
+        StateHasChanged();
+    }
+
+    private class MergeListItem
+    {
+        public int ID { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
+    }
+}

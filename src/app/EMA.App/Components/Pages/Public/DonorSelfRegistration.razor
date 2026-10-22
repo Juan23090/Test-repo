@@ -1,0 +1,581 @@
+@page "/donor-register/{EMAOrganizationID:int}"
+@page "/register"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using EMA.App.Models
+
+@inject ILoginService LoginService
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+
+<PageTitle>Donor Self-Registration - EMA</PageTitle>
+
+<div class="donor-self-final-page">
+    <section class="donor-self-final-card">
+        <div class="donor-self-final-source">
+            @(EMAOrganizationID.HasValue
+                ? "From Org's Website"
+                : "From emailmoney.app")
+        </div>
+
+        <h1 class="donor-self-final-org-title">
+            @(EMAOrganizationID.HasValue
+                ? OrganizationName
+                : "Email Money App")
+        </h1>
+
+        <h2 class="donor-self-final-title">
+            Donor Self-Registration
+        </h2>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="donor-self-final-error"
+                 role="alert">
+                @ErrorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(SuccessMessage))
+        {
+            <div class="donor-self-final-success"
+                 role="status">
+                @SuccessMessage
+            </div>
+        }
+
+        <div class="donor-self-final-form">
+            @if (!EMAOrganizationID.HasValue)
+            {
+                <div class="donor-self-final-row">
+                    <label for="organization-search">
+                        Organization
+                    </label>
+
+                    <div class="donor-self-final-org-search">
+                        <input id="organization-search"
+                               class="donor-self-final-input donor-self-final-org-input"
+                               type="text"
+                               placeholder="(start typing all or part of the name)"
+                               @bind="OrganizationSearchTerm"
+                               @bind:event="oninput"
+                               @onkeyup="SearchOrganizationsAsync"
+                               disabled="@(VerificationStart is not null || IsSaving)" />
+
+                        @if (OrganizationSearchResults.Count > 0 &&
+                             VerificationStart is null)
+                        {
+                            <div class="donor-self-final-org-results">
+                                @foreach (var organization in OrganizationSearchResults)
+                                {
+                                    <button type="button"
+                                            @onclick="@(() => SelectOrganization(organization))">
+                                        @organization.OrganizationName
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="donor-self-final-row">
+                <label for="official-name">
+                    Official Donor Name:
+                </label>
+
+                <input id="official-name"
+                       class="donor-self-final-input"
+                       type="text"
+                       @bind="Registration.OfficialDonorName"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row">
+                <label for="interac-name">
+                    eTransfer Name:
+                </label>
+
+                <input id="interac-name"
+                       class="donor-self-final-input"
+                       type="text"
+                       placeholder="(optional)"
+                       @bind="Registration.InteracDonorName"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row">
+                <label for="address">
+                    Address:
+                </label>
+
+                <input id="address"
+                       class="donor-self-final-input"
+                       type="text"
+                       @bind="Registration.Address"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row">
+                <label for="city">
+                    City/Town:
+                </label>
+
+                <input id="city"
+                       class="donor-self-final-input"
+                       type="text"
+                       @bind="Registration.City"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row donor-self-final-prov-row">
+                <label for="province">
+                    Prov/State:
+                </label>
+
+                <input id="province"
+                       class="donor-self-final-input donor-self-final-province"
+                       type="text"
+                       placeholder="SK"
+                       autocomplete="address-level1"
+                       title="Enter a province/state name or 2-letter code, such as Saskatchewan or SK."
+                       @bind="Registration.ProvinceStateCode"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+
+                <label for="postal">
+                    Postal/Zip:
+                </label>
+
+                <input id="postal"
+                       class="donor-self-final-input"
+                       type="text"
+                       @bind="Registration.PostalCode"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row">
+                <label for="country">
+                    Country:
+                </label>
+
+                <input id="country"
+                       class="donor-self-final-input"
+                       type="text"
+                       @bind="Registration.Country"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row">
+                <label for="phone">
+                    Phone:
+                </label>
+
+                <input id="phone"
+                       class="donor-self-final-input donor-self-final-phone"
+                       type="text"
+                       inputmode="numeric"
+                       autocomplete="tel"
+                       @bind="Registration.PhoneNumber"
+                       @bind:event="oninput"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+            </div>
+
+            <div class="donor-self-final-row donor-self-final-email-row">
+                <label for="email">
+                    Email:
+                </label>
+
+                <input id="email"
+                       class="donor-self-final-input"
+                       type="email"
+                       autocomplete="email"
+                       @bind="Registration.EmailAddress"
+                       disabled="@(VerificationStart is not null || IsSaving)" />
+
+                @if (VerificationStart is null)
+                {
+                    <button type="button"
+                            class="donor-self-final-verify-button"
+                            @onclick="StartVerificationAsync"
+                            disabled="@(IsStartingVerification || IsSaving)">
+                        @(IsStartingVerification
+                            ? "Sending..."
+                            : "Verify")
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (VerificationStart is not null)
+        {
+            <section class="donor-self-final-code-panel">
+                <p class="donor-self-final-code-message">
+                    @VerificationStart.Message
+                </p>
+
+                <label for="registration-code">
+                    Enter the 6-digit code:
+                </label>
+
+                <div class="donor-self-final-code-row">
+                    <input id="registration-code"
+                           class="donor-self-final-input donor-self-final-code-input"
+                           type="text"
+                           inputmode="numeric"
+                           maxlength="6"
+                           placeholder="123456"
+                           @bind="VerificationCode"
+                           @bind:event="oninput"
+                           disabled="@IsSaving" />
+
+                    <button type="button"
+                            class="donor-self-final-save-button"
+                            @onclick="VerifySaveAndLoginAsync"
+                            disabled="@(!CanVerifyRegistration)">
+                        @(IsSaving
+                            ? "Saving..."
+                            : "Verify and Save")
+                    </button>
+                </div>
+
+                <button type="button"
+                        class="donor-self-final-secondary-button"
+                        @onclick="ResetVerification"
+                        disabled="@IsSaving">
+                    Edit registration details
+                </button>
+            </section>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter]
+    public int? EMAOrganizationID { get; set; }
+
+    [SupplyParameterFromQuery(Name = "phone")]
+    public string? PhoneFromQuery { get; set; }
+
+    private StartDonorSelfRegistrationVerificationRequest Registration { get; set; } =
+        new()
+        {
+            Country = string.Empty
+        };
+
+    private string OrganizationName { get; set; } =
+        "<Org Name>";
+
+    private string OrganizationSearchTerm { get; set; } =
+        string.Empty;
+
+    private List<PublicOrganizationLookup> OrganizationSearchResults { get; set; } =
+        new();
+
+    private StartDonorSelfRegistrationVerificationResponse? VerificationStart;
+
+    private string VerificationCode { get; set; } =
+        string.Empty;
+
+    private bool IsStartingVerification;
+
+    private bool IsSaving;
+
+    private string? ErrorMessage;
+
+    private string? SuccessMessage;
+
+    private bool CanVerifyRegistration =>
+        VerificationStart is not null &&
+        GetDigits(VerificationCode).Length == 6 &&
+        !IsSaving;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(PhoneFromQuery))
+        {
+            var phoneDigits =
+                GetDigits(PhoneFromQuery);
+
+            if (phoneDigits.Length == 10)
+            {
+                Registration.PhoneNumber =
+                    FormatPhoneNumber(phoneDigits);
+            }
+        }
+
+        if (EMAOrganizationID.HasValue)
+        {
+            Registration.EMAOrganizationID =
+                EMAOrganizationID.Value;
+
+            var organization =
+                await OrganizationService.GetOrganizationAsync(
+                    EMAOrganizationID.Value);
+
+            OrganizationName =
+                organization?.OrganizationName ??
+                "<Org Name>";
+        }
+    }
+
+    private async Task SearchOrganizationsAsync()
+    {
+        if (EMAOrganizationID.HasValue ||
+            OrganizationSearchTerm.Trim().Length < 2)
+        {
+            OrganizationSearchResults.Clear();
+            return;
+        }
+
+        var searchResult =
+            await LoginService.SearchPublicOrganizationsAsync(
+                OrganizationSearchTerm.Trim());
+
+        OrganizationSearchResults =
+            searchResult.IsSuccess && searchResult.Value is not null
+                ? searchResult.Value
+                : new List<PublicOrganizationLookup>();
+    }
+
+    private void SelectOrganization(
+        PublicOrganizationLookup organization)
+    {
+        Registration.EMAOrganizationID =
+            organization.EMAOrganizationID;
+
+        OrganizationName =
+            organization.OrganizationName;
+
+        OrganizationSearchTerm =
+            organization.OrganizationName;
+
+        OrganizationSearchResults.Clear();
+    }
+
+    private async Task StartVerificationAsync()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+
+        var validationMessage =
+            ValidateRegistration();
+
+        if (!string.IsNullOrWhiteSpace(validationMessage))
+        {
+            ErrorMessage =
+                validationMessage;
+
+            return;
+        }
+
+        Registration.PhoneNumber =
+            FormatPhoneNumber(GetDigits(Registration.PhoneNumber));
+
+        Registration.EmailAddress =
+            Registration.EmailAddress.Trim();
+
+        IsStartingVerification = true;
+
+        try
+        {
+            var result =
+                await LoginService.StartDonorSelfRegistrationVerificationAsync(
+                    Registration);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? "Unable to send donor registration verification code."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            VerificationStart =
+                result.Value;
+
+            SuccessMessage =
+                "Verification code sent.";
+        }
+        finally
+        {
+            IsStartingVerification = false;
+        }
+    }
+
+    private async Task VerifySaveAndLoginAsync()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+
+        if (VerificationStart is null)
+        {
+            ErrorMessage =
+                "Please verify your email first.";
+
+            return;
+        }
+
+        var codeDigits =
+            GetDigits(VerificationCode);
+
+        if (codeDigits.Length != 6)
+        {
+            ErrorMessage =
+                "Please enter the 6-digit code.";
+
+            return;
+        }
+
+        IsSaving = true;
+
+        try
+        {
+            var result =
+                await LoginService.VerifyDonorSelfRegistrationAsync(
+                    VerificationStart.RegistrationID,
+                    codeDigits);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(result.ErrorMessage)
+                        ? "The verification code is invalid or expired."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            await CompleteLoginAsync(result.Value);
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task CompleteLoginAsync(
+        LoginResponse loginResponse)
+    {
+        await SessionState.SignInAsync(loginResponse);
+
+        var organization =
+            await OrganizationService.GetOrganizationAsync(
+                loginResponse.EMAOrganizationID);
+
+        if (organization is not null)
+        {
+            OrganizationState.UpdateOrganization(organization);
+        }
+
+        var categoryID =
+            SessionState.CurrentSession?.CurrentCategoryID ??
+            loginResponse.DefaultCategoryID;
+
+        var donorID =
+            loginResponse.DonorID ??
+            loginResponse.UserID;
+
+        var landingUrl =
+            await CategoryLandingPageService.GetDonorLandingUrlAsync(
+                loginResponse.EMAOrganizationID,
+                donorID,
+                categoryID);
+
+        Navigation.NavigateTo(
+            landingUrl,
+            replace: true);
+    }
+
+    private string? ValidateRegistration()
+    {
+        if (Registration.EMAOrganizationID <= 0)
+        {
+            return "Organization is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.OfficialDonorName))
+        {
+            return "Official Donor Name is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.Address))
+        {
+            return "Address is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.City))
+        {
+            return "City/Town is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.ProvinceStateCode))
+        {
+            return "Prov/State is required.";
+        }
+
+        if (Registration.ProvinceStateCode.Trim().Length > 40)
+        {
+            return "Please enter a province/state name or 2-letter code.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.PostalCode))
+        {
+            return "Postal/Zip is required.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.Country))
+        {
+            return "Country is required.";
+        }
+
+        if (GetDigits(Registration.PhoneNumber).Length != 10)
+        {
+            return "Please input a valid 10 digit phone number.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Registration.EmailAddress) ||
+            !Registration.EmailAddress.Contains('@', StringComparison.Ordinal))
+        {
+            return "Please input a valid email address.";
+        }
+
+        return null;
+    }
+
+    private void ResetVerification()
+    {
+        VerificationStart = null;
+        VerificationCode = string.Empty;
+        ErrorMessage = null;
+        SuccessMessage = null;
+    }
+
+    private static string GetDigits(
+        string value)
+    {
+        return new string(
+            value
+                .Where(char.IsDigit)
+                .ToArray());
+    }
+
+    private static string FormatPhoneNumber(
+        string phoneDigits)
+    {
+        if (phoneDigits.Length != 10)
+        {
+            return phoneDigits;
+        }
+
+        return $"{phoneDigits[..3]}-{phoneDigits.Substring(3, 3)}-{phoneDigits.Substring(6, 4)}";
+    }
+}

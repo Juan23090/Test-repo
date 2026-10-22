@@ -1,0 +1,23 @@
+@using EMA.App.Models
+
+<div class="email-header-top">
+    <div class="email-header-left">
+        <div class="email-step-log-header">
+            @foreach (var log in StepLogs)
+            {
+                <small>@log</small><br />
+            }
+        </div>
+    </div>
+    <h1 class="email-app-title">Email Money App</h1>
+    <div class="email-header-right">Josh</div>
+</div>
+<div class="email-header-center">
+    <div class="email-org-name">Org Name shows here Big &amp; Bold</div>
+    <div class="email-page-title">@PageTitle</div>
+</div>
+
+@code {
+    [Parameter] public string PageTitle { get; set; } = string.Empty;
+    [Parameter] public List<string> StepLogs { get; set; } = new();
+}

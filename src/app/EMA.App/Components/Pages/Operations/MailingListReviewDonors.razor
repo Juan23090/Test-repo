@@ -1,0 +1,210 @@
+@page "/mailing-list-review/{ListID:int}"
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IMailingListService MailingListService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Review / Update Donors - EMA</PageTitle>
+
+<div class="container my-4" style="max-width: 950px; font-family: Arial, sans-serif;">
+    <div class="d-flex align-items-center mb-3">
+        <a href="/mailing-list-details/@ListID" class="me-3 text-decoration-none" title="Return to previous page">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 14L4 9l5-5"/>
+                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>
+            </svg>
+        </a>
+        <div class="flex-grow-1 text-center pe-5">
+            <h2 class="fw-bold m-0">Review/Update Donors</h2>
+            <h3 class="fw-bold text-dark mt-2">@(ListName ?? "Crossroads Post Mail List")</h3>
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive shadow-sm">
+            <table class="table table-bordered align-middle text-center mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-start" style="width: 35%;">
+                            <button type="button" @onclick="ListAllDonors" class="btn btn-link p-0 text-decoration-none fst-italic text-primary fw-bold">List All Donors</button>
+                            <br/>
+                            <span class="fst-italic fw-normal text-muted">or Type Partial Name</span>
+                            <input type="text" class="form-control form-control-sm mt-1" placeholder="Search donor..." value="@SearchText" @oninput="OnSearchInput" />
+                        </th>
+                        <th>Last<br/>Donation<br/>Date</th>
+                        <th>Last<br/>Donation<br/>Amount</th>
+                        <th>Selected</th>
+                        <th>Opted<br/>In<br/><span class="fw-normal text-primary">Click To Toggle</span></th>
+                        <th>Opted<br/>Out<br/><span class="fw-normal text-primary">Click To Toggle</span></th>
+                        <th>Mailing<br/>List</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (PagedDonors != null && PagedDonors.Any())
+                    {
+                        @foreach (var donor in PagedDonors)
+                        {
+                            <tr>
+                                <td class="text-start fw-bold">@donor.OfficialDonorName</td>
+                                <td>@(donor.LastDonationDate ?? "N/A")</td>
+                                <td>@(donor.LastDonationAmount.HasValue ? $"{donor.LastDonationAmount:C2}" : "N/A")</td>
+                                <td>
+                                    @if (donor.Selected)
+                                    {
+                                        <span class="text-dark fs-5">✔</span>
+                                    }
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-link text-decoration-none" @onclick="() => ToggleOptIn(donor)">
+                                        <span class="@(donor.OptedIn ? "text-primary fs-5" : "text-muted opacity-50 fs-5")">✔</span>
+                                    </button>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-link text-decoration-none" @onclick="() => ToggleOptOut(donor)">
+                                        <span class="@(donor.OptedOut ? "text-primary fs-5" : "text-muted opacity-50 fs-5")">✔</span>
+                                    </button>
+                                </td>
+                                <td>
+                                    @if (donor.MailingList)
+                                    {
+                                        <span class="text-primary fs-5">✔</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                No donors found matching the current criteria or search.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (TotalPages > 1)
+        {
+            <div class="d-flex justify-content-between align-items-center mt-3 px-2">
+                <div class="text-muted small">
+                    Showing @(((CurrentPage - 1) * PageSize) + 1) to @(Math.Min(CurrentPage * PageSize, Donors?.Count ?? 0)) of @(Donors?.Count ?? 0) donors
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" disabled="@(CurrentPage <= 1)" @onclick="() => ChangePage(CurrentPage - 1)">
+                        &laquo; Previous
+                    </button>
+                    <span class="btn btn-outline-secondary disabled text-dark fw-bold px-3">
+                        Page @CurrentPage of @TotalPages
+                    </span>
+                    <button class="btn btn-outline-secondary" disabled="@(CurrentPage >= TotalPages)" @onclick="() => ChangePage(CurrentPage + 1)">
+                        Next &raquo;
+                    </button>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int ListID { get; set; }
+
+    private List<ReviewDonorItem>? Donors;
+    private string? ListName;
+    private string SearchText = string.Empty;
+    private bool IsLoading = true;
+
+    private int CurrentPage = 1;
+    private const int PageSize = 25;
+    private int TotalPages => Donors == null || !Donors.Any() ? 1 : (int)Math.Ceiling((double)Donors.Count / PageSize);
+
+    private IEnumerable<ReviewDonorItem> PagedDonors =>
+        Donors?.Skip((CurrentPage - 1) * PageSize).Take(PageSize) ?? Enumerable.Empty<ReviewDonorItem>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        int orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0)
+        {
+            Donors = new List<ReviewDonorItem>();
+            IsLoading = false;
+            return;
+        }
+
+        var details = await MailingListService.GetMailingListDetailsAsync(orgID, ListID);
+        ListName = details?.Name;
+
+        await LoadDonors();
+        IsLoading = false;
+    }
+
+    private async Task LoadDonors(string? search = null)
+    {
+        int orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0)
+        {
+            Donors = new List<ReviewDonorItem>();
+            return;
+        }
+
+        Donors = await MailingListService.GetReviewDonorsAsync(orgID, ListID, search);
+        CurrentPage = 1;
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        await LoadDonors(SearchText);
+    }
+
+    private async Task ListAllDonors()
+    {
+        SearchText = string.Empty;
+        await LoadDonors(null);
+    }
+
+    private void ChangePage(int newPage)
+    {
+        if (newPage >= 1 && newPage <= TotalPages)
+        {
+            CurrentPage = newPage;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleOptIn(ReviewDonorItem donor)
+    {
+        int orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0) return;
+
+        bool newOptIn = !donor.OptedIn;
+        donor.OptedIn = newOptIn;
+
+        donor.MailingList = !donor.OptedOut && (donor.OptedIn || donor.Selected);
+        await MailingListService.ToggleDonorOptStatusAsync(orgID, ListID, donor.EMADonorID, newOptIn, null);
+    }
+
+    private async Task ToggleOptOut(ReviewDonorItem donor)
+    {
+        int orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0) return;
+
+        bool newOptOut = !donor.OptedOut;
+        donor.OptedOut = newOptOut;
+
+        donor.MailingList = !donor.OptedOut && (donor.OptedIn || donor.Selected);
+        await MailingListService.ToggleDonorOptStatusAsync(orgID, ListID, donor.EMADonorID, null, newOptOut);
+    }
+}

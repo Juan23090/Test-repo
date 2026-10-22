@@ -1,0 +1,372 @@
+@page "/chms"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@implements IDisposable
+@inject IChMSService ChMSService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>ChMS - EMA</PageTitle>
+
+<div class="chms-container">
+
+    <div class="chms-header">
+        <h4 class="chms-title">Church Management Systems <span class="chms-sub">(ChMS)</span></h4>
+        <button class="btn btn-sm btn-outline-primary" @onclick="NewRecord" disabled="@_saving">+ New ChMS</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-warning py-2 mb-3"><small>@_error</small></div>
+    }
+
+    <p class="chms-hint">Click a column heading to sort · click a row to edit it below.</p>
+
+    <!-- ── Grid (top half): sortable, 10 rows + scroll ── -->
+    <div class="chms-grid-wrapper">
+        <table class="chms-grid">
+            <thead>
+                <tr>
+                    @foreach (var col in _columns)
+                    {
+                        <th @onclick="() => Sort(col.Key)" class="@(col.Numeric ? "num" : "")">
+                            @col.Label
+                            @if (_sortColumn == col.Key)
+                            {
+                                <span class="chms-sort">@(_sortAsc ? "▲" : "▼")</span>
+                            }
+                            else
+                            {
+                                <span class="chms-sort neutral">⇅</span>
+                            }
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (_loading)
+                {
+                    <tr><td colspan="@_columns.Count" class="chms-empty">Loading…</td></tr>
+                }
+                else if (SortedItems.Count == 0)
+                {
+                    <tr><td colspan="@_columns.Count" class="chms-empty">No ChMS records.</td></tr>
+                }
+                else
+                {
+                    @foreach (var item in SortedItems)
+                    {
+                        <tr class="@(ReferenceEquals(item, _selected) ? "selected" : "")"
+                            @onclick="() => SelectRow(item)">
+                            <td>@item.ChMSName</td>
+                            <td class="num">@(item.CanadianInstalls?.ToString() ?? "—")</td>
+                            <td>@Dash(item.ChMSCandidateForEMAID)</td>
+                            <td>@Dash(item.ChMSAPIRating)</td>
+                            <td class="num">@Money(item.ChMSMonthlyRentDefault)</td>
+                            <td class="num">@Percent(item.ChMSPercentBasedFee)</td>
+                            <td class="num">@Money(item.ChMSPerTransactionFee)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── Edit form (bottom half) ── -->
+    @if (_edit is not null)
+    {
+        <div class="chms-form">
+            <div class="chms-form-head">
+                <strong>@(_isNew ? "New ChMS" : $"Editing: {_selected?.ChMSName}")</strong>
+                @if (_status is not null)
+                {
+                    <span class="chms-status">@_status</span>
+                }
+            </div>
+
+            <div class="chms-section">
+                <div class="chms-section-title">Overview</div>
+                <div class="chms-form-grid">
+                    <label>ChMS: <span class="req">*</span></label>
+                    <input @bind="_edit.ChMSName" maxlength="256" />
+
+                    <label>Country:</label>
+                    <input @bind="_edit.Country" maxlength="256" />
+
+                    <label>Cdn Installs:</label>
+                    <input type="number" @bind="_edit.CanadianInstalls" min="0" />
+                </div>
+            </div>
+
+            <div class="chms-section">
+                <div class="chms-section-title">Candidacy</div>
+                <div class="chms-form-grid">
+                    <label>Candidate For:</label>
+                    <select @bind="_edit.ChMSCandidateForEMAID">
+                        <option value="">—</option>
+                        @foreach (var opt in _lookups.CandidateFor)
+                        {
+                            <option value="@opt">@opt</option>
+                        }
+                    </select>
+
+                    <label>Candidate Rating:</label>
+                    <select @bind="_edit.ChMSCandidateRatingID">
+                        <option value="">—</option>
+                        @foreach (var opt in _lookups.CandidateRating)
+                        {
+                            <option value="@opt">@opt</option>
+                        }
+                    </select>
+
+                    <label>API Rating:</label>
+                    <select @bind="_edit.ChMSAPIRating">
+                        <option value="">—</option>
+                        @foreach (var opt in _lookups.ApiRating)
+                        {
+                            <option value="@opt">@opt</option>
+                        }
+                    </select>
+
+                    <label>Mirror Tx Emails:</label>
+                    <select @bind="_edit.MirrorTransactionEmails">
+                        <option value="">—</option>
+                        <option value="Y">Yes</option>
+                        <option value="N">No</option>
+                    </select>
+
+                    <label>Comments:</label>
+                    <textarea @bind="_edit.ChMSCandidateDecisionBackgound" rows="4"></textarea>
+                </div>
+            </div>
+
+            <div class="chms-section">
+                <div class="chms-section-title">Fees</div>
+                <div class="chms-fees">
+                    <div class="chms-field">
+                        <label>Rent Cdn</label>
+                        <input type="number" step="0.01" @bind="_edit.ChMSMonthlyRentDefault" />
+                    </div>
+                    <div class="chms-field">
+                        <label>% of Tran</label>
+                        <input type="number" step="0.01" @bind="_edit.ChMSPercentBasedFee" />
+                    </div>
+                    <div class="chms-field">
+                        <label>Cost per Tran</label>
+                        <input type="number" step="0.01" @bind="_edit.ChMSPerTransactionFee" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="chms-section">
+                <div class="chms-section-title">Links</div>
+                <div class="chms-links">
+                    <div class="chms-field">
+                        <label>ChMS URL</label>
+                        <input @bind="_edit.ChMSURL" maxlength="510" />
+                    </div>
+                    <div class="chms-field">
+                        <label>API URL</label>
+                        <input @bind="_edit.ChMSAPIDocURL" maxlength="510" />
+                    </div>
+                    <div class="chms-field">
+                        <label>DataPort URL</label>
+                        <input @bind="_edit.ChMSDataPortURL" maxlength="255" />
+                    </div>
+                    <div class="chms-field">
+                        <label>Onboarding Doc URL</label>
+                        <input @bind="_edit.ChMSOnboardingDocumentURL" maxlength="510" />
+                    </div>
+                    <div class="chms-field">
+                        <label>Onboarding Video URL</label>
+                        <input @bind="_edit.ChMSOnboardingVideoURL" maxlength="510" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="chms-form-actions">
+                <button class="btn btn-sm btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                    @(_saving ? "Saving…" : "Save")
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit" disabled="@_saving">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed record Column(string Key, string Label, bool Numeric);
+
+    // Grid columns. Candidate + API now show the lookup text stored on the row.
+    private readonly List<Column> _columns = new()
+    {
+        new("ChMSName", "ChMS", false),
+        new("CanadianInstalls", "Cdn Installs", true),
+        new("ChMSCandidateForEMAID", "Candidate", false),
+        new("ChMSAPIRating", "API", false),
+        new("ChMSMonthlyRentDefault", "Rent Cdn", true),
+        new("ChMSPercentBasedFee", "% of Tran", true),
+        new("ChMSPerTransactionFee", "$ Per Tran", true),
+    };
+
+    private List<ChMSSummary> _items = new();
+    private ChMSLookups _lookups = new();   // dropdown option lists (loaded once)
+    private ChMSSummary? _selected;   // currently-selected grid row
+    private ChMSSummary? _edit;       // edit buffer (a clone / new record)
+    private bool _isNew;
+
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _status;
+    private CancellationTokenSource? _statusCts;
+
+    private string _sortColumn = "ChMSName";
+    private bool _sortAsc = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+        if (SessionState.CurrentSession is null)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        _lookups = await ChMSService.GetLookupsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _items = await ChMSService.GetChMSAsync();
+        _loading = false;
+    }
+
+    private IReadOnlyList<ChMSSummary> SortedItems
+    {
+        get
+        {
+            IEnumerable<ChMSSummary> q = _items;
+            q = _sortColumn switch
+            {
+                "Country"                => q.OrderBy(x => x.Country),
+                "CanadianInstalls"       => q.OrderBy(x => x.CanadianInstalls ?? int.MinValue),
+                "ChMSCandidateForEMAID"  => q.OrderBy(x => x.ChMSCandidateForEMAID),
+                "ChMSAPIRating"          => q.OrderBy(x => x.ChMSAPIRating),
+                "ChMSMonthlyRentDefault" => q.OrderBy(x => x.ChMSMonthlyRentDefault ?? decimal.MinValue),
+                "ChMSPercentBasedFee"    => q.OrderBy(x => x.ChMSPercentBasedFee ?? decimal.MinValue),
+                "ChMSPerTransactionFee"  => q.OrderBy(x => x.ChMSPerTransactionFee ?? decimal.MinValue),
+                _                        => q.OrderBy(x => x.ChMSName),
+            };
+            return (_sortAsc ? q : q.Reverse()).ToList();
+        }
+    }
+
+    private void Sort(string column)
+    {
+        if (_sortColumn == column) _sortAsc = !_sortAsc;
+        else { _sortColumn = column; _sortAsc = true; }
+    }
+
+    private void SelectRow(ChMSSummary item)
+    {
+        _selected = item;
+        _edit = item.Clone();
+        _isNew = false;
+        ClearStatus();
+    }
+
+    private void NewRecord()
+    {
+        _selected = null;
+        _edit = new ChMSSummary { ChMSName = string.Empty };
+        _isNew = true;
+        ClearStatus();
+    }
+
+    private void CancelEdit()
+    {
+        // Cancel dismisses the edit form entirely and clears the row selection.
+        _edit = null;
+        _selected = null;
+        _isNew = false;
+        ClearStatus();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_edit is null) return;
+
+        if (string.IsNullOrWhiteSpace(_edit.ChMSName))
+        {
+            SetStatus("⚠ ChMS name is required.", autoClear: false);
+            return;
+        }
+
+        _saving = true;
+        ClearStatus();
+
+        if (_isNew)
+        {
+            var newID = await ChMSService.InsertChMSAsync(_edit);
+            if (newID is null) { SetStatus("⚠ Save failed.", autoClear: false); _saving = false; return; }
+            _edit.ChMSID = newID.Value;
+        }
+        else
+        {
+            var ok = await ChMSService.UpdateChMSAsync(_edit);
+            if (!ok) { SetStatus("⚠ Save failed.", autoClear: false); _saving = false; return; }
+        }
+
+        await LoadAsync();                                        // refresh grid
+        _selected = _items.FirstOrDefault(x => x.ChMSID == _edit.ChMSID);
+        if (_selected is not null) _edit = _selected.Clone();
+        _isNew = false;
+        _saving = false;
+        SetStatus("Saved ✓", autoClear: true);
+    }
+
+    // ── Status message (auto-clears the "Saved ✓" confirmation after a few seconds) ──
+    private void ClearStatus()
+    {
+        _statusCts?.Cancel();
+        _status = null;
+    }
+
+    private void SetStatus(string message, bool autoClear)
+    {
+        _statusCts?.Cancel();
+        _status = message;
+
+        if (!autoClear) return;
+
+        _statusCts = new CancellationTokenSource();
+        var token = _statusCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try { await Task.Delay(3000, token); }
+            catch (TaskCanceledException) { return; }
+            if (token.IsCancellationRequested) return;
+            _status = null;
+            try { await InvokeAsync(StateHasChanged); }
+            catch (ObjectDisposedException) { }
+        });
+    }
+
+    public void Dispose() => _statusCts?.Cancel();
+
+    private static string Dash(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string Money(decimal? value) =>
+        value is null ? "—" : "$" + value.Value.ToString("N2");
+
+    private static string Percent(decimal? value) =>
+        value is null ? "—" : value.Value.ToString("0.##") + "%";
+}

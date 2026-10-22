@@ -1,0 +1,597 @@
+@page "/donor-journey"
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IDonorService DonorService
+@inject ICustomizationService CustomizationService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Donor Journey - EMA</PageTitle>
+
+<div class="donors-container" style="max-width: 1100px; margin: 0 auto; padding: 20px;">
+    <div class="donors-form" style="width: 100%; max-width: 100%; box-sizing: border-box;">
+
+        @if (!string.IsNullOrEmpty(ValidationMessage))
+        {
+            <div class="text-center validation-message" style="color: red; font-weight: bold; margin-bottom: 15px;">
+                @ValidationMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="text-center success-message" style="color: green; font-weight: bold; margin-bottom: 15px;">
+                @SuccessMessage
+            </div>
+        }
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Next Follow Up:</u></strong></label>
+            <input type="datetime-local" class="form-input journey-date-input" onclick="this.showPicker()" />
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Official Donor Name:</u></strong></label>
+                <div class="journey-typeahead-wrapper">
+                    <input class="form-input typeahead" placeholder="Start typing to select donor" 
+                           value="@SearchText" @oninput="OnSearchInput" style="width: 100%;" />
+                    @if (SearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown journey-typeahead-dropdown">
+                            @foreach (var donor in SearchResults)
+                            {
+                                <div class="typeahead-item" @onclick="() => SelectDonor(donor)">
+                                    @donor.OfficialDonorName
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>eTransfer Name:</u></strong></label>
+                <div class="journey-typeahead-wrapper">
+                    <input class="form-input typeahead" placeholder="Start typing to select donor" 
+                           value="@InteracSearchText" @oninput="OnInteracSearchInput" style="width: 100%;" />
+                    @if (InteracSearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown journey-typeahead-dropdown">
+                            @foreach (var donor in InteracSearchResults)
+                            {
+                                <div class="typeahead-item" @onclick="() => SelectDonor(donor)">
+                                    @donor.InteracDonorName
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Address:</u></strong></label>
+            <input class="form-input" placeholder="Address" @bind="CurrentDonor.Address" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>City/Town:</u></strong></label>
+            <input class="form-input" placeholder="City" @bind="CurrentDonor.City" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Prov/State:</u></strong></label>
+            <input class="form-input province-input" placeholder="Province/State" @bind="CurrentDonor.ProvinceStateCode" @bind:event="oninput" />
+            <div class="postal-wrapper">
+                <label class="postal-label"><strong><u>Postal/Zip:</u></strong></label>
+                <input class="postal-input-new" placeholder="Postal Code" @bind="CurrentDonor.PostalCode" @bind:event="oninput" />
+            </div>
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Email:</u></strong></label>
+                <input class="form-input" placeholder="Email" @bind="CurrentDonor.EmailAddress" @bind:event="oninput" />
+                <button class="btn-create" @onclick="CheckEmailDuplicates">Check Duplicates</button>
+            </div>
+            @if (!string.IsNullOrEmpty(EmailDuplicateMessage))
+            {
+                <div class="duplicate-message" style="margin-top: 5px; color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px;">
+                    @EmailDuplicateMessage
+                </div>
+            }
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label"><strong><u>Phone:</u></strong></label>
+                <input class="form-input" placeholder="Phone" @bind="CurrentDonor.PhoneNumber" @bind:event="oninput" />
+                <button class="btn-create" @onclick="CheckPhoneDuplicates">Check Duplicates</button>
+            </div>
+            @if (!string.IsNullOrEmpty(PhoneDuplicateMessage))
+            {
+                <div class="duplicate-message" style="margin-top: 5px; color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 8px; border-radius: 4px;">
+                    @PhoneDuplicateMessage
+                </div>
+            }
+        </div>
+
+        <div class="form-row">
+            <label class="form-label"><strong><u>Status:</u></strong></label>
+            <select class="form-input journey-select-input" @bind="SelectedStatusId">
+                <option value="">Select Status</option>
+                @foreach (var status in DonorStatuses)
+                {
+                    <option value="@status.DonorStatusID">@status.Description</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-actions-row journey-actions-row">
+            <button class="btn-save btn-save-donations journey-save-btn" @onclick="SaveDonorInfo">
+                <strong>Save Member</strong>
+            </button>
+        </div>
+
+        <hr class="journey-divider" />
+
+        <h3 style="margin-bottom: 15px; font-weight: bold;">Log Interaction</h3>
+
+        @if (!string.IsNullOrEmpty(LogValidationMessage))
+        {
+            <div class="validation-message" style="color: red; font-weight: bold; margin-bottom: 10px;">
+                @LogValidationMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(LogSuccessMessage))
+        {
+            <div class="success-message" style="color: green; font-weight: bold; margin-bottom: 10px;">
+                @LogSuccessMessage
+            </div>
+        }
+
+        <div class="journey-log-form" style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 25px; border: 1px solid #dee2e6;">
+            <div style="display: flex; gap: 20px; align-items: flex-start;">
+                <div style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Who:</label>
+                            <select class="form-input" @bind="SelectedLogUserId">
+                                <option value="">Select User</option>
+                                @foreach (var user in OrgUsers)
+                                {
+                                    <option value="@user.UserID">@user.UserName</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Activity:</label>
+                            <select class="form-input" @bind="SelectedLogActivityTypeId">
+                                <option value="">Select Activity</option>
+                                @foreach (var act in ActivityTypes)
+                                {
+                                    <option value="@act.ActivityTypeID">@act.Description</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Status:</label>
+                            <div class="mirrored-status-box" style="background: #e9ecef; padding: 6px 12px; border-radius: 4px; color: #555;">
+                                @(DonorStatuses.FirstOrDefault(s => s.DonorStatusID == CurrentDonor.DonorStatusID)?.Description ?? "No Status")
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <textarea class="form-input journey-comments-area" style="width: 100%; height: 90px;" placeholder="Comments about the interaction go here" @bind="NewEntry.ActivityComments"></textarea>
+                    </div>
+                </div>
+
+                <div style="width: 190px; display: flex; flex-direction: column; gap: 6px; align-self: flex-start;">
+                    <label style="display: block; font-weight: bold; text-decoration: underline; font-size: 0.9rem; margin-bottom: 4px;">Followup:</label>
+                    <input type="datetime-local" class="form-input" style="height: 50px !important; min-height: 50px !important; max-height: 50px !important; padding: 8px 10px; font-size: 0.95rem; box-sizing: border-box;" @bind="NewEntry.FollowUpDateTIme" onclick="this.showPicker()" />
+                    <button class="btn-save btn-save-donations" style="background-color: #e21a9a; border-color: #e21a9a; width: 100%; font-weight: bold; margin-top: 4px; height: 38px; padding: 4px;" @onclick="SaveJourneyEntry">
+                        <strong>Done</strong>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom: 15px; font-weight: bold;">History</h3>
+
+        <div class="journey-history-list">
+            @if (HistoryEntries == null || !HistoryEntries.Any())
+            {
+                <div class="text-center" style="padding: 20px; color: #777;">
+                    No interaction logs found for this donor.
+                </div>
+            }
+            else
+            {
+                @foreach (var entry in HistoryEntries)
+                {
+                    <div class="history-card" style="border: 1px solid #dee2e6; padding: 15px; border-radius: 6px; margin-bottom: 12px; background: white; display: flex; gap: 20px;">
+                        <div style="flex: 1;">
+                            <div class="history-meta-row" style="display: grid; grid-template-columns: 1.3fr 1.3fr 0.9fr; gap: 15px; margin-bottom: 8px; font-weight: bold;">
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Who:</u> @(OrgUsers.FirstOrDefault(u => u.UserID == entry.UserId)?.UserName ?? $"User #{entry.UserId}")</div>
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Activity:</u> @(ActivityTypes.FirstOrDefault(a => a.ActivityTypeID == entry.ActivityTypeID)?.Description ?? $"Activity #{entry.ActivityTypeID}")</div>
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Status:</u> @(DonorStatuses.FirstOrDefault(s => s.DonorStatusID == entry.DonorStatusID)?.Description ?? "No Status")</div>
+                            </div>
+                            <div style="white-space: pre-wrap; margin-top: 8px; color: #333; line-height: 1.4;">
+                                @entry.ActivityComments
+                            </div>
+                        </div>
+                        <div style="width: 180px; border-left: 1px solid #eee; padding-left: 15px; font-size: 0.9em; color: #495057;">
+                            <div style="margin-bottom: 8px;">
+                                <u style="font-weight: bold;">Followup:</u><br />
+                                @(entry.FollowUpDateTIme?.ToString("yyyy-MM-dd HH:mm") ?? "None")
+                            </div>
+                            <div>
+                                <u style="font-weight: bold;">Date/Time:</u><br />
+                                @entry.ActivityDateTIme.ToString("yyyy-MM-dd HH:mm")
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private int OrgID => SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private DonorItem CurrentDonor = new();
+    private List<DonorItem> AllDonors = new();
+    private List<DonorStatusItem> DonorStatuses = new();
+    
+    private string SearchText = string.Empty;
+    private string InteracSearchText = string.Empty;
+    
+    private List<DonorItem> SearchResults = new();
+    private List<DonorItem> InteracSearchResults = new();
+
+    private string ValidationMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+    
+    private string EmailDuplicateMessage = string.Empty;
+    private string PhoneDuplicateMessage = string.Empty;
+
+    private List<DonorJourneyActivityType> ActivityTypes = new();
+    private List<UserItem> OrgUsers = new();
+    private List<DonorJourneyEntry> HistoryEntries = new();
+    private DonorJourneyEntry NewEntry = new();
+
+    private string LogValidationMessage = string.Empty;
+    private string LogSuccessMessage = string.Empty;
+
+    private string SelectedStatusId
+    {
+        get => CurrentDonor.DonorStatusID?.ToString() ?? string.Empty;
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                CurrentDonor.DonorStatusID = parsed;
+            }
+            else
+            {
+                CurrentDonor.DonorStatusID = null;
+            }
+        }
+    }
+
+    private string SelectedLogUserId
+    {
+        get => NewEntry.UserId == 0 ? string.Empty : NewEntry.UserId.ToString();
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                NewEntry.UserId = parsed;
+            }
+            else
+            {
+                NewEntry.UserId = 0;
+            }
+        }
+    }
+
+    private string SelectedLogActivityTypeId
+    {
+        get => NewEntry.ActivityTypeID == 0 ? string.Empty : NewEntry.ActivityTypeID.ToString();
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                NewEntry.ActivityTypeID = parsed;
+            }
+            else
+            {
+                NewEntry.ActivityTypeID = 0;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (OrgID <= 0)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        CurrentDonor.EMAOrganizationID = OrgID;
+
+        try
+        {
+            DonorStatuses = await CustomizationService.GetDonorStatusesAsync(OrgID, activeOnly: true);
+            AllDonors = await DonorService.GetAllAsync(OrgID);
+            
+            ActivityTypes = await DonorService.GetJourneyActivityTypesAsync(OrgID);
+            OrgUsers = await DonorService.GetOrganizationUsersAsync(OrgID);
+        }
+        catch (Exception ex)
+        {
+            ValidationMessage = "Error loading lookup metadata.";
+            Console.WriteLine(ex);
+        }
+
+        ResetNewEntry();
+    }
+
+    private void ResetNewEntry()
+    {
+        NewEntry = new DonorJourneyEntry
+        {
+            EMAOrganizationID = OrgID,
+            EMADonorId = CurrentDonor.EMADonorID,
+            UserId = SessionState.CurrentSession?.UserID ?? 0,
+            ActivityDateTIme = DateTime.Now
+        };
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        InteracSearchResults.Clear();
+        SuccessMessage = string.Empty;
+
+        if (SearchText.Length >= 2)
+        {
+            SearchResults = await DonorService.SearchAsync(OrgID, SearchText);
+        }
+        else
+        {
+            SearchResults.Clear();
+        }
+    }
+
+    private async Task OnInteracSearchInput(ChangeEventArgs e)
+    {
+        InteracSearchText = e.Value?.ToString() ?? string.Empty;
+        SearchResults.Clear();
+        SuccessMessage = string.Empty;
+
+        if (InteracSearchText.Length >= 2)
+        {
+            InteracSearchResults = await DonorService.SearchAsync(OrgID, InteracSearchText);
+        }
+        else
+        {
+            InteracSearchResults.Clear();
+        }
+    }
+
+    private async Task SelectDonor(DonorItem donor)
+    {
+        CurrentDonor = donor;
+        SearchText = donor.OfficialDonorName ?? string.Empty;
+        InteracSearchText = donor.InteracDonorName ?? string.Empty;
+
+        SearchResults.Clear();
+        InteracSearchResults.Clear();
+
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+        EmailDuplicateMessage = string.Empty;
+        PhoneDuplicateMessage = string.Empty;
+        LogValidationMessage = string.Empty;
+        LogSuccessMessage = string.Empty;
+
+        try
+        {
+            HistoryEntries = await DonorService.GetJourneyHistoryAsync(OrgID, donor.EMADonorID);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
+
+        ResetNewEntry();
+        if (HistoryEntries != null && HistoryEntries.Any())
+        {
+            NewEntry.UserId = HistoryEntries.First().UserId;
+        }
+    }
+
+    private void CheckEmailDuplicates()
+    {
+        EmailDuplicateMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(CurrentDonor.EmailAddress))
+        {
+            EmailDuplicateMessage = "Please enter an email to check.";
+            return;
+        }
+
+        var matches = AllDonors
+            .Where(d => d.EmailAddress != null &&
+                        d.EmailAddress.Equals(CurrentDonor.EmailAddress, StringComparison.OrdinalIgnoreCase) &&
+                        d.EMADonorID != CurrentDonor.EMADonorID)
+            .ToList();
+
+        if (matches.Any())
+        {
+            var match = matches.First();
+            EmailDuplicateMessage = $"Duplicate found: <strong>{match.OfficialDonorName ?? match.InteracDonorName}</strong> already uses this email.";
+        }
+        else
+        {
+            EmailDuplicateMessage = "No duplicates found for this email.";
+        }
+    }
+
+    private void CheckPhoneDuplicates()
+    {
+        PhoneDuplicateMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(CurrentDonor.PhoneNumber))
+        {
+            PhoneDuplicateMessage = "Please enter a phone number to check.";
+            return;
+        }
+
+        var normalizedInput = new string(CurrentDonor.PhoneNumber.Where(char.IsDigit).ToArray());
+
+        var matches = AllDonors
+            .Where(d => d.PhoneNumber != null &&
+                        new string(d.PhoneNumber.Where(char.IsDigit).ToArray()).Equals(normalizedInput, StringComparison.OrdinalIgnoreCase) &&
+                        d.EMADonorID != CurrentDonor.EMADonorID)
+            .ToList();
+
+        if (matches.Any())
+        {
+            var match = matches.First();
+            PhoneDuplicateMessage = $"Duplicate found: <strong>{match.OfficialDonorName ?? match.InteracDonorName}</strong> already uses this phone number.";
+        }
+        else
+        {
+            PhoneDuplicateMessage = "No duplicates found for this phone number.";
+        }
+    }
+
+    private bool ValidateDonor()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentDonor.OfficialDonorName) &&
+            string.IsNullOrWhiteSpace(CurrentDonor.InteracDonorName))
+        {
+            ValidationMessage = "At least one name field (CRA Name or eTransfer Name) is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentDonor.Address) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.City) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.ProvinceStateCode) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.PostalCode) ||
+            string.IsNullOrWhiteSpace(CurrentDonor.EmailAddress))
+        {
+            ValidationMessage = "All fields except one name field are compulsory.";
+            return false;
+        }
+
+        ValidationMessage = string.Empty;
+        return true;
+    }
+
+    private async Task SaveDonorInfo()
+    {
+        SuccessMessage = string.Empty;
+        if (!ValidateDonor()) return;
+
+        try
+        {
+            if (CurrentDonor.EMADonorID == 0)
+            {
+                ValidationMessage = "Please select a donor first to update their details.";
+                return;
+            }
+
+            CurrentDonor.UpdatedbyUserID = SessionState.CurrentSession?.UserID ?? 0;
+            bool success = await DonorService.UpdateJourneyDetailsAsync(OrgID, CurrentDonor);
+            
+            if (success)
+            {
+                AllDonors = await DonorService.GetAllAsync(OrgID);
+                SuccessMessage = "Donor details saved successfully.";
+            }
+            else
+            {
+                ValidationMessage = "Failed to save donor info on the server.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ValidationMessage = "Failed to save donor info.";
+            Console.WriteLine(ex);
+        }
+    }
+
+    private async Task SaveJourneyEntry()
+    {
+        LogValidationMessage = string.Empty;
+        LogSuccessMessage = string.Empty;
+
+        if (CurrentDonor.EMADonorID == 0)
+        {
+            LogValidationMessage = "Please select a donor first.";
+            return;
+        }
+
+        if (NewEntry.ActivityTypeID <= 0)
+        {
+            LogValidationMessage = "Please select an Activity type.";
+            return;
+        }
+
+        if (NewEntry.UserId <= 0)
+        {
+            LogValidationMessage = "Please select a User ('Who').";
+            return;
+        }
+
+        NewEntry.DonorStatusID = CurrentDonor.DonorStatusID;
+
+        try
+        {
+            string? newId = await DonorService.CreateJourneyEntryAsync(OrgID, CurrentDonor.EMADonorID, NewEntry);
+            if (newId != null)
+            {
+                var simulatedEntry = new DonorJourneyEntry
+                {
+                    EMAOrganizationID = OrgID,
+                    EMADonorId = CurrentDonor.EMADonorID,
+                    UserId = NewEntry.UserId,
+                    DonorInteractionId = newId,
+                    ActivityTypeID = NewEntry.ActivityTypeID,
+                    ActivityComments = NewEntry.ActivityComments,
+                    DonorStatusID = NewEntry.DonorStatusID,
+                    FollowUpDateTIme = NewEntry.FollowUpDateTIme,
+                    ActivityDateTIme = DateTime.Now
+                };
+
+                HistoryEntries.Insert(0, simulatedEntry);
+                LogSuccessMessage = "Touchpoint entry saved successfully.";
+                
+                NewEntry.ActivityComments = string.Empty;
+                NewEntry.FollowUpDateTIme = null;
+            }
+            else
+            {
+                LogValidationMessage = "Failed to save the touchpoint entry on the server.";
+            }
+        }
+        catch (Exception ex)
+        {
+            LogValidationMessage = "An error occurred while saving.";
+            Console.WriteLine(ex);
+        }
+    }
+}

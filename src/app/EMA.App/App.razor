@@ -1,0 +1,371 @@
+@inject IUserSessionStateService SessionState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+
+<Router AppAssembly="@typeof(App).Assembly"
+        OnNavigateAsync="GuardRouteAsync">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData"
+                   DefaultLayout="@typeof(Layout.MainLayout)" />
+
+        <FocusOnNavigate RouteData="@routeData"
+                         Selector="h1" />
+    </Found>
+
+    <NotFound>
+        <PageTitle>
+            Page Not Available - EMA
+        </PageTitle>
+
+        <LayoutView Layout="@typeof(Layout.MainLayout)">
+            <section class="page-not-available">
+                <h1>
+                    Page Not Available Yet
+                </h1>
+
+                <p>
+                    This page exists in the menu, but the screen has not been built yet.
+                </p>
+
+                <p class="page-not-available-path">
+                    Requested page: @GetCurrentPath()
+                </p>
+            </section>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    private static readonly string[]
+        SystemPublicRoutes =
+    [
+        "/",
+        "/login",
+        "/user-login",
+        "/giving-history",
+        "/about",
+        "/faqs",
+        "/regular-pricing",
+        "/how-we-bill",
+        "/book-a-demo",
+        "/access-denied"
+    ];
+
+    private bool _redirecting;
+
+    private async Task GuardRouteAsync(
+        NavigationContext context)
+    {
+        try
+        {
+            await GuardRouteCoreAsync(
+                context);
+        }
+        catch (OperationCanceledException)
+            when (context.CancellationToken.IsCancellationRequested)
+        {
+            // A newer navigation superseded this one. Do not allow the
+            // cancelled, older access check to redirect to Access Denied.
+        }
+    }
+
+    private async Task GuardRouteCoreAsync(
+        NavigationContext context)
+    {
+        if (_redirecting)
+        {
+            return;
+        }
+
+        var requestedLocalUrl =
+            NormalizeLocalUrl(
+                context.Path);
+
+        var requestedPath =
+            NormalizePath(
+                requestedLocalUrl);
+
+        var requiresAuthenticatedSession =
+            RequiresAuthenticatedSession(
+                requestedPath);
+
+        if (IsLegacyLoginRoute(
+                requestedPath))
+        {
+            RedirectTo(
+                "/login");
+
+            return;
+        }
+
+        if (!requiresAuthenticatedSession &&
+            IsSystemPublicRoute(
+                requestedPath))
+        {
+            return;
+        }
+
+        if (!requiresAuthenticatedSession &&
+            await CategoryLandingPageService
+                .IsPublicRouteAsync(
+                    requestedPath,
+                    context.CancellationToken))
+        {
+            return;
+        }
+
+        await SessionState.InitializeAsync();
+
+        context.CancellationToken
+            .ThrowIfCancellationRequested();
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            RedirectTo(
+                SessionState.SessionExpired
+                    ? EMA.App.Utilities.LoginReturnUrl
+                        .BuildSessionExpiredLoginUrl(
+                            requestedLocalUrl)
+                    : EMA.App.Utilities.LoginReturnUrl
+                        .BuildLoginUrl(
+                            requestedLocalUrl));
+
+            return;
+        }
+
+        if (IsAuthenticatedUtilityRoute(
+                requestedPath))
+        {
+            return;
+        }
+
+        if (requiresAuthenticatedSession &&
+            await CategoryLandingPageService
+                .IsPublicRouteAsync(
+                    requestedPath,
+                    context.CancellationToken))
+        {
+            return;
+        }
+
+        var accessResult =
+            session.IsDonorSession
+                ? await CategoryLandingPageService
+                    .CheckDonorRouteAccessAsync(
+                        session.EMAOrganizationID,
+                        session.ActorID,
+                        requestedPath,
+                        context.CancellationToken)
+                : await CategoryLandingPageService
+                    .CheckRouteAccessAsync(
+                        session.EMAOrganizationID,
+                        session.UserID,
+                        requestedPath,
+                        context.CancellationToken);
+
+        context.CancellationToken
+            .ThrowIfCancellationRequested();
+
+        if (SessionState.CurrentSession is null &&
+            SessionState.SessionExpired)
+        {
+            RedirectTo(
+                EMA.App.Utilities.LoginReturnUrl
+                    .BuildSessionExpiredLoginUrl(
+                        requestedLocalUrl));
+
+            return;
+        }
+
+        if (!accessResult.IsAllowed)
+        {
+            RedirectTo("/access-denied");
+
+            return;
+        }
+
+        if (accessResult.CategoryID.HasValue &&
+            accessResult.CategoryID.Value !=
+            session.CurrentCategoryID &&
+            session.AllowedCategoryIDs.Contains(
+                accessResult.CategoryID.Value) &&
+            !ShouldPreserveSharedWizardContext(
+                requestedPath,
+                session.CurrentCategoryID))
+        {
+            await SessionState
+                .TrySwitchCategoryAsync(
+                    accessResult.CategoryID.Value);
+        }
+    }
+
+    private void RedirectTo(
+        string url)
+    {
+        _redirecting = true;
+
+        Navigation.NavigateTo(
+            url,
+            replace: true);
+
+        _redirecting = false;
+    }
+
+    private static bool ShouldPreserveSharedWizardContext(
+        string requestedPath,
+        int currentCategoryID)
+    {
+        return currentCategoryID ==
+                   EMA.App.Models.MenuNavigationConstants.SupportCategoryID &&
+               requestedPath.Equals(
+                   "/wizard",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSystemPublicRoute(
+        string requestedPath)
+    {
+        if (SystemPublicRoutes.Any(
+                route =>
+                    requestedPath.Equals(
+                        route,
+                        StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return requestedPath.Equals(
+                   "/donor-register",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/donor-register/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/donor-directed-changes/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.Equals(
+                   "/user-sandbox",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.Equals(
+                   "/explore-ema-instantly",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.Equals(
+                   "/explore-ema-instantly/test-email",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLegacyLoginRoute(
+        string requestedPath)
+    {
+        return requestedPath.Equals(
+                   "/organization-login",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.Equals(
+                   "/donor-login",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/donorlogin/",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool
+        IsAuthenticatedUtilityRoute(
+            string requestedPath)
+    {
+        return requestedPath.Equals(
+                   "/explore-ema-instantly/test-email",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/api/mailing-lists/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/mailing-lists",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/mailing-list-",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/donor-updates/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/email/nonprofit-notification/",
+                   StringComparison.OrdinalIgnoreCase) ||
+               requestedPath.StartsWith(
+                   "/email/donor-directed-changes/",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool RequiresAuthenticatedSession(
+        string requestedPath)
+    {
+        return requestedPath.Equals(
+                   "/dataport",
+                   StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLocalUrl(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(
+                path))
+        {
+            return "/";
+        }
+
+        var trimmed =
+            path.Trim();
+
+        return trimmed.StartsWith(
+            "/",
+            StringComparison.Ordinal)
+                ? trimmed
+                : $"/{trimmed}";
+    }
+
+    private string GetCurrentPath()
+    {
+        var uri =
+            new Uri(
+                Navigation.Uri);
+
+        return string.IsNullOrWhiteSpace(
+            uri.AbsolutePath)
+            ? "/"
+            : uri.AbsolutePath;
+    }
+
+    private static string NormalizePath(
+        string? path)
+    {
+        var trimmed =
+            NormalizeLocalUrl(
+                path);
+
+        var queryIndex =
+            trimmed.IndexOf(
+                '?',
+                StringComparison.Ordinal);
+
+        if (queryIndex >= 0)
+        {
+            trimmed =
+                trimmed[..queryIndex];
+        }
+
+        if (!trimmed.StartsWith(
+                "/",
+                StringComparison.Ordinal))
+        {
+            trimmed =
+                $"/{trimmed}";
+        }
+
+        return trimmed.Length > 1
+            ? trimmed.TrimEnd('/')
+            : trimmed;
+    }
+}
+

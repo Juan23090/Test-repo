@@ -1,0 +1,473 @@
+﻿@page "/donorlogin/{EMAOrganizationID:int}"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using EMA.App.Models
+
+@inject ILoginService LoginService
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+
+<PageTitle>Donor Login - EMA</PageTitle>
+
+<div class="donor-org-login-page">
+    <section class="donor-org-login-shell">
+        <h1 class="donor-org-login-org-name">
+            @OrganizationName
+        </h1>
+
+        <div class="donor-org-login-card">
+            <h2 class="donor-org-login-title">
+                Donor Login
+            </h2>
+
+            <p class="donor-org-login-subtitle">
+                Enter your 10 digit phone number to continue.
+            </p>
+
+            <div class="donor-org-login-form-row ema-login-phone-row">
+                <input id="donor-phone"
+                       class="donor-org-login-input ema-login-phone-input"
+                       type="text"
+                       autocomplete="tel"
+                       inputmode="numeric"
+                       placeholder="780-123-4567"
+                       @bind="PhoneNumber"
+                       @bind:event="oninput"
+                       disabled="@(IsLoadingOrganization || IsLookingUp || VerificationStart is not null)" />
+
+                <button type="button"
+                        class="donor-org-login-primary-button"
+                        @onclick="LookupDonorAsync"
+                        disabled="@(IsLoadingOrganization || IsLookingUp || VerificationStart is not null)">
+                    @(IsLookingUp
+                        ? "Looking..."
+                        : "Continue")
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(ErrorMessage) &&
+                 !ShowCreateDonorButton)
+            {
+                <div class="donor-org-login-error"
+                     role="alert">
+                    @ErrorMessage
+                </div>
+            }
+        </div>
+
+        @if (ShowCreateDonorButton)
+        {
+            <section class="donor-org-login-not-found">
+                <p>
+                    That phone number was not found. Please change the number
+                    or create a new donor record.
+                </p>
+
+                <button type="button"
+                        class="donor-org-login-create-button"
+                        @onclick="GoToRegistration">
+                    Create a New Donor Record
+                </button>
+            </section>
+        }
+
+        @if (VerificationStart is not null &&
+             DonorLookup is not null)
+        {
+            <section class="donor-org-login-verification-card">
+                <p class="donor-org-login-verification-message">
+                    @VerificationStart.Message
+                </p>
+
+                <div class="donor-org-login-verification-org">
+                    Organization:
+                    <strong>
+                        @DonorLookup.OrganizationName
+                    </strong>
+                </div>
+
+                <label class="donor-org-login-code-label ema-login-code-label"
+                       for="donor-code">
+                    Enter the 6-digit code:
+                </label>
+
+                <div class="donor-org-login-form-row ema-login-code-row">
+                    <input id="donor-code"
+                           class="donor-org-login-input donor-org-login-code-input ema-login-code-input"
+                           type="text"
+                           inputmode="numeric"
+                           maxlength="6"
+                           placeholder="123456"
+                           @bind="VerificationCode"
+                           @bind:event="oninput"
+                           disabled="@IsVerifying" />
+
+                    <button type="button"
+                            class="donor-org-login-primary-button donor-org-login-verify-button"
+                            @onclick="VerifyAndLoginAsync"
+                            disabled="@(!CanVerify)">
+                        @(IsVerifying
+                            ? "Verifying..."
+                            : "Verify and Login")
+                    </button>
+                </div>
+
+                <button type="button"
+                        class="donor-org-login-secondary-button"
+                        @onclick="ResetLookup"
+                        disabled="@IsVerifying">
+                    Use a different phone number
+                </button>
+            </section>
+        }
+    </section>
+</div>
+
+@code {
+    [Parameter]
+    public int EMAOrganizationID { get; set; }
+
+    private string OrganizationName { get; set; } =
+        "Organization";
+    private string _phoneNumber =
+        string.Empty;
+
+    private string PhoneNumber
+    {
+        get => _phoneNumber;
+        set
+        {
+            var candidate =
+                value ?? string.Empty;
+
+            var rawDigits =
+                new string(
+                    candidate
+                        .Where(char.IsDigit)
+                        .ToArray());
+
+            var normalizedDigits =
+                EMA.App.Utilities.LoginPhoneNumber.NormalizeDigits(
+                    candidate);
+
+            _phoneNumber =
+                rawDigits.Length == 11 &&
+                rawDigits.StartsWith(
+                    "1",
+                    StringComparison.Ordinal) &&
+                normalizedDigits.Length == 10
+                    ? EMA.App.Utilities.LoginPhoneNumber.Format(
+                        normalizedDigits)
+                    : candidate;
+        }
+    }
+
+    private string VerificationCode { get; set; } =
+        string.Empty;
+
+    private DonorOrganizationLoginLookupResponse? DonorLookup;
+
+    private LoginVerificationStartResponse? VerificationStart;
+
+    private bool IsLoadingOrganization =
+        true;
+
+    private bool IsLookingUp;
+
+    private bool IsStartingVerification;
+
+    private bool IsVerifying;
+
+    private bool ShowCreateDonorButton;
+
+    private string? ErrorMessage;
+
+    private bool CanVerify =>
+        VerificationStart is not null &&
+        DonorLookup is not null &&
+        GetDigits(VerificationCode).Length == 6 &&
+        !IsLookingUp &&
+        !IsStartingVerification &&
+        !IsVerifying;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoadingOrganization =
+            true;
+
+        try
+        {
+            var organization =
+                await OrganizationService
+                    .GetOrganizationAsync(
+                        EMAOrganizationID);
+
+            if (organization is null)
+            {
+                ErrorMessage =
+                    "Organization was not found.";
+
+                return;
+            }
+
+            OrganizationName =
+                string.IsNullOrWhiteSpace(
+                    organization.OrganizationName)
+                    ? "Organization"
+                    : organization.OrganizationName;
+        }
+        finally
+        {
+            IsLoadingOrganization =
+                false;
+        }
+    }
+
+    private async Task LookupDonorAsync()
+    {
+        ErrorMessage = null;
+        ShowCreateDonorButton = false;
+        VerificationStart = null;
+        DonorLookup = null;
+        VerificationCode = string.Empty;
+
+        var phoneDigits =
+            EMA.App.Utilities.LoginPhoneNumber.NormalizeDigits(PhoneNumber);
+
+        if (phoneDigits.Length != 10)
+        {
+            ErrorMessage =
+                "Please input a valid 10 digit phone number.";
+
+            return;
+        }
+
+        PhoneNumber =
+            FormatPhoneNumber(
+                phoneDigits);
+
+        IsLookingUp =
+            true;
+
+        try
+        {
+            var lookupResult =
+                await LoginService
+                    .LookupDonorForOrganizationAsync(
+                        EMAOrganizationID,
+                        phoneDigits);
+
+            if (!lookupResult.IsSuccess ||
+                lookupResult.Value is null)
+            {
+                ShowCreateDonorButton =
+                    true;
+
+                return;
+            }
+
+            DonorLookup =
+                lookupResult.Value;
+
+            await StartVerificationAsync();
+        }
+        finally
+        {
+            IsLookingUp =
+                false;
+        }
+    }
+
+    private async Task StartVerificationAsync()
+    {
+        if (DonorLookup is null)
+        {
+            return;
+        }
+
+        IsStartingVerification =
+            true;
+
+        try
+        {
+            var startResult =
+                await LoginService
+                    .StartDonorLoginVerificationAsync(
+                        DonorLookup.EMAOrganizationID,
+                        DonorLookup.DonorID);
+
+            if (!startResult.IsSuccess ||
+                startResult.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(
+                        startResult.ErrorMessage)
+                        ? "Unable to send donor login verification code."
+                        : startResult.ErrorMessage;
+
+                return;
+            }
+
+            VerificationStart =
+                startResult.Value;
+        }
+        finally
+        {
+            IsStartingVerification =
+                false;
+        }
+    }
+
+    private async Task VerifyAndLoginAsync()
+    {
+        ErrorMessage = null;
+
+        if (DonorLookup is null ||
+            VerificationStart is null)
+        {
+            ErrorMessage =
+                "Please request a verification code first.";
+
+            return;
+        }
+
+        var codeDigits =
+            GetDigits(
+                VerificationCode);
+
+        if (codeDigits.Length != 6)
+        {
+            ErrorMessage =
+                "Please enter the 6-digit code.";
+
+            return;
+        }
+
+        IsVerifying =
+            true;
+
+        try
+        {
+            var loginResult =
+                await LoginService
+                    .VerifyDonorLoginCodeAsync(
+                        DonorLookup.EMAOrganizationID,
+                        DonorLookup.DonorID,
+                        VerificationStart.VerificationID,
+                        codeDigits);
+
+            if (!loginResult.IsSuccess ||
+                loginResult.Value is null)
+            {
+                ErrorMessage =
+                    string.IsNullOrWhiteSpace(
+                        loginResult.ErrorMessage)
+                        ? "The verification code is invalid or expired."
+                        : loginResult.ErrorMessage;
+
+                return;
+            }
+
+            await CompleteLoginAsync(
+                loginResult.Value);
+        }
+        finally
+        {
+            IsVerifying =
+                false;
+        }
+    }
+
+    private async Task CompleteLoginAsync(
+        LoginResponse loginResponse)
+    {
+        await SessionState
+            .SignInAsync(
+                loginResponse);
+
+        var organization =
+            await OrganizationService
+                .GetOrganizationAsync(
+                    loginResponse.EMAOrganizationID);
+
+        if (organization is not null)
+        {
+            OrganizationState
+                .UpdateOrganization(
+                    organization);
+        }
+
+        var categoryID =
+            SessionState
+                .CurrentSession
+                ?.CurrentCategoryID ??
+            loginResponse.DefaultCategoryID;
+
+        var donorID =
+            loginResponse.DonorID ??
+            loginResponse.UserID;
+
+        var landingUrl =
+            await CategoryLandingPageService
+                .GetDonorLandingUrlAsync(
+                    loginResponse.EMAOrganizationID,
+                    donorID,
+                    categoryID);
+
+        Navigation.NavigateTo(
+            landingUrl,
+            replace: true);
+    }
+
+    private void GoToRegistration()
+    {
+        var phoneDigits =
+            EMA.App.Utilities.LoginPhoneNumber.NormalizeDigits(PhoneNumber);
+
+        var url =
+            $"/donor-register/{EMAOrganizationID}";
+
+        if (phoneDigits.Length == 10)
+        {
+            url +=
+                $"?phone={phoneDigits}";
+        }
+
+        Navigation.NavigateTo(
+            url);
+    }
+
+    private void ResetLookup()
+    {
+        VerificationStart = null;
+        DonorLookup = null;
+        VerificationCode = string.Empty;
+        ErrorMessage = null;
+        ShowCreateDonorButton = false;
+    }
+
+    private static string GetDigits(
+        string value)
+    {
+        return new string(
+            value
+                .Where(char.IsDigit)
+                .ToArray());
+    }
+
+    private static string FormatPhoneNumber(
+        string phoneDigits)
+    {
+        if (phoneDigits.Length != 10)
+        {
+            return phoneDigits;
+        }
+
+        return $"{phoneDigits[..3]}-{phoneDigits.Substring(3, 3)}-{phoneDigits.Substring(6, 4)}";
+    }
+}

@@ -1,0 +1,223 @@
+.accept-referral-page {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 0 1rem 2.5rem;
+    box-sizing: border-box;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.accept-shell {
+    width: min(100%, 720px);
+    border: 1px solid #a6a6a6;
+    background: #f2f2f2;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.shell-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
+    background: #d9d9d9;
+    border-bottom: 1px solid #a6a6a6;
+}
+
+.header-link-btn {
+    font-weight: 600;
+    background: #ffffff;
+    border: 1px solid #8d8d8d;
+    color: #222222;
+    font-size: 0.85rem;
+}
+
+.header-link-btn:hover {
+    background: #e6e6e6;
+    color: #000000;
+}
+
+.shell-title-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.shell-org-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #444444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.shell-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #111111;
+    margin: 0;
+}
+
+.shell-body {
+    padding: 1.25rem 1.5rem 1.75rem;
+}
+
+.shell-intro {
+    font-size: 0.95rem;
+    color: #333333;
+    line-height: 1.45;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #d0d0d0;
+    padding-bottom: 0.85rem;
+}
+
+.claim-form {
+    background: #ffffff;
+    border: 1px solid #a6a6a6;
+    padding: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #111111;
+    margin-bottom: 0.35rem;
+}
+
+.ema-input {
+    border: 1px solid #8d8d8d;
+    border-radius: 0;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.95rem;
+}
+
+.ema-input:focus {
+    border-color: #2748d8;
+    box-shadow: 0 0 0 2px rgba(39, 72, 216, 0.2);
+}
+
+.form-text {
+    display: block;
+    font-size: 0.82rem;
+    color: #555555;
+    margin-top: 0.35rem;
+}
+
+.form-submit-row {
+    margin-top: 1.25rem;
+}
+
+.btn-claim {
+    background: #2748d8;
+    border: 1px solid #1a38b8;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.98rem;
+    padding: 0.6rem 1.75rem;
+    border-radius: 0;
+    width: 100%;
+}
+
+.btn-claim:hover:not(:disabled) {
+    background: #1e3bb5;
+}
+
+/* Rules Box */
+.info-rules-box {
+    border: 1px solid #c0c0c0;
+    background: #eaeaea;
+    padding: 1rem 1.25rem;
+}
+
+.rules-header {
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: #222222;
+    margin-bottom: 0.4rem;
+}
+
+.info-rules-box ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.85rem;
+    color: #444444;
+}
+
+.info-rules-box li {
+    margin-bottom: 0.2rem;
+}
+
+/* Success Box */
+.claim-success-box {
+    background: #ffffff;
+    border: 2px solid #16a34a;
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+}
+
+.success-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.success-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    background: #16a34a;
+    color: #ffffff;
+    font-weight: 900;
+    border-radius: 50%;
+}
+
+.claim-success-box h3 {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #166534;
+    margin: 0;
+}
+
+.success-desc {
+    font-size: 0.98rem;
+    color: #333333;
+    margin-bottom: 1.25rem;
+}
+
+.benefit-card {
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    padding: 1rem 1.25rem;
+    text-align: left;
+    margin-bottom: 1.5rem;
+}
+
+.benefit-card-title {
+    font-weight: 800;
+    font-size: 0.92rem;
+    color: #166534;
+    margin-bottom: 0.25rem;
+}
+
+.benefit-card p {
+    font-size: 0.88rem;
+    color: #15803d;
+    margin: 0;
+}
+
+.btn-pay-forward {
+    background: #2748d8;
+    border: 1px solid #1a38b8;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.95rem;
+    padding: 0.55rem 1.5rem;
+    border-radius: 0;
+    display: inline-block;
+    text-decoration: none;
+}

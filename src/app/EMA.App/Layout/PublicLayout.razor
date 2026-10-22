@@ -1,0 +1,104 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+@{
+    var showBrochureMenu =
+        ShouldShowBrochureMenu();
+}
+
+<div class="ema-shell public-shell">
+    <BrochureHeader ShowCategorySwitcher="@showBrochureMenu"
+                    CurrentMenuItem="@_currentMenuItem" />
+
+    @if (showBrochureMenu)
+    {
+        <DataDrivenNavigation EMAOrganizationID="0"
+                              UserId="0"
+                              CategoryId="@MenuNavigationConstants.BrochureCategoryID"
+                              IsDonorSession="false"
+                              UsePublicMenuEndpoint="true"
+                              CurrentMenuItemChanged="HandleCurrentMenuItemChanged" />
+    }
+
+    <main class="public-content">
+        @Body
+    </main>
+</div>
+
+@code {
+    private MenuItemDto? _currentMenuItem;
+
+    protected override void OnInitialized()
+    {
+        SessionState.OnChange +=
+            HandleSessionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(
+        bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await SessionState
+            .InitializeAsync();
+
+        await InvokeAsync(
+            StateHasChanged);
+    }
+
+    private bool ShouldShowBrochureMenu()
+    {
+        var path =
+            Navigation
+                .ToBaseRelativePath(
+                    Navigation.Uri)
+                .Split(
+                    '?',
+                    2)[0]
+                .Trim('/')
+                .ToLowerInvariant();
+
+        var isLoginRoute =
+            path is
+                "login" or
+                "organization-login" or
+                "donor-login" or
+                "donor-register" or
+                "giving-history"
+            || path.StartsWith(
+                "donorlogin/",
+                StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(
+                "donor-register/",
+                StringComparison.OrdinalIgnoreCase);
+
+        return !isLoginRoute;
+    }
+
+    private void HandleCurrentMenuItemChanged(
+        MenuItemDto? menuItem)
+    {
+        _currentMenuItem = menuItem;
+    }
+
+    private void HandleSessionChanged()
+    {
+        _ = InvokeAsync(
+            StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        SessionState.OnChange -=
+            HandleSessionChanged;
+    }
+}

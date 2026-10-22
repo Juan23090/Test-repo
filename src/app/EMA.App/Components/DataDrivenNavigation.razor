@@ -1,0 +1,795 @@
+@using EMA.App.Models
+@implements IDisposable
+
+@inject IMenuNavigationService MenuNavigationService
+@inject IMobileMenuStateService MobileMenuState
+@inject NavigationManager Navigation
+
+<nav class="@GetNavigationClass()"
+     aria-label="Application navigation">
+
+    @if (_isLoading)
+    {
+        <div class="ema-navigation-message">
+            Loading navigation...
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="ema-navigation-message ema-navigation-error"
+             role="alert">
+            @_errorMessage
+        </div>
+    }
+    else if (_menuGroups.Count == 0)
+    {
+        <div class="ema-navigation-message">
+            No navigation items are available.
+        </div>
+    }
+    else
+    {
+        <div class="ema-dropdown-menu-bar">
+            @foreach (var group in _menuGroups)
+            {
+                if (group.Children.Count > 0)
+                {
+                    <div class="@GetGroupClass(group.Parent.MenuItemID)"
+                         @onmouseenter="@(() => OpenMenu(group.Parent.MenuItemID))"
+                         @onmouseleave="@(() => CloseMenu(group.Parent.MenuItemID))">
+
+                        <button type="button"
+                                class="ema-menu-button ema-menu-trigger"
+                                aria-haspopup="menu"
+                                aria-expanded="@IsMenuOpen(group.Parent.MenuItemID)"
+                                title="@GetTitle(group.Parent)"
+                                @onclick="@(() => HandleParentMenuClickAsync(group.Parent))"
+                                @onfocus="@(() => OpenMenu(group.Parent.MenuItemID))"
+                                @onblur="CloseAllMenus">
+
+                            <span class="ema-menu-label ema-menu-label-short">
+                                @GetShortMenuLabel(group.Parent)
+                            </span>
+
+                            <span class="ema-menu-label ema-menu-label-long">
+                                @GetLongMenuLabel(group.Parent)
+                            </span>
+
+                            <span class="ema-menu-arrow"
+                                  aria-hidden="true"></span>
+                        </button>
+
+                        <div class="ema-menu-dropdown"
+                             role="menu"
+                             aria-label="@($"{GetLongMenuLabel(group.Parent)} menu")">
+
+                            @foreach (var child in group.Children)
+                            {
+                                if (string.IsNullOrWhiteSpace(child.URL))
+                                {
+                                    <span class="ema-menu-dropdown-item ema-menu-item-disabled"
+                                          role="menuitem"
+                                          aria-disabled="true">
+                                        <span class="ema-menu-label ema-menu-label-short">
+                                            @GetShortMenuLabel(child)
+                                        </span>
+
+                                        <span class="ema-menu-label ema-menu-label-long">
+                                            @GetLongMenuLabel(child)
+                                        </span>
+                                    </span>
+                                }
+                                else if (IsExternalUrl(child.URL))
+                                {
+                                    <a class="ema-menu-dropdown-item"
+                                       role="menuitem"
+                                       href="@child.URL"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       @onclick="@(() => HandleExternalMenuClick(child))">
+                                        <span class="ema-menu-label ema-menu-label-short">
+                                            @GetShortMenuLabel(child)
+                                        </span>
+
+                                        <span class="ema-menu-label ema-menu-label-long">
+                                            @GetLongMenuLabel(child)
+                                        </span>
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a class="ema-menu-dropdown-item"
+                                       role="menuitem"
+                                       href="@NormalizeInternalUrl(child.URL)"
+                                       @onclick="@(() => NavigateToMenuItemAsync(child))"
+                                       @onclick:preventDefault="true">
+                                        <span class="ema-menu-label ema-menu-label-short">
+                                            @GetShortMenuLabel(child)
+                                        </span>
+
+                                        <span class="ema-menu-label ema-menu-label-long">
+                                            @GetLongMenuLabel(child)
+                                        </span>
+                                    </a>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(group.Parent.URL))
+                    {
+                        <span class="ema-menu-button ema-menu-direct-link ema-menu-item-disabled"
+                              aria-disabled="true"
+                              title="@GetTitle(group.Parent)">
+                            <span class="ema-menu-label ema-menu-label-short">
+                                @GetShortMenuLabel(group.Parent)
+                            </span>
+
+                            <span class="ema-menu-label ema-menu-label-long">
+                                @GetLongMenuLabel(group.Parent)
+                            </span>
+                        </span>
+                    }
+                    else if (IsExternalUrl(group.Parent.URL))
+                    {
+                        <a class="ema-menu-button ema-menu-direct-link"
+                           href="@group.Parent.URL"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="@GetTitle(group.Parent)"
+                           @onclick="@(() => HandleExternalMenuClick(group.Parent))">
+                            <span class="ema-menu-label ema-menu-label-short">
+                                @GetShortMenuLabel(group.Parent)
+                            </span>
+
+                            <span class="ema-menu-label ema-menu-label-long">
+                                @GetLongMenuLabel(group.Parent)
+                            </span>
+                        </a>
+                    }
+                    else
+                    {
+                        <a class="ema-menu-button ema-menu-direct-link"
+                           href="@NormalizeInternalUrl(group.Parent.URL)"
+                           title="@GetTitle(group.Parent)"
+                           @onclick="@(() => NavigateToMenuItemAsync(group.Parent))"
+                           @onclick:preventDefault="true">
+                            <span class="ema-menu-label ema-menu-label-short">
+                                @GetShortMenuLabel(group.Parent)
+                            </span>
+
+                            <span class="ema-menu-label ema-menu-label-long">
+                                @GetLongMenuLabel(group.Parent)
+                            </span>
+                        </a>
+                    }
+                }
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_screenTitle))
+        {
+            <h2 class="ema-screen-title">
+                @_screenTitle
+            </h2>
+        }
+    }
+</nav>
+
+@code {
+    [Parameter]
+    public int EMAOrganizationID { get; set; }
+
+    [Parameter]
+    public int UserId { get; set; }
+
+    [Parameter]
+    public int CategoryId { get; set; }
+
+    [Parameter]
+    public bool IsDonorSession { get; set; }
+
+    [Parameter]
+    public bool UsePublicMenuEndpoint { get; set; }
+
+    [Parameter]
+    public EventCallback<MenuItemDto?> CurrentMenuItemChanged { get; set; }
+
+    private readonly List<MenuGroup> _menuGroups = new();
+
+    // Keep the full authorized result set so wizard-only (W) rows can still
+    // identify the current page and expose that MenuItem's Audio/Video/Setup
+    // resources without becoming visible dropdown navigation items.
+    private readonly List<MenuItemDto> _availableMenuItems = new();
+
+    private CancellationTokenSource? _loadCancellation;
+
+    private int? _openParentMenuItemId;
+
+    private bool _isLoading;
+
+    private string? _errorMessage;
+
+    private string _screenTitle = string.Empty;
+
+    private MenuItemDto? _currentMenuItem;
+
+    private bool _hasLoadedParameters;
+    private int _loadedOrganizationID;
+    private int _loadedUserId;
+    private int _loadedCategoryId;
+    private bool _loadedIsDonorSession;
+    private bool _loadedUsePublicMenuEndpoint;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged +=
+            HandleLocationChanged;
+
+        MobileMenuState.OnChange +=
+            HandleMobileMenuStateChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var parametersChanged =
+            !_hasLoadedParameters ||
+            _loadedOrganizationID != EMAOrganizationID ||
+            _loadedUserId != UserId ||
+            _loadedCategoryId != CategoryId ||
+            _loadedIsDonorSession != IsDonorSession ||
+            _loadedUsePublicMenuEndpoint != UsePublicMenuEndpoint;
+
+        if (!parametersChanged)
+        {
+            return;
+        }
+
+        _hasLoadedParameters = true;
+        _loadedOrganizationID = EMAOrganizationID;
+        _loadedUserId = UserId;
+        _loadedCategoryId = CategoryId;
+        _loadedIsDonorSession = IsDonorSession;
+        _loadedUsePublicMenuEndpoint = UsePublicMenuEndpoint;
+
+        MobileMenuState.Collapse();
+
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+
+        _loadCancellation =
+            new CancellationTokenSource();
+
+        var cancellationToken =
+            _loadCancellation.Token;
+
+        _isLoading = true;
+        _errorMessage = null;
+        _menuGroups.Clear();
+        _availableMenuItems.Clear();
+        _openParentMenuItemId = null;
+        _screenTitle = string.Empty;
+
+        try
+        {
+            var menuItems =
+                UsePublicMenuEndpoint
+                    ? await MenuNavigationService
+                        .GetPublicMenuItemsAsync(
+                            cancellationToken)
+                    : await MenuNavigationService
+                        .GetMenuItemsAsync(
+                            EMAOrganizationID,
+                            UserId,
+                            CategoryId,
+                            IsDonorSession,
+                            cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _availableMenuItems.AddRange(menuItems);
+
+            _menuGroups.AddRange(
+                BuildMenuGroups(menuItems));
+
+            await UpdateCurrentMenuItemAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer navigation request replaced this one.
+        }
+        catch
+        {
+            _errorMessage =
+                "The navigation menu could not be loaded.";
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _isLoading = false;
+            }
+        }
+    }
+
+    private static IReadOnlyList<MenuGroup> BuildMenuGroups(
+        IReadOnlyList<MenuItemDto> menuItems)
+    {
+        var activeItems =
+            menuItems
+                .Where(IsMenuVisibleItem)
+                .OrderBy(item => item.MenuItemID)
+                .ToList();
+
+        var parentItems =
+            activeItems
+                .Where(item => item.Row == 1)
+                .OrderBy(item => item.MenuItemID)
+                .ToList();
+
+        var childItems =
+            activeItems
+                .Where(item => item.Row > 1)
+                .OrderBy(item => item.MenuItemID)
+                .ToList();
+
+        var childrenByParent =
+            parentItems.ToDictionary(
+                parent => parent.MenuItemID,
+                _ => new List<MenuItemDto>());
+
+        foreach (var child in childItems)
+        {
+            var ownerIndex =
+                parentItems.FindLastIndex(parent =>
+                    parent.MenuItemID < child.MenuItemID);
+
+            if (ownerIndex < 0)
+            {
+                // Some legacy migrations reserve child IDs below their first
+                // category header. Keep those authorized entries visible by
+                // attaching them to that first header rather than dropping
+                // them from the navigation altogether.
+                if (parentItems.Count == 0)
+                {
+                    continue;
+                }
+
+                ownerIndex = 0;
+            }
+
+            // Setup Wizard is a direct page, not a normal menu group.
+            // Menu-visible M/B rows that fall numerically after /wizard
+            // belong to the next regular menu heading instead of becoming
+            // an accidental Setup Wizard dropdown. Wizard-only W rows are
+            // supplied by the dedicated Setup Wizard page/query.
+            if (IsSetupWizardParent(parentItems[ownerIndex]) &&
+                ownerIndex + 1 < parentItems.Count)
+            {
+                ownerIndex++;
+            }
+
+            childrenByParent[parentItems[ownerIndex].MenuItemID]
+                .Add(child);
+        }
+
+        return parentItems
+            .Select(parent =>
+                new MenuGroup(
+                    parent,
+                    IsSetupWizardParent(parent)
+                        ? new List<MenuItemDto>()
+                        : childrenByParent[parent.MenuItemID]
+                            .OrderBy(GetChildNavigationOrder)
+                            .ThenBy(child => child.MenuItemID)
+                            .ToList()))
+            .ToList();
+    }
+
+    private static long GetChildNavigationOrder(MenuItemDto item)
+    {
+        // Keep the referral-program links with their related organization
+        // communications tools, immediately after Mailing Lists. Their legacy
+        // database IDs are intentionally retained for migration compatibility.
+        return NormalizeComparablePath(item.URL) switch
+        {
+            "/send-referrals" => 223001,
+            "/accept-referral" => 223002,
+            "/referral-details" => 223003,
+            _ => (long)item.MenuItemID * 10
+        };
+    }
+
+    private static bool IsMenuVisibleItem(
+        MenuItemDto item)
+    {
+        var displayControlID =
+            item.DisplayControlID?.Trim().ToUpperInvariant();
+
+        return displayControlID is "M" or "B";
+    }
+
+    private string GetNavigationClass()
+    {
+        return MobileMenuState.IsExpanded
+            ? "ema-dropdown-navigation mobile-menu-expanded"
+            : "ema-dropdown-navigation mobile-menu-collapsed";
+    }
+
+    private string GetGroupClass(
+        int parentMenuItemId)
+    {
+        return IsMenuOpen(parentMenuItemId)
+            ? "ema-menu-group is-open"
+            : "ema-menu-group";
+    }
+
+    private bool IsMenuOpen(
+        int parentMenuItemId)
+    {
+        return _openParentMenuItemId ==
+               parentMenuItemId;
+    }
+
+    private void OpenMenu(
+        int parentMenuItemId)
+    {
+        _openParentMenuItemId =
+            parentMenuItemId;
+    }
+
+    private async Task HandleParentMenuClickAsync(
+        MenuItemDto parent)
+    {
+        if (IsSetupWizardParent(parent))
+        {
+            await NavigateToMenuItemAsync(parent);
+            return;
+        }
+
+        ToggleMenu(parent.MenuItemID);
+    }
+
+    private static bool IsSetupWizardParent(
+        MenuItemDto parent)
+    {
+        return string.Equals(
+            NormalizeInternalUrl(parent.URL),
+            "/wizard",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private void CloseMenu(
+        int parentMenuItemId)
+    {
+        if (_openParentMenuItemId ==
+            parentMenuItemId)
+        {
+            _openParentMenuItemId = null;
+        }
+    }
+
+    private void ToggleMenu(
+        int parentMenuItemId)
+    {
+        _openParentMenuItemId =
+            _openParentMenuItemId ==
+            parentMenuItemId
+                ? null
+                : parentMenuItemId;
+    }
+
+    private void CloseAllMenus()
+    {
+        _openParentMenuItemId = null;
+    }
+
+    private async Task NavigateToMenuItemAsync(
+        MenuItemDto item)
+    {
+        CloseAllMenus();
+        MobileMenuState.Collapse();
+
+        if (UserId > 0)
+        {
+            await MenuNavigationService
+                .LogMenuItemUsageAsync(
+                    item.MenuItemID);
+        }
+
+        Navigation.NavigateTo(
+            NormalizeInternalUrl(item.URL));
+    }
+
+    private void HandleExternalMenuClick(
+        MenuItemDto item)
+    {
+        CloseAllMenus();
+        MobileMenuState.Collapse();
+
+        if (UserId > 0)
+        {
+            _ = MenuNavigationService
+                .LogMenuItemUsageAsync(
+                    item.MenuItemID);
+        }
+    }
+
+    private static bool IsExternalUrl(
+        string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        return Uri.TryCreate(
+                   url,
+                   UriKind.Absolute,
+                   out var parsedUri)
+               &&
+               (
+                   parsedUri.Scheme ==
+                       Uri.UriSchemeHttp
+                   ||
+                   parsedUri.Scheme ==
+                       Uri.UriSchemeHttps
+               );
+    }
+
+    private static string NormalizeInternalUrl(
+        string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return "/app";
+        }
+
+        var trimmedUrl =
+            url.Trim();
+
+        if (trimmedUrl.StartsWith(
+                "//",
+                StringComparison.Ordinal) ||
+            trimmedUrl.Contains(
+                '\\') ||
+            trimmedUrl.Any(
+                char.IsControl))
+        {
+            return "/app";
+        }
+
+        // Root-relative URLs such as "/donors" are already valid.
+        // This check must happen before Uri.TryCreate because .NET can
+        // interpret rooted paths as absolute file URIs.
+        if (trimmedUrl.StartsWith(
+                "/",
+                StringComparison.Ordinal))
+        {
+            return trimmedUrl;
+        }
+
+        // Support conventional application-relative URL formats.
+        if (trimmedUrl.StartsWith(
+                "~/",
+                StringComparison.Ordinal))
+        {
+            trimmedUrl =
+                trimmedUrl[1..];
+        }
+        else
+        {
+            while (trimmedUrl.StartsWith(
+                       "./",
+                       StringComparison.Ordinal))
+            {
+                trimmedUrl =
+                    trimmedUrl[2..];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                trimmedUrl) ||
+            trimmedUrl.Equals(
+                "..",
+                StringComparison.Ordinal) ||
+            trimmedUrl.StartsWith(
+                "../",
+                StringComparison.Ordinal))
+        {
+            return "/app";
+        }
+
+        // Reject non-HTTP schemes such as javascript:, data:, file:, etc.
+        if (Uri.TryCreate(
+                trimmedUrl,
+                UriKind.Absolute,
+                out _))
+        {
+            return "/app";
+        }
+
+        return $"/{trimmedUrl}";
+    }
+
+    private static string GetTitle(
+        MenuItemDto item)
+    {
+        return string.IsNullOrWhiteSpace(
+            item.ScreenTitle)
+                ? GetShortMenuLabel(item)
+                : item.ScreenTitle.Trim();
+    }
+
+    private static string GetShortMenuLabel(
+        MenuItemDto item)
+    {
+        return string.IsNullOrWhiteSpace(
+            item.MenuName)
+                ? "Menu"
+                : item.MenuName.Trim();
+    }
+
+    private static string GetLongMenuLabel(
+        MenuItemDto item)
+    {
+        return string.IsNullOrWhiteSpace(
+            item.ScreenTitle)
+                ? GetShortMenuLabel(item)
+                : item.ScreenTitle.Trim();
+    }
+
+    private void HandleLocationChanged(
+        object? sender,
+        LocationChangedEventArgs args)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            CloseAllMenus();
+            MobileMenuState.Collapse();
+            await UpdateCurrentMenuItemAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleMobileMenuStateChanged()
+    {
+        _ = InvokeAsync(
+            StateHasChanged);
+    }
+
+    private async Task UpdateCurrentMenuItemAsync()
+    {
+        var previousMenuItemID =
+            _currentMenuItem?.MenuItemID;
+
+        var resolvedMenuItem =
+            ResolveCurrentMenuItem();
+
+        _currentMenuItem =
+            resolvedMenuItem;
+
+        _screenTitle =
+            _currentMenuItem is null
+                ? string.Empty
+                : GetScreenTitle(_currentMenuItem);
+
+        var currentMenuItemID =
+            _currentMenuItem?.MenuItemID;
+
+        if (CurrentMenuItemChanged.HasDelegate &&
+            previousMenuItemID != currentMenuItemID)
+        {
+            await CurrentMenuItemChanged.InvokeAsync(
+                _currentMenuItem);
+        }
+    }
+
+    private MenuItemDto? ResolveCurrentMenuItem()
+    {
+        var currentPath =
+            NormalizeComparablePath(
+                Navigation.ToBaseRelativePath(
+                    Navigation.Uri));
+
+        return _availableMenuItems
+            .Where(item =>
+                !IsExternalUrl(item.URL) &&
+                !string.IsNullOrWhiteSpace(item.URL))
+            .Select(item => new
+            {
+                Item = item,
+                Path = NormalizeComparablePath(item.URL)
+            })
+            .Where(candidate =>
+                candidate.Path.Equals(
+                    currentPath,
+                    StringComparison.OrdinalIgnoreCase) ||
+                (
+                    candidate.Path != "/" &&
+                    currentPath.StartsWith(
+                        candidate.Path + "/",
+                        StringComparison.OrdinalIgnoreCase)
+                ))
+            .OrderByDescending(candidate =>
+                candidate.Path.Length)
+            .Select(candidate => candidate.Item)
+            .FirstOrDefault();
+    }
+
+    private static string GetScreenTitle(
+        MenuItemDto item)
+    {
+        return string.IsNullOrWhiteSpace(
+            item.ScreenTitle)
+                ? GetShortMenuLabel(item)
+                : item.ScreenTitle.Trim();
+    }
+
+    private static string NormalizeComparablePath(
+        string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        var normalized = path.Trim();
+
+        var queryIndex =
+            normalized.IndexOf(
+                '?',
+                StringComparison.Ordinal);
+
+        if (queryIndex >= 0)
+        {
+            normalized =
+                normalized[..queryIndex];
+        }
+
+        var fragmentIndex =
+            normalized.IndexOf(
+                '#',
+                StringComparison.Ordinal);
+
+        if (fragmentIndex >= 0)
+        {
+            normalized =
+                normalized[..fragmentIndex];
+        }
+
+        if (!normalized.StartsWith(
+                "/",
+                StringComparison.Ordinal))
+        {
+            normalized =
+                $"/{normalized}";
+        }
+
+        return normalized.Length > 1
+            ? normalized.TrimEnd('/')
+            : normalized;
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -=
+            HandleLocationChanged;
+
+        MobileMenuState.OnChange -=
+            HandleMobileMenuStateChanged;
+
+        _loadCancellation?.Cancel();
+        _loadCancellation?.Dispose();
+    }
+
+    private sealed record MenuGroup(
+        MenuItemDto Parent,
+        IReadOnlyList<MenuItemDto> Children);
+}

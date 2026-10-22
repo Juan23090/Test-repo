@@ -1,0 +1,57 @@
+@page "/access-denied"
+
+@inject IUserSessionStateService SessionState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+
+<PageTitle>Access Denied - EMA</PageTitle>
+
+<section class="access-denied-page">
+    <h1>Access Denied</h1>
+
+    <p>
+        You do not have permission to access this page.
+    </p>
+
+    <button type="button"
+            class="access-denied-button"
+            @onclick="GoHomeAsync">
+        Go to my home page
+    </button>
+</section>
+
+@code {
+    private async Task GoHomeAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null)
+        {
+            Navigation.NavigateTo(
+                "/login",
+                replace: true);
+
+            return;
+        }
+
+        var landingUrl =
+            session.IsDonorSession
+                ? await CategoryLandingPageService
+                    .GetDonorLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.ActorID,
+                        session.CurrentCategoryID)
+                : await CategoryLandingPageService
+                    .GetLandingUrlAsync(
+                        session.EMAOrganizationID,
+                        session.UserID,
+                        session.CurrentCategoryID);
+
+        Navigation.NavigateTo(
+            landingUrl,
+            replace: true);
+    }
+}

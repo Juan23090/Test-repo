@@ -1,0 +1,897 @@
+@page "/calculate-your-savings"
+
+@inject ISavingsCalculatorService SavingsService
+@inject IOrganizationStateService OrganizationState
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Calculate Your Savings - EMA</PageTitle>
+
+<div class="savings-container" id="report-print-area">
+    @if (!string.IsNullOrEmpty(emailSuccessMessage))
+    {
+        <div class="alert alert-success" role="alert" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; border-radius: 4px; background-color: #d4edda; border-color: #c3e6cb; color: #155724;">
+            <span>@emailSuccessMessage</span>
+            <button type="button" class="btn-close" @onclick="() => emailSuccessMessage = null" aria-label="Close" style="background: none; border: none; font-size: 1.20rem; cursor: pointer; color: #155724; font-weight: bold;">&times;</button>
+        </div>
+    }
+    @if (isLoading)
+    {
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading calculator data...</span>
+            </div>
+            <p class="mt-2 text-muted">Loading calculator data...</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @errorMessage
+        </div>
+    }
+    else if (calculatorData != null)
+    {
+        <div class="savings-header-card">
+            <div class="savings-org-name">
+                @calculatorData.OrganizationName
+            </div>
+            <h2 class="savings-subtitle">Potential Savings with EMA Giving</h2>
+            <div class="savings-period">
+                For the Period 
+                <input type="date" value="@calculatorData.StartDate.ToString("yyyy-MM-dd")" @onchange="OnStartDateChanged" onclick="this.showPicker()" class="savings-date-input" />
+                to 
+                <input type="date" value="@calculatorData.EndDate.ToString("yyyy-MM-dd")" @onchange="OnEndDateChanged" onclick="this.showPicker()" class="savings-date-input" />
+            </div>
+            <div class="savings-wording">
+                @calculatorData.Wording
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="savings-grid-table">
+                <thead>
+                    <tr>
+                        <!-- Row 1 -->
+                        <th class="header-chms" style="font-weight: bold; padding: 6px;">ChMS</th>
+                        <th colspan="10" class="header-current">Current</th>
+                        <th colspan="3" class="header-ema">With EMA Giving</th>
+                    </tr>
+                    <tr>
+                        <!-- Row 2 -->
+                        <th class="header-chms" style="padding: 6px;">
+                            <select @bind="calculatorData.ChMSID" @bind:after="OnChMSChanged" class="form-select form-select-sm d-inline-block w-auto" style="color: #000; font-weight: bold; padding: 2px 6px;">
+                                @foreach (var opt in chmsOptions)
+                                {
+                                    <option value="@opt.ChMSID">@opt.ChMSName</option>
+                                }
+                            </select>
+                        </th>
+                        <th colspan="3" class="header-current">Percentage Based</th>
+                        <th colspan="3" class="header-current">Transaction Based</th>
+                        <th colspan="3" class="header-current">
+                            <span class="office-hotlink" @onclick="OpenOfficeModal">Office</span>
+                        </th>
+                        <th rowspan="2" class="header-current" style="vertical-align: bottom;">Total</th>
+                        
+                        <th rowspan="2" class="header-ema" style="vertical-align: bottom;">Change To EMA Giving</th>
+                        <th rowspan="2" class="header-ema" style="vertical-align: bottom;">EMA Charge</th>
+                        <th rowspan="2" class="header-ema" style="vertical-align: bottom;">Potential Savings</th>
+                    </tr>
+                    <tr>
+                        <!-- Row 3 -->
+                        <th class="header-current" style="min-width: 170px; padding: 6px;">Method of Giving</th>
+                        <th class="header-current" style="min-width: 100px;">Value</th>
+                        <th class="header-current">%</th>
+                        <th class="header-current">Charge</th>
+                        
+                        <th class="header-current"># Txs</th>
+                        <th class="header-current">Per Tx</th>
+                        <th class="header-current">Charge</th>
+                        
+                        <th class="header-current">Min</th>
+                        <th class="header-current">$ Per Min</th>
+                        <th class="header-current">Labor Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in calculatorData.Details)
+                    {
+                        <tr>
+                            <!-- Method of Giving (Column 1) -->
+                            <td class="text-start" style="min-width: 170px;">
+                                <span style="color: #000000; font-weight: bold;">@row.Description</span>
+                            </td>
+
+                            <!-- Value -->
+                            <td style="min-width: 100px; padding: 2px;">
+                                <input type="text" inputmode="numeric" @bind-value:get="FormatCurrencyValue(row.AnnualValueOfTransactions)" @bind-value:set="(val) => SetDecimalFromFormattedString(row, val)" @bind-value:event="onchange" @onblur="() => SaveRowDetails(row)" class="blue-input" />
+                            </td>
+
+                        <!-- % Fee -->
+                        <td>
+                            @((row.PercentBasedFee * 100m).ToString("0.#"))%
+                        </td>
+
+                        <!-- Charge % -->
+                        <td>
+                            @CalculatePercentCharge(row).ToString("C0")
+                        </td>
+
+                        <!-- # Txs -->
+                        <td>
+                            <input type="text" inputmode="numeric" @bind-value:get="FormatIntWithCommas(row.AnnualNumberOfTransactions)" @bind-value:set="(val) => SetIntFromFormattedString(row, val)" @bind-value:event="onchange" @onblur="() => SaveRowDetails(row)" class="blue-input" />
+                        </td>
+
+                        <!-- Per Tx Fee -->
+                        <td>
+                            @row.PerTransactionFee.ToString("C2")
+                        </td>
+
+                        <!-- Charge Tx -->
+                        <td>
+                            @FormatCurrencyWithOptionalCents(CalculateTxCharge(row))
+                        </td>
+
+                        <!-- Labor Min -->
+                        <td>
+                            <input type="number" step="any" @bind-value:get="NormalizeDecimal(row.LaborMinutesPerTransaction)" @bind-value:set="(val) => { row.LaborMinutesPerTransaction = val; }" @bind-value:event="oninput" @onblur="() => SaveRowDetails(row)" class="blue-input" />
+                        </td>
+
+                        <!-- $ Per Min -->
+                        <td>
+                            @((calculatorData.LaborCostPerHour / 60m).ToString("C2"))
+                        </td>
+
+                        <!-- Labor Cost -->
+                        <td>
+                            @CalculateLaborCost(row).ToString("C0")
+                        </td>
+
+                        <!-- Total Cost -->
+                        <td>
+                            @CalculateTotal(row).ToString("C0")
+                        </td>
+
+                        <!-- Change to EMA Toggle -->
+                        <td>
+                            <div class="d-flex align-items-center justify-content-center" style="white-space: nowrap; gap: 6px;">
+                                <div class="switch-container m-0">
+                                    <input type="checkbox" checked="@(row.ChangeToEMAEtransfer == "Y")" 
+                                           @onchange="@((e) => ToggleChangeToEMA(row, e))" class="switch-input" id="@($"toggle-{row.EMAMethodOfGivingID}")" />
+                                    <label class="switch-slider" for="@($"toggle-{row.EMAMethodOfGivingID}")"></label>
+                                </div>
+                                <span class="font-weight-bold" style="min-width: 25px; text-align: left;">@(row.ChangeToEMAEtransfer == "Y" ? "Yes" : "No")</span>
+                            </div>
+                        </td>
+
+                        <!-- EMA Charge -->
+                        <td>
+                            @CalculateEmaCharge(row).ToString("C0")
+                        </td>
+
+                        <!-- Potential Savings -->
+                        <td>
+                            @CalculatePotentialSavings(row).ToString("C0")
+                        </td>
+                    </tr>
+                }
+
+                <!-- Subtotals Row -->
+                <tr class="subtotals-row">
+                    <td class="text-start" style="min-width: 170px;">Subtotals</td>
+                    <td style="min-width: 100px;">@GetSubtotalValue().ToString("C0")</td>
+                    <td></td>
+                    <td></td>
+                    <td>@GetSubtotalTxs().ToString("N0")</td>
+                    <td></td>
+                    <td></td>
+                    <td>@GetSubtotalMinutes().ToString("#,##0.##")</td>
+                    <td></td>
+                    <td>@GetSubtotalLaborCost().ToString("C0")</td>
+                    <td>@GetSubtotalTotal().ToString("C0")</td>
+                    <td></td>
+                    <td>@GetSubtotalEmaCharge().ToString("C0")</td>
+                    <td></td>
+                </tr>
+
+                <!-- Software Rental Row -->
+                <tr class="software-rental-row">
+                    <td class="text-start" style="min-width: 170px; font-weight: bold;">Software Rental</td>
+                    <td style="min-width: 100px;"></td> <!-- Value -->
+                    <td></td> <!-- % -->
+                    <td style="padding: 2px; white-space: nowrap;">
+                        <input type="text" inputmode="numeric" @bind-value:get="FormatCurrencyValue(calculatorData.MonthlySoftwareRental)" @bind-value:set="(val) => SetSoftwareRentalFromFormattedString(val)" @bind-value:event="onchange" @onblur="SaveSoftwareRental" class="blue-input" />
+                    </td> <!-- Charge % -->
+                    <td>/Mo</td> <!-- # Txs -->
+                    <td>x</td> <!-- Per Tx -->
+                    <td>@calculatorData.NumberOfMonths</td> <!-- Charge Tx -->
+                    <td>Mo</td> <!-- Min -->
+                    <td>=</td> <!-- $ Per Min -->
+                    <td></td> <!-- Labor Cost -->
+                    <td>@GetSoftwareRentalTotal().ToString("C0")</td> <!-- Total -->
+                    <td></td> <!-- Change to EMA -->
+                    <td></td> <!-- EMA Charge -->
+                    <td>@GetSoftwareRentalTotal().ToString("C0")</td> <!-- Potential Savings -->
+                </tr>
+
+                <!-- Grand Totals Row -->
+                <tr class="grand-totals-row">
+                    <td colspan="10" class="text-end">Totals</td>
+                    <td>@GetGrandTotal().ToString("C0")</td>
+                    <td></td>
+                    <td>@GetSubtotalEmaCharge().ToString("C0")</td>
+                    <td>@GetGrandSavings().ToString("C0")</td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="savings-actions-bar">
+            <button type="button" class="savings-btn" @onclick="SaveAsPdf">Save as PDF</button>
+            <button type="button" class="savings-btn" @onclick="Print">Print</button>
+            <button type="button" class="savings-btn" @onclick="Email">Email</button>
+        </div>
+
+        @if (isOfficeModalOpen)
+        {
+            <div class="savings-modal-backdrop">
+                <div class="savings-modal-card">
+                    <h3 class="savings-modal-title">Labor & Burden Cost Settings</h3>
+                    <hr />
+                    <div class="savings-modal-body">
+                        <div class="form-group mb-3">
+                            <label class="form-label font-weight-bold">Labor Cost Per Hour</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" value="@((double)laborCostInput)" @oninput="@((e) => { if (e.Value != null && decimal.TryParse(e.Value.ToString(), out var val)) laborCostInput = val; })" step="any" />
+                                <span class="input-group-text">per hour</span>
+                            </div>
+                        </div>
+                        <div class="savings-modal-calc text-muted mb-4">
+                            = <strong>@((laborCostInput / 60m).ToString("C2"))</strong> cost per minute.
+                        </div>
+                    </div>
+                    <div class="savings-modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseOfficeModal">Cancel</button>
+                        <button type="button" class="btn btn-primary ms-2" @onclick="SaveOfficeModal">Save Settings</button>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (isEmailModalOpen)
+        {
+            <div class="savings-modal-backdrop">
+                <div class="savings-modal-card" style="width: 500px;">
+                    <h3 class="savings-modal-title">Email Calculator Report</h3>
+                    <hr />
+                    <div class="savings-modal-body">
+                        @if (!string.IsNullOrEmpty(emailErrorMessage))
+                        {
+                            <div class="alert alert-danger" style="color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; padding: 8px 12px; margin-bottom: 15px; border-radius: 4px;">@emailErrorMessage</div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label font-weight-bold" style="font-weight: bold; margin-bottom: 5px; display: block;">Recipient Email</label>
+                            <input type="email" class="form-control" @bind="emailRecipient" placeholder="e.g. pastor@church.org" style="width: 100%; border: 1px solid #ccc; padding: 6px 12px; border-radius: 4px; box-sizing: border-box;" />
+                        </div>
+                        <div class="mb-3" style="margin-top: 15px;">
+                            <label class="form-label font-weight-bold" style="font-weight: bold; margin-bottom: 5px; display: block;">Subject</label>
+                            <input type="text" class="form-control" @bind="emailSubject" placeholder="Email Subject" style="width: 100%; border: 1px solid #ccc; padding: 6px 12px; border-radius: 4px; box-sizing: border-box;" />
+                        </div>
+                        <div class="mb-3" style="margin-top: 15px;">
+                            <label class="form-label font-weight-bold" style="font-weight: bold; margin-bottom: 5px; display: block;">Message Body</label>
+                            <textarea class="form-control" @bind="emailBody" rows="6" placeholder="Write your email body here..." style="width: 100%; border: 1px solid #ccc; padding: 6px 12px; border-radius: 4px; resize: vertical; box-sizing: border-box; font-family: inherit;"></textarea>
+                        </div>
+                        <div class="text-muted small mt-2" style="font-size: 0.85rem; color: #6c757d; margin-top: 10px;">
+                            Note: The Savings Calculator PDF report will be generated and attached automatically to this email.
+                        </div>
+                    </div>
+                    <div class="savings-modal-footer" style="display: flex; justify-content: flex-end; margin-top: 15px; align-items: center; border-top: 1px solid #dee2e6; padding-top: 15px;">
+                        @if (isSendingEmail)
+                        {
+                            <span style="margin-right: 15px; font-size: 0.9rem; color: #555;">Sending...</span>
+                        }
+                        <button type="button" class="btn btn-secondary" @onclick="CloseEmailModal" disabled="@isSendingEmail" style="background-color: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
+                        <button type="button" class="btn btn-primary ms-2" @onclick="SendEmail" disabled="@isSendingEmail" style="background-color: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-left: 8px;">Send</button>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    // Checks BillingRate table first, otherwise uses discount formula or falls back to $1.00.
+    private decimal GetEmaChargePerTransaction(SavingsCalculatorDetailRow row)
+    {
+        if (calculatorData?.ConfiguredEtransferRate.HasValue == true)
+        {
+            return calculatorData.ConfiguredEtransferRate.Value;
+        }
+
+        if (calculatorData != null)
+        {
+            decimal totalValue = calculatorData.Details.Sum(r => r.AnnualValueOfTransactions);
+            if (totalValue > 0)
+            {
+                var etransRow = calculatorData.Details.FirstOrDefault(r => r.Description.Equals("e-Transfer", StringComparison.OrdinalIgnoreCase));
+                decimal etransValue = etransRow?.AnnualValueOfTransactions ?? 0m;
+                decimal etransPercent = etransValue / totalValue;
+
+                if (row.Description.Equals("e-Transfer", StringComparison.OrdinalIgnoreCase))
+                {
+                    return 1.00m;
+                }
+                else
+                {
+                    return Math.Max(0m, 1.00m - etransPercent);
+                }
+            }
+        }
+
+        return 1.00m;
+    }
+
+
+    private SavingsCalculatorData? calculatorData;
+    private List<ChMSOption> chmsOptions = new();
+    private bool isLoading = true;
+    private string errorMessage = "";
+    private int orgId;
+
+    
+    private bool isOfficeModalOpen = false;
+    private decimal laborCostInput = 0m;
+
+    private bool isEmailModalOpen = false;
+    private string emailRecipient = "";
+    private string emailSubject = "";
+    private string emailBody = "";
+    private bool isSendingEmail = false;
+    private string emailErrorMessage = "";
+    private string? emailSuccessMessage = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await SessionState.InitializeAsync();
+
+            orgId =
+                SessionState.CurrentSession
+                    ?.EMAOrganizationID
+                ?? 0;
+            
+            
+            var options = await SavingsService.GetChMSListAsync();
+            if (options != null)
+            {
+                chmsOptions = options;
+            }
+
+            var data = await SavingsService.GetCalculatorDataAsync(orgId);
+            if (data != null)
+            {
+                calculatorData = data;
+            }
+            else
+            {
+                errorMessage = "Failed to load savings calculator data.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error initializing page: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnChMSChanged()
+    {
+        if (calculatorData == null) return;
+        isLoading = true;
+        StateHasChanged();
+        try
+        {
+            await SavingsService.SaveSettingsAsync(orgId, calculatorData);
+            var data = await SavingsService.GetCalculatorDataAsync(orgId);
+            if (data != null)
+            {
+                calculatorData = data;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error switching ChMS: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveSoftwareRental()
+    {
+        if (calculatorData == null) return;
+        try
+        {
+            await SavingsService.SaveSettingsAsync(orgId, calculatorData);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving software rental: {ex.Message}";
+        }
+    }
+
+    private async Task ToggleChangeToEMA(SavingsCalculatorDetailRow row, ChangeEventArgs e)
+    {
+        if (e.Value is bool isChecked)
+        {
+            row.ChangeToEMAEtransfer = isChecked ? "Y" : "N";
+            await SaveRowDetails(row);
+        }
+    }
+
+    private async Task OnStartDateChanged(ChangeEventArgs e)
+    {
+        if (calculatorData == null || e.Value == null) return;
+        if (DateTime.TryParse(e.Value.ToString(), out var dt))
+        {
+            calculatorData.StartDate = dt;
+            if (calculatorData.EndDate < dt)
+            {
+                calculatorData.EndDate = dt;
+            }
+            RecalculateMonths();
+            isLoading = true;
+            StateHasChanged();
+            try
+            {
+                await SavingsService.SaveSettingsAsync(orgId, calculatorData);
+                var data = await SavingsService.GetCalculatorDataAsync(orgId);
+                if (data != null)
+                {
+                    calculatorData = data;
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error updating start date: {ex.Message}";
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task OnEndDateChanged(ChangeEventArgs e)
+    {
+        if (calculatorData == null || e.Value == null) return;
+        if (DateTime.TryParse(e.Value.ToString(), out var dt))
+        {
+            calculatorData.EndDate = dt;
+            if (dt < calculatorData.StartDate)
+            {
+                calculatorData.StartDate = dt;
+            }
+            RecalculateMonths();
+            isLoading = true;
+            StateHasChanged();
+            try
+            {
+                await SavingsService.SaveSettingsAsync(orgId, calculatorData);
+                var data = await SavingsService.GetCalculatorDataAsync(orgId);
+                if (data != null)
+                {
+                    calculatorData = data;
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error updating end date: {ex.Message}";
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void RecalculateMonths()
+    {
+        if (calculatorData == null) return;
+        var months = ((calculatorData.EndDate.Year - calculatorData.StartDate.Year) * 12) + calculatorData.EndDate.Month - calculatorData.StartDate.Month + 1;
+        calculatorData.NumberOfMonths = Math.Max(1, months);
+    }
+
+    private void OpenOfficeModal()
+    {
+        if (calculatorData == null) return;
+        laborCostInput = calculatorData.LaborCostPerHour;
+        isOfficeModalOpen = true;
+    }
+
+    private void CloseOfficeModal()
+    {
+        isOfficeModalOpen = false;
+    }
+
+    private async Task SaveOfficeModal()
+    {
+        if (calculatorData == null) return;
+        calculatorData.LaborCostPerHour = laborCostInput;
+        isLoading = true;
+        isOfficeModalOpen = false;
+        StateHasChanged();
+        try
+        {
+            await SavingsService.SaveSettingsAsync(orgId, calculatorData);
+            var data = await SavingsService.GetCalculatorDataAsync(orgId);
+            if (data != null)
+            {
+                calculatorData = data;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving labor rate: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveRowDetails(SavingsCalculatorDetailRow row)
+    {
+        try
+        {
+            await SavingsService.SaveDetailsAsync(orgId, new List<SavingsCalculatorDetailRow> { row });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error auto-saving row details: {ex.Message}");
+        }
+    }
+
+    private decimal NormalizeDecimal(decimal val)
+    {
+        return val / 1.0000000000000000000000000000m;
+    }
+
+    private string FormatCurrencyValue(decimal val)
+    {
+        return $"${Math.Round(val, MidpointRounding.AwayFromZero):#,##0}";
+    }
+
+    private void SetDecimalFromFormattedString(SavingsCalculatorDetailRow row, string? str)
+    {
+        if (string.IsNullOrWhiteSpace(str))
+        {
+            row.AnnualValueOfTransactions = 0m;
+            return;
+        }
+        var clean = str.Replace("$", "").Replace(",", "").Trim();
+        if (decimal.TryParse(clean, out var result))
+        {
+            row.AnnualValueOfTransactions = Math.Round(result, MidpointRounding.AwayFromZero);
+        }
+    }
+
+    private void SetSoftwareRentalFromFormattedString(string? str)
+    {
+        if (calculatorData == null) return;
+        if (string.IsNullOrWhiteSpace(str))
+        {
+            calculatorData.MonthlySoftwareRental = 0m;
+            return;
+        }
+        var clean = str.Replace("$", "").Replace(",", "").Trim();
+        if (decimal.TryParse(clean, out var result))
+        {
+            calculatorData.MonthlySoftwareRental = Math.Round(result, MidpointRounding.AwayFromZero);
+        }
+    }
+
+    private string FormatIntWithCommas(int val)
+    {
+        return val.ToString("#,##0");
+    }
+
+    private void SetIntFromFormattedString(SavingsCalculatorDetailRow row, string? str)
+    {
+        if (string.IsNullOrWhiteSpace(str))
+        {
+            row.AnnualNumberOfTransactions = 0;
+            return;
+        }
+        var clean = str.Replace(",", "").Trim();
+        if (int.TryParse(clean, out var result))
+        {
+            row.AnnualNumberOfTransactions = result;
+        }
+    }
+
+
+    private string GetInputValueWidthStyle(decimal val)
+    {
+        int charCount = NormalizeDecimal(val).ToString().Length;
+        int calculatedWidth = (charCount * 8) + 4;
+        return $"width: {calculatedWidth}px;";
+    }
+
+    private decimal CalculatePercentCharge(SavingsCalculatorDetailRow row)
+    {
+        return row.AnnualValueOfTransactions * row.PercentBasedFee;
+    }
+
+    private decimal CalculateTxCharge(SavingsCalculatorDetailRow row)
+    {
+        return row.AnnualNumberOfTransactions * row.PerTransactionFee;
+    }
+
+    private decimal CalculateLaborCost(SavingsCalculatorDetailRow row)
+    {
+        if (calculatorData == null) return 0m;
+        var costPerMin = calculatorData.LaborCostPerHour / 60m;
+        return row.AnnualNumberOfTransactions * row.LaborMinutesPerTransaction * costPerMin;
+    }
+
+    private decimal CalculateTotal(SavingsCalculatorDetailRow row)
+    {
+        return CalculatePercentCharge(row) + CalculateTxCharge(row) + CalculateLaborCost(row);
+    }
+
+    private decimal CalculateEmaCharge(SavingsCalculatorDetailRow row)
+    {
+        return row.ChangeToEMAEtransfer == "Y" 
+            ? row.AnnualNumberOfTransactions * GetEmaChargePerTransaction(row) 
+            : 0m;
+    }
+
+    private decimal CalculatePotentialSavings(SavingsCalculatorDetailRow row)
+    {
+        if (row.ChangeToEMAEtransfer == "N")
+        {
+            return 0m;
+        }
+        var totalCost = CalculateTotal(row);
+        var emaCharge = CalculateEmaCharge(row);
+        return Math.Max(0m, totalCost - emaCharge);
+    }
+
+    private decimal GetSubtotalValue() => calculatorData?.Details.Sum(r => r.AnnualValueOfTransactions) ?? 0m;
+    private decimal GetSubtotalPercentCharge() => calculatorData?.Details.Sum(CalculatePercentCharge) ?? 0m;
+    private int GetSubtotalTxs() => calculatorData?.Details.Sum(r => r.AnnualNumberOfTransactions) ?? 0;
+    private decimal GetSubtotalTxCharge() => calculatorData?.Details.Sum(CalculateTxCharge) ?? 0m;
+    private double GetSubtotalMinutes() => (double)(calculatorData?.Details.Sum(r => r.AnnualNumberOfTransactions * r.LaborMinutesPerTransaction) ?? 0m);
+    private decimal GetSubtotalLaborCost() => calculatorData?.Details.Sum(CalculateLaborCost) ?? 0m;
+    private decimal GetSubtotalTotal() => calculatorData?.Details.Sum(CalculateTotal) ?? 0m;
+    private decimal GetSubtotalEmaCharge() => calculatorData?.Details.Sum(CalculateEmaCharge) ?? 0m;
+    private decimal GetSubtotalPotentialSavings() => calculatorData?.Details.Sum(CalculatePotentialSavings) ?? 0m;
+
+    private decimal GetSoftwareRentalTotal()
+    {
+        if (calculatorData == null) return 0m;
+        return calculatorData.MonthlySoftwareRental * calculatorData.NumberOfMonths;
+    }
+
+    private decimal GetGrandTotal() => GetSubtotalTotal() + GetSoftwareRentalTotal();
+    private decimal GetGrandSavings() => GetSubtotalPotentialSavings() + GetSoftwareRentalTotal();
+
+    private string FormatCurrencyWithOptionalCents(decimal val)
+    {
+        return val % 1 == 0 ? val.ToString("C0") : val.ToString("C2");
+    }
+
+    private async Task SaveAsPdf()
+    {
+        if (calculatorData == null) return;
+
+        var request = new SavingsCalculatorPdfRequest
+        {
+            OrganizationName = calculatorData.OrganizationName,
+            DatePeriodText = $"{calculatorData.StartDate:yyyy-MM-dd} to {calculatorData.EndDate:yyyy-MM-dd}",
+            ChMSName = calculatorData.ChMSName ?? "None",
+            LaborCostPerHour = calculatorData.LaborCostPerHour,
+            MonthlySoftwareRental = calculatorData.MonthlySoftwareRental,
+            NumberOfMonths = calculatorData.NumberOfMonths,
+            Wording = calculatorData.Wording,
+            SubtotalValue = GetSubtotalValue(),
+            SubtotalTxs = GetSubtotalTxs(),
+            SubtotalMinutes = GetSubtotalMinutes(),
+            SubtotalLaborCost = GetSubtotalLaborCost(),
+            SubtotalEmaCharge = GetSubtotalEmaCharge(),
+            SubtotalTotal = GetSubtotalTotal(),
+            GrandTotal = GetGrandTotal(),
+            GrandSavings = GetGrandSavings(),
+            FileName = $"savings-calculator-report-{calculatorData.OrganizationName.Replace(" ", "-")}-{DateTime.Today:yyyyMMdd}.pdf"
+        };
+
+        foreach (var row in calculatorData.Details)
+        {
+            request.Details.Add(new SavingsCalculatorPdfRow
+            {
+                Description = row.Description,
+                Value = row.AnnualValueOfTransactions,
+                PercentBasedFee = row.PercentBasedFee,
+                PercentBasedCharge = CalculatePercentCharge(row),
+                NumberOfTransactions = row.AnnualNumberOfTransactions,
+                PerTransactionFee = row.PerTransactionFee,
+                TransactionBasedCharge = CalculateTxCharge(row),
+                LaborMinutes = row.LaborMinutesPerTransaction,
+                LaborCost = CalculateLaborCost(row),
+                TotalCost = CalculateTotal(row),
+                ChangeToEma = row.ChangeToEMAEtransfer,
+                EmaCharge = CalculateEmaCharge(row),
+                PotentialSavings = CalculatePotentialSavings(row)
+            });
+        }
+
+        request.Details.Add(new SavingsCalculatorPdfRow
+        {
+            Description = "Software Rental",
+            PercentBasedCharge = calculatorData.MonthlySoftwareRental,
+            TotalCost = GetSoftwareRentalTotal(),
+            PotentialSavings = GetSoftwareRentalTotal()
+        });
+
+        try
+        {
+            var pdfBytes = await SavingsService.GeneratePdfAsync(request);
+            if (pdfBytes != null)
+            {
+                var base64 = Convert.ToBase64String(pdfBytes);
+                await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+                await module.InvokeVoidAsync("downloadFileFromBase64", request.FileName, "application/pdf", base64);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error exporting PDF: {ex.Message}");
+        }
+    }
+    private async Task Print()
+    {
+        await JS.InvokeVoidAsync("printPage");
+    }
+
+    private void Email()
+    {
+        if (calculatorData == null) return;
+        emailRecipient = "";
+        emailSubject = $"Savings Calculator Report - {calculatorData.OrganizationName}";
+        emailBody = $"Hello,\n\nPlease find attached the Savings Calculator Report for {calculatorData.OrganizationName}.\n\nBest regards,\n[Your Name]";
+        emailErrorMessage = "";
+        emailSuccessMessage = null;
+        isSendingEmail = false;
+        isEmailModalOpen = true;
+    }
+
+    private void CloseEmailModal()
+    {
+        isEmailModalOpen = false;
+    }
+
+    private async Task SendEmail()
+    {
+        if (calculatorData == null) return;
+
+        if (string.IsNullOrWhiteSpace(emailRecipient))
+        {
+            emailErrorMessage = "Recipient email is required.";
+            return;
+        }
+
+        if (!emailRecipient.Contains("@") || !emailRecipient.Contains("."))
+        {
+            emailErrorMessage = "Please enter a valid email address.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(emailSubject))
+        {
+            emailErrorMessage = "Subject is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(emailBody))
+        {
+            emailErrorMessage = "Message body is required.";
+            return;
+        }
+
+        emailErrorMessage = "";
+        isSendingEmail = true;
+        StateHasChanged();
+
+        var pdfRequest = new SavingsCalculatorPdfRequest
+        {
+            OrganizationName = calculatorData.OrganizationName,
+            DatePeriodText = $"{calculatorData.StartDate:yyyy-MM-dd} to {calculatorData.EndDate:yyyy-MM-dd}",
+            ChMSName = calculatorData.ChMSName ?? "None",
+            LaborCostPerHour = calculatorData.LaborCostPerHour,
+            MonthlySoftwareRental = calculatorData.MonthlySoftwareRental,
+            NumberOfMonths = calculatorData.NumberOfMonths,
+            Wording = calculatorData.Wording,
+            SubtotalValue = GetSubtotalValue(),
+            SubtotalTxs = GetSubtotalTxs(),
+            SubtotalMinutes = GetSubtotalMinutes(),
+            SubtotalLaborCost = GetSubtotalLaborCost(),
+            SubtotalEmaCharge = GetSubtotalEmaCharge(),
+            SubtotalTotal = GetSubtotalTotal(),
+            GrandTotal = GetGrandTotal(),
+            GrandSavings = GetGrandSavings(),
+            FileName = $"savings-calculator-report-{calculatorData.OrganizationName.Replace(" ", "-")}-{DateTime.Today:yyyyMMdd}.pdf"
+        };
+
+        foreach (var row in calculatorData.Details)
+        {
+            pdfRequest.Details.Add(new SavingsCalculatorPdfRow
+            {
+                Description = row.Description,
+                Value = row.AnnualValueOfTransactions,
+                PercentBasedFee = row.PercentBasedFee,
+                PercentBasedCharge = CalculatePercentCharge(row),
+                NumberOfTransactions = row.AnnualNumberOfTransactions,
+                PerTransactionFee = row.PerTransactionFee,
+                TransactionBasedCharge = CalculateTxCharge(row),
+                LaborMinutes = row.LaborMinutesPerTransaction,
+                LaborCost = CalculateLaborCost(row),
+                TotalCost = CalculateTotal(row),
+                ChangeToEma = row.ChangeToEMAEtransfer,
+                EmaCharge = CalculateEmaCharge(row),
+                PotentialSavings = CalculatePotentialSavings(row)
+            });
+        }
+
+        pdfRequest.Details.Add(new SavingsCalculatorPdfRow
+        {
+            Description = "Software Rental",
+            PercentBasedCharge = calculatorData.MonthlySoftwareRental,
+            TotalCost = GetSoftwareRentalTotal(),
+            PotentialSavings = GetSoftwareRentalTotal()
+        });
+
+        var emailRequest = new SavingsCalculatorEmailRequest
+        {
+            RecipientEmail = emailRecipient,
+            Subject = emailSubject,
+            Body = emailBody,
+            CalculatorData = pdfRequest
+        };
+
+        try
+        {
+            var success = await SavingsService.SendEmailAsync(emailRequest);
+            if (success)
+            {
+                isEmailModalOpen = false;
+                emailSuccessMessage = "Email sent successfully!";
+            }
+            else
+            {
+                emailErrorMessage = "Failed to send email. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            emailErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSendingEmail = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -1,0 +1,530 @@
+@page "/kpis"
+
+@using System.Text.Json
+@implements IAsyncDisposable
+
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>KPIs - EMA</PageTitle>
+
+<HeadContent>
+    <meta name="description"
+          content="EMA KPIs — donation activity snapshot and charts for nonprofit administrators." />
+</HeadContent>
+
+<div class="kpis-container">
+
+@if (_kpisError is not null)
+{
+    <div class="alert alert-warning py-2 mb-3" role="alert">
+        <small>@_kpisError</small>
+    </div>
+}
+
+<!-- ── KPI tiles lead the page; the graph picker and History Days sit just below them. -->
+<div class="row g-4 mb-3">
+    <div class="col-6 col-xl-3">
+        <div class="card h-100 shadow-sm text-center">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Number Donations</p>
+                @if (_kpisLoading)
+                {
+                    <div class="kpi-skeleton mx-auto mt-1"></div>
+                }
+                else
+                {
+                    <h3 class="fw-bold mb-0">@(_kpis?.NumberDonations.ToString("N0") ?? "—")</h3>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card h-100 shadow-sm text-center">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Average Donation</p>
+                @if (_kpisLoading)
+                {
+                    <div class="kpi-skeleton mx-auto mt-1"></div>
+                }
+                else
+                {
+                    <h3 class="fw-bold mb-0">$@((_kpis?.AverageDonation ?? 0).ToString("N2"))</h3>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card h-100 shadow-sm text-center">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Donors Added</p>
+                @if (_kpisLoading)
+                {
+                    <div class="kpi-skeleton mx-auto mt-1"></div>
+                }
+                else
+                {
+                    <h3 class="fw-bold mb-0">@(_kpis?.DonorsAdded.ToString("N0") ?? "—")</h3>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-xl-3">
+        <div class="card h-100 shadow-sm text-center">
+            <div class="card-body">
+                <p class="text-muted small mb-1">Donors Active</p>
+                @if (_kpisLoading)
+                {
+                    <div class="kpi-skeleton mx-auto mt-1"></div>
+                }
+                else
+                {
+                    <h3 class="fw-bold mb-0">@(_kpis?.DonorsActive.ToString("N0") ?? "—")</h3>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Landing graph picker: pressed toggle buttons. Defaults to and saves the org's
+     KPIGraphOrganizationLandingPage setting (F=Fund, M=Method, V=Value). ────────── -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+    <div class="toggle-btn-group" role="group" aria-label="Landing graph selector">
+        <button type="button" class="toggle-btn @(_selectedGraph == "F" ? "selected" : "")"
+                disabled="@_kpisLoading" @onclick='() => OnGraphButtonClicked("F")'>Fund</button>
+        <button type="button" class="toggle-btn @(_selectedGraph == "M" ? "selected" : "")"
+                disabled="@_kpisLoading" @onclick='() => OnGraphButtonClicked("M")'>Method</button>
+        <button type="button" class="toggle-btn @(_selectedGraph == "V" ? "selected" : "")"
+                disabled="@_kpisLoading" @onclick='() => OnGraphButtonClicked("V")'>Value</button>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <label class="mb-0 small fw-semibold" for="historyDays">History Days to Show:</label>
+        <input id="historyDays" type="number" min="1" max="3650"
+               class="form-control form-control-sm history-days-input" style="width:5rem;"
+               value="@(_historyDays > 0 ? _historyDays.ToString() : "")"
+               @onchange="OnHistoryDaysChanged"
+               disabled="@_kpisLoading" />
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2"
+                disabled="@(_refreshing || _kpisLoading)"
+                @onclick="RefreshDashboardAsync"
+                title="Refresh all data">
+            @(_refreshing ? "…" : "↻")
+        </button>
+    </div>
+</div>
+
+<!-- ── Selected landing graph, captioned directly above the chart ───────────────── -->
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <p class="fw-semibold mb-2 text-muted" style="font-size:1rem;">@GraphTitle</p>
+                <div style="height: 300px;">
+                    @if (_selectedGraph == "V")
+                    {
+                        @if (_trendLoading)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading chart data...</small></div>
+                        }
+                        <canvas id="trendChart" @key="(1, _chartRefreshKey)" style="@(_trendLoading ? "display:none" : "")"></canvas>
+                    }
+                    else if (_selectedGraph == "F")
+                    {
+                        @if (_fundLoading)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading chart data...</small></div>
+                        }
+                        else if (_fundError)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-danger fst-italic"><small>Could not load data</small></div>
+                        }
+                        else if (!_fundDataReady)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted fst-italic"><small>No data available</small></div>
+                        }
+                        <canvas id="fundChart" @key="(2, _chartRefreshKey)" style="@(_fundLoading || !_fundDataReady || _fundError ? "display:none" : "")"></canvas>
+                    }
+                    else
+                    {
+                        @if (_methodLoading)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading chart data...</small></div>
+                        }
+                        else if (_methodError)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-danger fst-italic"><small>Could not load data</small></div>
+                        }
+                        else if (!_methodDataReady)
+                        {
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted fst-italic"><small>No data available</small></div>
+                        }
+                        <canvas id="methodChart" @key="(3, _chartRefreshKey)" style="@(_methodLoading || !_methodDataReady || _methodError ? "display:none" : "")"></canvas>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+@code {
+    // The Fund/Method graphs use the same configurable History Days window as the tiles.
+    // Omit the param until it resolves so the API falls back to the org's saved default.
+    private string DaysQuery => _historyDays > 0 ? $"?days={_historyDays}" : string.Empty;
+
+    // Landing graph: only one shows at a time (F=Fund, M=Method, V=Value). Defaults to and
+    // saves the org's KPIGraphOrganizationLandingPage column via the picker buttons.
+    private string _selectedGraph = "M";   // Method — Roger's org default
+    private string GraphTitle => _selectedGraph switch
+    {
+        "F" => $"Value by Fund (last {(_kpis?.Days ?? _historyDays)} days)",
+        "V" => "Value by Month",
+        _   => $"Value by Method (last {(_kpis?.Days ?? _historyDays)} days)",
+    };
+
+    // ── API response models ───────────────────────────────────────────────────
+    private record KpiResult(int Days, int NumberDonations, decimal AverageDonation, int DonorsAdded, int DonorsActive);
+    private record MonthlyData(List<MonthlyEntry> Months);
+    private record MonthlyEntry(DateTime MonthStartDate, decimal TotalDonations, int DonationCount, decimal AverageGiftSize);
+    private record ChartDataItem(string Label, decimal Amount);
+
+    // ── KPI state ─────────────────────────────────────────────────────────────
+    private KpiResult? _kpis;
+    private bool       _kpisLoading = true;
+    private string?    _kpisError;
+    private int        _historyDays;   // 0 until first load resolves the org's saved default
+
+    private DateTime?                _lastUpdated;
+    private bool                     _refreshing      = false;
+    private int                      _chartRefreshKey = 0;
+    private CancellationTokenSource? _autoRefreshCts;
+
+    // ── Donations by Month chart state ────────────────────────────────────────
+    private bool       _trendLoading          = true;
+    private bool       _trendDataReady        = false;
+    private string[][] _trendLabels           = [];
+    private decimal[]  _trendAmounts          = [];
+    private bool       _trendChartInitialised = false;
+
+    // ── Fund chart state ──────────────────────────────────────────────────────
+    private bool      _fundLoading          = true;
+    private bool      _fundDataReady        = false;
+    private bool      _fundError            = false;
+    private string[]  _fundLabels           = [];
+    private decimal[] _fundAmounts          = [];
+    private bool      _fundChartInitialised = false;
+
+    // ── Method chart state ────────────────────────────────────────────────────
+    private bool      _methodLoading          = true;
+    private bool      _methodDataReady        = false;
+    private bool      _methodError            = false;
+    private string[]  _methodLabels           = [];
+    private decimal[] _methodAmounts          = [];
+    private bool      _methodChartInitialised = false;
+
+    private int OrgID;
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (SessionState.CurrentSession is not { } session)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        OrgID = session.EMAOrganizationID;
+
+        await LoadLandingGraphAsync();   // resolve the org's saved default graph first
+
+        await Task.WhenAll(
+            FetchKpisAsync(),
+            FetchSelectedGraphAsync());   // only the selected graph (reduces load)
+
+        // Start background auto-refresh after initial data load.
+        _autoRefreshCts = new CancellationTokenSource();
+        _ = AutoRefreshLoopAsync(_autoRefreshCts.Token);
+    }
+
+    /// <summary>Initialises Chart.js charts after each render, once their data is ready.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_trendDataReady && !_trendChartInitialised)
+        {
+            _trendChartInitialised = true;
+            await JS.InvokeVoidAsync("initTrendChart", _trendLabels, _trendAmounts);
+        }
+
+        if (_fundDataReady && !_fundChartInitialised)
+        {
+            _fundChartInitialised = true;
+            await JS.InvokeVoidAsync("initFundChart", _fundLabels, _fundAmounts);
+        }
+
+        if (_methodDataReady && !_methodChartInitialised)
+        {
+            _methodChartInitialised = true;
+            await JS.InvokeVoidAsync("initMethodChart", _methodLabels, _methodAmounts);
+        }
+    }
+
+    // ── History Days (sticky) ─────────────────────────────────────────────────
+
+    private async Task OnHistoryDaysChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var days)) return;
+
+        _historyDays = Math.Clamp(days, 1, 3650);
+        _kpisLoading = true;
+        _kpisError   = null;
+
+        // The Fund/Method charts are windowed by the same DaysQuery as the tiles, so the
+        // graph has to be refetched too — otherwise it keeps showing the previous window.
+        ResetSelectedGraphState();
+        StateHasChanged();
+
+        await SaveHistoryDaysAsync(_historyDays);   // persist to the Org field
+        await FetchKpisAsync();                     // re-fetch tiles for the new window
+        await FetchSelectedGraphAsync();            // ...and the chart for the new window
+    }
+
+    private async Task SaveHistoryDaysAsync(int days)
+    {
+        try
+        {
+            await Http.PutAsJsonAsync($"/api/dashboard/kpis/{OrgID}/history-days", new { days });
+        }
+        catch (Exception)
+        {
+            // Non-blocking — the value still drives the current view even if the save fails.
+        }
+    }
+
+    // ── Landing graph picker ──────────────────────────────────────────────────
+
+    private async Task LoadLandingGraphAsync()
+    {
+        try
+        {
+            var settings = await Http.GetFromJsonAsync<JsonElement>($"/api/customization/settings/{OrgID}");
+            if (settings.TryGetProperty("KPIGraphOrganizationLandingPage", out var g)
+                && g.ValueKind == JsonValueKind.String
+                && g.GetString() is { } code && (code is "F" or "M" or "V"))
+            {
+                _selectedGraph = code;
+            }
+        }
+        catch { /* default to Method */ }
+    }
+
+    private Task FetchSelectedGraphAsync() => _selectedGraph switch
+    {
+        "F" => FetchByFundAsync(),
+        "V" => FetchMonthlyAsync(),
+        _   => FetchByMethodAsync(),   // M = Method (default)
+    };
+
+    private async Task OnGraphButtonClicked(string graph)
+    {
+        if (graph == _selectedGraph) return;
+
+        _selectedGraph = graph;
+
+        // The buttons ARE the setting — persist the org's choice to its own column.
+        try { await Http.PostAsJsonAsync($"/api/customization/landing-graph/{OrgID}", new { graph, target = "org" }); }
+        catch { /* non-blocking; the view still switches */ }
+
+        ResetSelectedGraphState();
+        StateHasChanged();
+
+        await FetchSelectedGraphAsync();
+    }
+
+    // Recreates the canvas and clears the selected graph's init/loading flags so it
+    // renders fresh on the next fetch.
+    private void ResetSelectedGraphState()
+    {
+        _chartRefreshKey++;
+        _trendChartInitialised = _fundChartInitialised = _methodChartInitialised = false;
+
+        switch (_selectedGraph)
+        {
+            case "F": _fundLoading = true; _fundDataReady = false; _fundError = false; break;
+            case "V": _trendLoading = true; _trendDataReady = false; break;
+            default:  _methodLoading = true; _methodDataReady = false; _methodError = false; break;   // M = Method
+        }
+    }
+
+    // ── Private fetch helpers ─────────────────────────────────────────────────
+
+    private async Task FetchKpisAsync()
+    {
+        try
+        {
+            // First load (no _historyDays yet) lets the API use the org's saved default;
+            // after that we pass the current window explicitly.
+            var url = _historyDays > 0
+                ? $"/api/dashboard/kpis/{OrgID}?days={_historyDays}"
+                : $"/api/dashboard/kpis/{OrgID}";
+
+            _kpis = await Http.GetFromJsonAsync<KpiResult>(url);
+            if (_kpis is not null) _historyDays = _kpis.Days;
+            _lastUpdated = DateTime.Now;
+        }
+        catch (Exception)
+        {
+            _kpisError = "Could not reach the API. Ensure the Azure Functions host is running at localhost:7071.";
+        }
+        finally
+        {
+            _kpisLoading = false;
+        }
+    }
+
+    private async Task FetchMonthlyAsync()
+    {
+        try
+        {
+            var monthly = await Http.GetFromJsonAsync<MonthlyData>(
+                $"/api/dashboard/donations-by-month/{OrgID}");
+
+            if (monthly?.Months is { Count: > 0 })
+            {
+                // Two-line x-axis labels: month abbreviation with the year underneath.
+                _trendLabels  = [.. monthly.Months.Select(m => new[] { m.MonthStartDate.ToString("MMM"), m.MonthStartDate.Year.ToString() })];
+                _trendAmounts = [.. monthly.Months.Select(m => m.TotalDonations)];
+                _trendDataReady = true;
+            }
+        }
+        catch (Exception)
+        {
+            // Trend chart stays hidden — not a blocking error
+        }
+        finally
+        {
+            _trendLoading = false;
+        }
+    }
+
+    private async Task FetchByFundAsync()
+    {
+        try
+        {
+            var items = await Http.GetFromJsonAsync<ChartDataItem[]>(
+                $"/api/dashboard/donations-by-fund/{OrgID}{DaysQuery}");
+
+            if (items is { Length: > 0 })
+            {
+                // Biggest fund first; anything under 1% of the total collapses into "Other".
+                (_fundLabels, _fundAmounts) = EMA.App.Utilities.ChartDataThreshold.GroupSmallEntries(
+                    items.Select(i => (i.Label, i.Amount)));
+                _fundDataReady = true;
+            }
+        }
+        catch (Exception)
+        {
+            _fundError = true;
+        }
+        finally
+        {
+            _fundLoading = false;
+        }
+    }
+
+    private async Task FetchByMethodAsync()
+    {
+        try
+        {
+            var items = await Http.GetFromJsonAsync<ChartDataItem[]>(
+                $"/api/dashboard/donations-by-method/{OrgID}{DaysQuery}");
+
+            if (items is { Length: > 0 })
+            {
+                // Biggest method first; anything under 1% of the total collapses into "Other".
+                (_methodLabels, _methodAmounts) = EMA.App.Utilities.ChartDataThreshold.GroupSmallEntries(
+                    items.Select(i => (i.Label, i.Amount)));
+                _methodDataReady = true;
+            }
+        }
+        catch (Exception)
+        {
+            _methodError = true;
+        }
+        finally
+        {
+            _methodLoading = false;
+        }
+    }
+
+    // ── Manual refresh ────────────────────────────────────────────────────────
+
+    private async Task RefreshDashboardAsync()
+    {
+        if (_refreshing) return;
+        _refreshing = true;
+
+        // Increment key so @key directives force Blazor to destroy/recreate all chart canvases,
+        // ensuring Chart.js doesn't try to reuse a canvas that already has an instance attached.
+        _chartRefreshKey++;
+
+        _kpisLoading            = true;
+        _trendLoading           = true;
+        _fundLoading            = true;
+        _methodLoading          = true;
+        _trendDataReady         = false;
+        _fundDataReady          = false;
+        _methodDataReady        = false;
+        _fundError              = false;
+        _methodError            = false;
+        _trendChartInitialised  = false;
+        _fundChartInitialised   = false;
+        _methodChartInitialised = false;
+        _kpisError              = null;
+        StateHasChanged();
+
+        await Task.WhenAll(FetchKpisAsync(), FetchSelectedGraphAsync());
+        _refreshing = false;
+    }
+
+    // ── Background auto-refresh (every 5 minutes, KPIs only) ─────────────────
+
+    private async Task AutoRefreshLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5), ct);
+                if (ct.IsCancellationRequested) break;
+
+                _kpisLoading = true;
+                _kpisError   = null;
+                await InvokeAsync(StateHasChanged);
+
+                await FetchKpisAsync();
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+
+    /// <summary>Cancels the background auto-refresh timer when the component is navigated away from.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_autoRefreshCts is not null)
+        {
+            await _autoRefreshCts.CancelAsync();
+            _autoRefreshCts.Dispose();
+        }
+    }
+}
+

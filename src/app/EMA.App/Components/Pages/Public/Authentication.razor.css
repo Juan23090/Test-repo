@@ -1,0 +1,31 @@
+.authentication-information-page {
+    width: min(100%, 56.5rem);
+    margin: 0 auto;
+    font-family: var(--ema-ui-font);
+}
+
+.authentication-information-page > h3:first-child {
+    margin-top: 0;
+}
+
+.authentication-information-page h3 {
+    margin-bottom: 0.75rem;
+    font-family: var(--ema-ui-font);
+    font-weight: 700;
+}
+
+.authentication-information-page p,
+.authentication-information-page li {
+    font-size: 1.15rem;
+    line-height: 1.55;
+}
+
+.authentication-information-page ul {
+    margin-bottom: 0;
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+    .authentication-information-page {
+        width: min(100%, 37.75rem);
+    }
+}

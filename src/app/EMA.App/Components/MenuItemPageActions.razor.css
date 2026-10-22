@@ -1,0 +1,203 @@
+.menu-item-page-actions {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    height: 44px;
+    gap: 0.35rem;
+    z-index: 1100;
+}
+
+.menu-item-page-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid #8f8f8f;
+    border-radius: 3px;
+    box-sizing: border-box;
+    background: #efefef;
+    color: #000000;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.menu-item-page-action:hover {
+    background: #dedede;
+}
+
+.menu-item-page-action:focus-visible {
+    outline: 3px solid #3159c8;
+    outline-offset: 2px;
+}
+
+.menu-item-resource-svg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.45rem;
+    height: 1.45rem;
+    object-fit: contain;
+}
+
+.menu-item-resource-menu {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    width: min(21rem, calc(100vw - 1rem));
+    padding: 0.4rem;
+    border: 1px solid #8f8f8f;
+    border-radius: 0.3rem;
+    background: #ffffff;
+    box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.22);
+    z-index: 1400;
+}
+
+.menu-item-resource-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.25rem 0.35rem 0.4rem 0.55rem;
+    border-bottom: 1px solid #d3d3d3;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.menu-item-resource-menu-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.menu-item-resource-menu-close:hover,
+.menu-item-resource-menu-close:focus-visible {
+    border-color: #9b9b9b;
+    background: #e8e8e8;
+}
+
+.menu-item-resource-menu-item {
+    width: 100%;
+    min-height: 2.5rem;
+    margin-top: 0.3rem;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: 0.2rem;
+    background: #ffffff;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+}
+
+.menu-item-resource-menu-item:hover,
+.menu-item-resource-menu-item:focus-visible {
+    border-color: #9f9f9f;
+    background: #eeeeee;
+}
+
+.menu-item-video-player,
+.menu-item-setup-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    border: 0;
+}
+
+.menu-item-video-player {
+    background: #000000;
+    object-fit: contain;
+}
+
+.menu-item-resource-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 8rem;
+    padding: 1rem;
+    text-align: center;
+    font-weight: 600;
+}
+
+.menu-item-resource-error {
+    color: #555555;
+}
+
+.menu-item-audio-player-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+.menu-item-audio-player {
+    width: 100%;
+}
+
+.menu-item-audio-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+}
+
+.menu-item-audio-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    flex: 1 1 0;
+    min-height: 2.2rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid #999999;
+    border-radius: 0.25rem;
+    background: #efefef;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.menu-item-audio-actions button:hover,
+.menu-item-audio-actions button:focus-visible {
+    background: #dddddd;
+}
+
+@media (max-width: 700px) {
+    .menu-item-page-actions {
+        gap: 0.25rem;
+    }
+
+    .menu-item-page-action {
+        width: 44px;
+        height: 44px;
+        font-size: 1.15rem;
+    }
+
+    .menu-item-resource-menu {
+        right: 0;
+        width: min(19rem, calc(100vw - 1rem));
+    }
+
+    .menu-item-audio-actions span {
+        display: none;
+    }
+}

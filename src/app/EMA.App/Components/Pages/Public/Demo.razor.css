@@ -1,0 +1,28 @@
+/* Task 26: keep the expanded four-choice demo selector from widening the entire form. */
+.demo-page .donors-form > .form-row:first-child > .form-input {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 1rem;
+    min-width: 0;
+    max-width: 24rem;
+}
+
+.demo-page .donors-form > .form-row:first-child > .form-input label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.3rem;
+    min-width: 0;
+    white-space: normal;
+}
+
+.demo-page .donors-form > .form-row:first-child > .form-input input[type="radio"] {
+    flex: 0 0 auto;
+    margin-top: 0.15rem;
+}
+
+@media (max-width: 700px) {
+    .demo-page .donors-form > .form-row:first-child > .form-input {
+        grid-template-columns: 1fr;
+        max-width: none;
+    }
+}

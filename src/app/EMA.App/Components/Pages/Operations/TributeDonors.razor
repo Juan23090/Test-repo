@@ -1,0 +1,346 @@
+@page "/tribute-report/donors"
+
+@using System.Globalization
+@using EMA.App.Services
+
+@inject ITributeReportService TributeReportService
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject IUserSessionStateService SessionState
+@inject IJSRuntime JS
+
+<PageTitle>Tribute Donors - EMA</PageTitle>
+
+@* Lives under /tribute-report so route access inherits the Tribute Report menu item's grants
+   (GetRouteAccess matches child paths); a sibling path would be denied. *@
+<div class="reports-page">
+    <main class="reports-body" aria-label="Tribute donors report">
+        <p class="tribute-back"><a href="@BackUrl">&larr; Back to Tribute Report</a></p>
+
+        @if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text error">@ErrorMessage</p>
+        }
+
+        @if (IsLoading)
+        {
+            <p class="status-text">Loading donors...</p>
+        }
+        else if (Report is not null)
+        {
+            <div id="report-print-area">
+                <p class="tribute-report-range">@Report.Title</p>
+                <p class="tribute-donors-range">@RangeText</p>
+
+                @if (Report.Donors.Count == 0)
+                {
+                    <p class="status-text">No donors found for this tribute in the selected range.</p>
+                }
+                else
+                {
+                    <table class="tribute-table tribute-donors-table">
+                        <thead>
+                            <tr>
+                                <th>Donor</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Address</th>
+                                <th>City/Town</th>
+                                <th>PS</th>
+                                <th>Postal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var donor in Report.Donors)
+                            {
+                                <tr>
+                                    <td>@donor.Name</td>
+                                    <td>@donor.Email</td>
+                                    <td>@donor.Phone</td>
+                                    <td>@donor.Address</td>
+                                    <td>@donor.City</td>
+                                    <td>@donor.Province</td>
+                                    <td>@donor.PostalCode</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+
+            <div class="tribute-actions">
+                <button type="button" class="tribute-btn" @onclick="DownloadPdfAsync" disabled="@IsBusy">
+                    @(IsDownloadingPdf ? "Generating PDF..." : "PDF")
+                </button>
+                <button type="button" class="tribute-btn" @onclick="PrintAsync" disabled="@IsBusy">Print</button>
+                <button type="button" class="tribute-btn" @onclick="OpenEmailModal" disabled="@IsBusy">Email</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(ActionMessage))
+            {
+                <p class="status-text @(ActionIsError ? "error" : "success")">@ActionMessage</p>
+            }
+        }
+    </main>
+</div>
+
+@if (IsEmailModalOpen)
+{
+    <div class="steps-overlay-backdrop" @onclick="CloseEmailModal">
+        <div class="steps-overlay-panel tribute-email-panel" @onclick:stopPropagation="true">
+            <div class="steps-overlay-header">
+                <span>Email Tribute Donors Report</span>
+                <button type="button" class="steps-overlay-close" @onclick="CloseEmailModal" disabled="@IsSendingEmail">&times;</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(EmailError))
+            {
+                <p class="status-text error">@EmailError</p>
+            }
+
+            <label class="tribute-email-label" for="tribute-email-to">To</label>
+            <input id="tribute-email-to" type="email" class="tribute-email-input"
+                   placeholder="e.g. treasurer@church.org"
+                   @bind="EmailRecipient" disabled="@IsSendingEmail" />
+
+            <label class="tribute-email-label" for="tribute-email-subject">Subject</label>
+            <input id="tribute-email-subject" type="text" class="tribute-email-input"
+                   @bind="EmailSubject" disabled="@IsSendingEmail" />
+
+            <label class="tribute-email-label" for="tribute-email-message">Message</label>
+            <textarea id="tribute-email-message" class="tribute-email-input" rows="5"
+                      @bind="EmailMessage" disabled="@IsSendingEmail"></textarea>
+
+            <p class="tribute-email-note">The report PDF will be generated and attached automatically.</p>
+
+            <div class="tribute-email-buttons">
+                <button type="button" class="tribute-btn" @onclick="SendEmailAsync" disabled="@IsSendingEmail">
+                    @(IsSendingEmail ? "Sending..." : "Send")
+                </button>
+                <button type="button" class="tribute-btn" @onclick="CloseEmailModal" disabled="@IsSendingEmail">Cancel</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "typeID")]
+    public int TypeID { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "hasName")]
+    public bool HasName { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "name")]
+    public string? Name { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "startDate")]
+    public string? StartDateRaw { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "endDate")]
+    public string? EndDateRaw { get; set; }
+
+    private int OrgID =>
+        SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private TributeDonorsFilter? Filter;
+    private TributeDonorsData? Report;
+    private string? DateFormatId;
+
+    private bool IsLoading = true;
+    private string? ErrorMessage;
+
+    private bool IsDownloadingPdf;
+    private bool IsSendingEmail;
+    private bool IsBusy => IsDownloadingPdf || IsSendingEmail;
+    private string? ActionMessage;
+    private bool ActionIsError;
+
+    private bool IsEmailModalOpen;
+    private string EmailRecipient = string.Empty;
+    private string EmailSubject = string.Empty;
+    private string EmailMessage = string.Empty;
+    private string? EmailError;
+
+    private string RangeText =>
+        Filter is null
+            ? string.Empty
+            : $"{EMA.App.Utilities.OrgDateFormat.Format(Filter.StartDate, DateFormatId)} - {EMA.App.Utilities.OrgDateFormat.Format(Filter.EndDate, DateFormatId)}";
+
+    // Carries the range back so the report reopens where the user left it.
+    private string BackUrl =>
+        Filter is null
+            ? "/tribute-report"
+            : $"/tribute-report?startDate={Filter.StartDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}&endDate={Filter.EndDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+
+    // OnParametersSet (not OnInitialized) so moving between drill-downs reloads the page.
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        ErrorMessage = null;
+        ActionMessage = null;
+        Report = null;
+
+        if (!TryBuildFilter(out var filter, out var error))
+        {
+            Filter = null;
+            ErrorMessage = error;
+            IsLoading = false;
+            return;
+        }
+
+        Filter = filter;
+
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        DateFormatId = org?.DateFormatID;
+
+        var result = await TributeReportService.GetTributeDonorsAsync(OrgID, filter);
+        if (result.IsSuccess && result.Data is not null)
+        {
+            Report = result.Data;
+        }
+        else
+        {
+            ErrorMessage = result.ErrorMessage ?? "Unable to load tribute donors.";
+        }
+
+        IsLoading = false;
+    }
+
+    private bool TryBuildFilter(out TributeDonorsFilter filter, out string error)
+    {
+        filter = null!;
+
+        if (TypeID <= 0)
+        {
+            error = "This link is missing the tribute type. Open it from the Tribute Report.";
+            return false;
+        }
+
+        if (!DateOnly.TryParseExact(StartDateRaw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var startDate) ||
+            !DateOnly.TryParseExact(EndDateRaw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var endDate))
+        {
+            error = "This link is missing a valid date range. Open it from the Tribute Report.";
+            return false;
+        }
+
+        if (HasName && string.IsNullOrEmpty(Name))
+        {
+            error = "This link is missing the tribute name. Open it from the Tribute Report.";
+            return false;
+        }
+
+        filter = new TributeDonorsFilter(TypeID, HasName, HasName ? Name : null, startDate, endDate);
+        error = string.Empty;
+        return true;
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        if (Filter is null || IsBusy) return;
+
+        IsDownloadingPdf = true;
+        ActionMessage = null;
+
+        try
+        {
+            var result = await TributeReportService.GetTributeDonorsPdfAsync(OrgID, Filter);
+            if (!result.IsSuccess || result.FileBytes is null)
+            {
+                ShowAction(result.ErrorMessage ?? "Could not generate the PDF.", isError: true);
+                return;
+            }
+
+            var fileName = result.FileName ?? $"tribute-donors-{DateTime.Today:yyyyMMdd}.pdf";
+            var base64 = Convert.ToBase64String(result.FileBytes);
+
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+            await module.InvokeVoidAsync("downloadFileFromBase64", fileName, "application/pdf", base64);
+        }
+        catch
+        {
+            ShowAction("Could not download the PDF.", isError: true);
+        }
+        finally
+        {
+            IsDownloadingPdf = false;
+        }
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("printPage");
+
+    private void OpenEmailModal()
+    {
+        if (Report is null) return;
+
+        EmailRecipient = string.Empty;
+        EmailSubject = Report.Title;
+        EmailMessage = $"Attached is the {Report.Title} for {RangeText}.";
+        EmailError = null;
+        IsEmailModalOpen = true;
+    }
+
+    private void CloseEmailModal()
+    {
+        if (IsSendingEmail) return;
+        IsEmailModalOpen = false;
+    }
+
+    private async Task SendEmailAsync()
+    {
+        if (Filter is null || IsSendingEmail) return;
+
+        EmailError = null;
+        var recipient = EmailRecipient.Trim();
+
+        if (recipient.Length == 0 || !recipient.Contains('@'))
+        {
+            EmailError = "Enter a valid recipient email address.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(EmailSubject))
+        {
+            EmailError = "Enter a subject.";
+            return;
+        }
+
+        IsSendingEmail = true;
+
+        try
+        {
+            var result = await TributeReportService.EmailTributeDonorsAsync(
+                OrgID, Filter, recipient, EmailSubject.Trim(), EmailMessage);
+
+            if (result.IsSuccess)
+            {
+                IsSendingEmail = false;
+                IsEmailModalOpen = false;
+                ShowAction($"Report emailed to {recipient}.", isError: false);
+            }
+            else
+            {
+                EmailError = result.ErrorMessage ?? "Could not send the email.";
+            }
+        }
+        finally
+        {
+            IsSendingEmail = false;
+        }
+    }
+
+    private void ShowAction(string message, bool isError)
+    {
+        ActionMessage = message;
+        ActionIsError = isError;
+    }
+}

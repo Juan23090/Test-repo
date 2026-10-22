@@ -1,0 +1,391 @@
+@page "/wizard"
+@using EMA.App.Models
+
+@inject IUserSessionStateService SessionState
+@inject ISetupWizardService SetupWizardService
+@inject IOrganizationJourneyService OrganizationJourneyService
+@inject IMenuNavigationService MenuNavigationService
+@inject NavigationManager Navigation
+
+<PageTitle>Setup Wizard - EMA</PageTitle>
+
+<section class="setup-wizard-page">
+    @if (_isLoading)
+    {
+        <div class="setup-wizard-message">
+            Loading Setup Wizard...
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="setup-wizard-message setup-wizard-error"
+             role="alert">
+            @_errorMessage
+        </div>
+    }
+    else
+    {
+        <div class="setup-wizard-shell">
+            @if (_isInsiderContext)
+            {
+                <div class="setup-wizard-organization-picker">
+                    <label for="setup-wizard-organization-search"
+                           class="visually-hidden">
+                        Find Organization
+                    </label>
+
+                    <input id="setup-wizard-organization-search"
+                           class="setup-wizard-organization-search"
+                           type="text"
+                           value="@_organizationSearch"
+                           placeholder="Type to Find Organization"
+                           autocomplete="off"
+                           @oninput="HandleOrganizationSearch" />
+
+                    @if (_organizationMatches.Count > 0)
+                    {
+                        <div class="setup-wizard-organization-results"
+                             role="listbox"
+                             aria-label="Organization search results">
+                            @foreach (var organization in _organizationMatches)
+                            {
+                                <button type="button"
+                                        class="setup-wizard-organization-result"
+                                        role="option"
+                                        @onclick="@(() => SelectOrganizationAsync(organization))">
+                                    @organization.OrganizationName
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            @if (_wizard is null)
+            {
+                @if (_isInsiderContext)
+                {
+                    <div class="setup-wizard-empty-state">
+                        Type at least two characters and select an organization to review its onboarding progress.
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="setup-wizard-table-wrap">
+                    <table class="setup-wizard-table">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="setup-wizard-step-column">
+                                    Step (Click to Visit)
+                                </th>
+                                <th scope="col" class="setup-wizard-visits-column">
+                                    # Visits
+                                </th>
+                                <th scope="col" class="setup-wizard-last-visit-column">
+                                    Last Visit
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (_wizard.Steps.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="3"
+                                        class="setup-wizard-no-steps">
+                                        No onboarding steps are available for this user/organization.
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var step in _wizard.Steps)
+                                {
+                                    <tr>
+                                        <td>
+                                            <button type="button"
+                                                    class="setup-wizard-step-link"
+                                                    title="@GetStepTitle(step)"
+                                                    @onclick="@(() => VisitStepAsync(step))">
+                                                @GetStepName(step)
+                                            </button>
+                                        </td>
+                                        <td class="setup-wizard-number-cell">
+                                            @step.VisitCount
+                                        </td>
+                                        <td class="setup-wizard-date-cell">
+                                            @FormatLastVisit(step.LastVisitUtc)
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private const int InsiderCategoryID =
+        MenuNavigationConstants.SupportCategoryID;
+
+    private bool _isLoading = true;
+    private bool _isInsiderContext;
+    private string _errorMessage = string.Empty;
+    private string _organizationSearch = string.Empty;
+
+    private SetupWizardResult? _wizard;
+
+    private List<OrganizationSummary> _organizations = new();
+    private List<OrganizationSummary> _organizationMatches = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        var session =
+            SessionState.CurrentSession;
+
+        if (session is null ||
+            session.IsDonorSession)
+        {
+            Navigation.NavigateTo(
+                "/access-denied",
+                replace: true);
+
+            return;
+        }
+
+        _isInsiderContext =
+            session.CurrentCategoryID ==
+            InsiderCategoryID;
+
+        try
+        {
+            if (_isInsiderContext)
+            {
+                _organizations =
+                    await OrganizationJourneyService
+                        .GetAllOrganizationsAsync();
+            }
+            else
+            {
+                _wizard =
+                    await SetupWizardService
+                        .GetForOrganizationUserAsync(
+                            session.EMAOrganizationID);
+
+                if (_wizard is null)
+                {
+                    _errorMessage =
+                        "The Setup Wizard could not be loaded.";
+                }
+            }
+        }
+        catch
+        {
+            _errorMessage =
+                "The Setup Wizard could not be loaded.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void HandleOrganizationSearch(
+        ChangeEventArgs eventArgs)
+    {
+        _organizationSearch =
+            eventArgs.Value?.ToString()
+            ?? string.Empty;
+
+        _wizard = null;
+        _errorMessage = string.Empty;
+
+        var term =
+            _organizationSearch.Trim();
+
+        if (term.Length < 2)
+        {
+            _organizationMatches.Clear();
+            return;
+        }
+
+        _organizationMatches =
+            _organizations
+                .Where(organization =>
+                    !string.IsNullOrWhiteSpace(
+                        organization.OrganizationName) &&
+                    organization.OrganizationName.Contains(
+                        term,
+                        StringComparison.OrdinalIgnoreCase))
+                .OrderBy(organization =>
+                    organization.OrganizationName)
+                .Take(10)
+                .ToList();
+    }
+
+    private async Task SelectOrganizationAsync(
+        OrganizationSummary organization)
+    {
+        _organizationSearch =
+            organization.OrganizationName
+            ?? string.Empty;
+
+        _organizationMatches.Clear();
+        _errorMessage = string.Empty;
+        _isLoading = true;
+
+        try
+        {
+            _wizard =
+                await SetupWizardService
+                    .GetForInsiderAsync(
+                        organization.EMAOrganizationID);
+
+            if (_wizard is null)
+            {
+                _errorMessage =
+                    "The selected organization's Setup Wizard could not be loaded.";
+            }
+        }
+        catch
+        {
+            _errorMessage =
+                "The selected organization's Setup Wizard could not be loaded.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task VisitStepAsync(
+        SetupWizardStep step)
+    {
+        if (step.MenuItemID > 0)
+        {
+            await MenuNavigationService
+                .LogMenuItemUsageAsync(
+                    step.MenuItemID);
+        }
+
+        var url =
+            NormalizeStepUrl(
+                step.Url);
+
+        if (IsExternalUrl(url))
+        {
+            Navigation.NavigateTo(
+                url,
+                forceLoad: true);
+
+            return;
+        }
+
+        Navigation.NavigateTo(url);
+    }
+
+    private static string GetStepName(
+        SetupWizardStep step)
+    {
+        return !string.IsNullOrWhiteSpace(
+                   step.ScreenTitle)
+            ? step.ScreenTitle
+            : step.MenuName;
+    }
+
+    private static string GetStepTitle(
+        SetupWizardStep step)
+    {
+        var name = GetStepName(step);
+
+        return string.IsNullOrWhiteSpace(
+                   step.Url)
+            ? name
+            : $"Visit {name}";
+    }
+
+    private static string FormatLastVisit(
+        DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return "—";
+        }
+
+        var utcValue =
+            DateTime.SpecifyKind(
+                value.Value,
+                DateTimeKind.Utc);
+
+        return $"{utcValue:yyyy-MM-dd HH:mm} UTC";
+    }
+
+    private static string NormalizeStepUrl(
+        string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return "/wizard";
+        }
+
+        var trimmed =
+            url.Trim();
+
+        if (IsExternalUrl(trimmed))
+        {
+            return trimmed;
+        }
+
+        if (trimmed.StartsWith(
+                "/",
+                StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        while (trimmed.StartsWith(
+                   "./",
+                   StringComparison.Ordinal))
+        {
+            trimmed = trimmed[2..];
+        }
+
+        if (trimmed.StartsWith(
+                "~/",
+                StringComparison.Ordinal))
+        {
+            trimmed = trimmed[2..];
+        }
+
+        if (string.IsNullOrWhiteSpace(trimmed) ||
+            trimmed.Equals(
+                "..",
+                StringComparison.Ordinal) ||
+            trimmed.StartsWith(
+                "../",
+                StringComparison.Ordinal) ||
+            trimmed.Contains('\\') ||
+            trimmed.Any(char.IsControl))
+        {
+            return "/wizard";
+        }
+
+        return $"/{trimmed}";
+    }
+
+    private static bool IsExternalUrl(
+        string? url)
+    {
+        return !string.IsNullOrWhiteSpace(url) &&
+               Uri.TryCreate(
+                   url,
+                   UriKind.Absolute,
+                   out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp ||
+                uri.Scheme == Uri.UriSchemeHttps);
+    }
+}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>
+        {{DonationStepDescription}}
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background:#dcdcdc; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background:#dcdcdc; border-collapse:collapse;">
+        <tr>
+            <td align="center" style="padding:20px 10px;">
+                <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; max-width:760px; border-collapse:collapse;">
+                    <tr>
+                        <td align="center" style="padding:8px 18px; border:1px solid #9a9a9a; background:#efefef; color:#000000; font-size:30px; line-height:36px; font-weight:800;">
+                            {{OrganizationName}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:18px; border:1px solid #8a8a8a; background:#ffffff; color:#000000; font-size:15px; line-height:22px;">
+                            <p style="margin:0 0 16px 0;">
+                                {{DonationStepExplanation}}
+                            </p>
+
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse:separate; border-spacing:0 8px;">
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Donation ID:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{EMADonationID}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Step ID:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{DonationStepID}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Reference:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{DonationReference}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Amount:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{DonationTotal}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Donor Email:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{DonorEmail}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Original From:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{OriginalEmailFrom}}</td>
+                                </tr>
+                                <tr>
+                                    <td width="180" style="font-weight:700;">Original Subject:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#f7f7f7;">{{OriginalEmailSubject}}</td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding:16px 20px 0 20px; color:#0078CC; font-size:12px; line-height:18px;">
+                            {{FooterText}}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>
+        {{DonationStepDescription}}
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0; padding:0; background:#dcdcdc; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background:#dcdcdc; border-collapse:collapse;">
+        <tr>
+            <td align="center" style="padding:20px 10px;">
+                <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; max-width:760px; border-collapse:collapse;">
+                    <tr>
+                        <td align="center" style="padding:8px 18px; border:1px solid #9a9a9a; background:#efefef; color:#000000; font-size:30px; line-height:36px; font-weight:800;">
+                            {{OrganizationName}}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:18px; border:1px solid #8a8a8a; background:#ffffff; color:#000000; font-size:15px; line-height:22px;">
+                            <p style="margin:0 0 12px 0; font-weight:700;">
+                                Your email was sent to an unmonitored e-transfer processing inbox.
+                            </p>
+                            <p style="margin:0 0 12px 0;">
+                                This inbox only accepts Interac e-Transfer notification emails. Your message was not reviewed by a person and was not processed as a donation.
+                            </p>
+                            <p style="margin:0 0 12px 0;">
+                                If you were trying to contact {{OrganizationName}}, please use their regular contact email or website instead.
+                            </p>
+                            <p style="margin:0;">
+                                Original subject: <strong>{{OriginalEmailSubject}}</strong>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="padding:16px 20px 0 20px; color:#0078CC; font-size:12px; line-height:18px;">
+                            {{FooterText}}
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

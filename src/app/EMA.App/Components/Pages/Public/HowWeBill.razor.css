@@ -1,0 +1,49 @@
+h2{
+    font-weight: bold;
+    margin-bottom: 0.8rem;
+    text-align: center;
+    font-family: var(--ema-ui-font);
+}
+h3{
+    font-weight: bold;
+    margin-bottom: 0.8rem;
+    font-family: var(--ema-ui-font);
+}
+p{
+    font-family: var(--ema-ui-font);
+    font-size: 19px;
+    margin-bottom: 0.5rem;
+}
+li{
+    font-family: var(--ema-ui-font);
+    font-size: 19px;
+    margin-bottom: 0.75rem;
+}
+ul{
+    margin-bottom: 0.75rem;
+    margin-top: 0.75rem;
+}
+.table-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+.transaction-table {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.transaction-table th,
+.transaction-table td {
+    border: 1px solid #ccc;
+    padding: 8px 16px;
+    text-align: center;
+    font-size: x-large;
+    font-family: var(--ema-ui-font);
+}
+
+.transaction-table thead th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    font-family: var(--ema-ui-font);
+}

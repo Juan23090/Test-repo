@@ -1,0 +1,60 @@
+@page "/authentication"
+@page "/authentication/{Action}"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@inject NavigationManager Navigation
+
+<PageTitle>
+    Authentication - EMA
+</PageTitle>
+
+@if (string.IsNullOrWhiteSpace(Action))
+{
+    <section class="authentication-information-page"
+             aria-label="EMA authentication information">
+        <h3>At EMA, we’ve eliminated passwords!</h3>
+        <p>
+            To keep your data safe and make your life easier, we use a secure passwordless login.
+        </p>
+        <ul>
+            <li><strong>Step 1:</strong> Enter your email address or phone number.</li>
+            <li><strong>Step 2:</strong> Check your email for a secure verification code.</li>
+            <li><strong>Step 3:</strong> Enter the code and you’re in.</li>
+        </ul>
+    </section>
+}
+else
+{
+    <p class="visually-hidden"
+       role="status">
+        Redirecting to EMA login.
+    </p>
+}
+
+@code {
+    [Parameter]
+    public string? Action { get; set; }
+
+    protected override void OnAfterRender(
+        bool firstRender)
+    {
+        if (!firstRender ||
+            string.IsNullOrWhiteSpace(Action))
+        {
+            return;
+        }
+
+        var destination =
+            Action.StartsWith(
+                "logout",
+                StringComparison.OrdinalIgnoreCase)
+                ? "/about"
+                : "/login";
+
+        Navigation.NavigateTo(
+            destination,
+            replace: true);
+    }
+}

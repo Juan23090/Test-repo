@@ -1,0 +1,215 @@
+.chms-container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.chms-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.chms-title {
+    margin: 0;
+    font-weight: 700;
+}
+
+.chms-sub {
+    color: #6b7c8c;
+    font-weight: 500;
+    font-size: 0.85em;
+}
+
+.chms-hint {
+    margin: 0 0 10px;
+    color: #6b7c8c;
+    font-size: 13px;
+}
+
+/* ── Grid (top half) ── */
+.chms-grid-wrapper {
+    max-height: 430px;              /* ~10 rows before scrolling */
+    overflow-y: auto;
+    border: 1px solid #b7c7d6;
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.chms-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.chms-grid thead th {
+    position: sticky;
+    top: 0;
+    background: #eef4fa;
+    border-bottom: 1px solid #b7c7d6;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.chms-grid thead th.num,
+.chms-grid tbody td.num {
+    text-align: right;
+}
+
+.chms-sort {
+    font-size: 11px;
+    margin-left: 2px;
+    color: #33689c;
+}
+
+/* Faint neutral indicator so every sortable column looks clickable. */
+.chms-sort.neutral {
+    color: #b7c7d6;
+}
+
+.chms-grid tbody td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #ebebeb;
+}
+
+.chms-grid tbody tr {
+    cursor: pointer;
+}
+
+.chms-grid tbody tr:hover {
+    background: #e5f2fb;
+}
+
+.chms-grid tbody tr.selected {
+    background: #d6e9f8;
+}
+
+.chms-empty {
+    padding: 12px;
+    text-align: center;
+    color: #888;
+    font-style: italic;
+}
+
+/* ── Edit form (bottom half) ── */
+.chms-form {
+    margin-top: 16px;
+    border: 1px solid #d6e4f0;
+    border-radius: 6px;
+    background: #fbfdff;
+    padding: 16px;
+}
+
+.chms-form-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e3edf5;
+}
+
+.chms-status {
+    font-size: 13px;
+    color: #2a7d46;
+}
+
+/* Section grouping */
+.chms-section {
+    margin-bottom: 18px;
+}
+
+.chms-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #5a6b7b;
+    border-bottom: 1px solid #e3edf5;
+    padding-bottom: 4px;
+    margin-bottom: 10px;
+}
+
+/* Label → input two-column layout (Overview / Candidacy) */
+.chms-form-grid {
+    display: grid;
+    grid-template-columns: 170px 1fr;
+    gap: 10px 14px;
+    align-items: start;
+}
+
+.chms-form-grid label {
+    font-weight: 600;
+    font-size: 14px;
+    padding-top: 6px;
+}
+
+.chms-form-grid label .req {
+    color: #c0392b;
+}
+
+/* Compact multi-column groups (Fees 3-across, Links 2-across) */
+.chms-fees {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.chms-links {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.chms-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chms-field label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #3a4a58;
+}
+
+.chms-form-grid input,
+.chms-form-grid select,
+.chms-form-grid textarea,
+.chms-field input {
+    font-size: 14px;
+    padding: 6px 8px;
+    border: 1px solid #b7c7d6;
+    border-radius: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.chms-form-grid textarea {
+    resize: vertical;
+}
+
+.chms-form-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+}
+
+@media (max-width: 640px) {
+    .chms-form-grid {
+        grid-template-columns: 1fr;
+    }
+    .chms-form-grid label {
+        padding-top: 0;
+    }
+    .chms-fees,
+    .chms-links {
+        grid-template-columns: 1fr;
+    }
+}

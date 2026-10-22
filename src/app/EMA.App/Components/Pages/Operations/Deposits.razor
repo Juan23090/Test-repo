@@ -1,0 +1,526 @@
+@page "/deposit-slip"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject NavigationManager Navigation
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject IBlobService BlobService
+@inject IDepositReportService DepositReportService
+@inject ICustomizationService CustomizationService
+@inject IUserSessionStateService SessionState
+@inject IJSRuntime JS
+
+<DepositSetup />
+
+<div class="deposits-page">
+    <main id="deposit-slip-content" class="slip-shell" aria-label="Deposit slip preview">
+        <section class="slip-header">
+            <div class="logo-ema">
+                <img src="images/ema-logo.png" alt="EMA logo" class="ema-logo-img" />
+            </div>
+
+            <div class="slip-title">
+                <h2>Deposit Slip</h2>
+                <h3>@OrganizationName</h3>
+            </div>
+
+            <div class="logo-org">
+                <button type="button" class="small">@OrganizationPhone</button>
+                <div class="logo-art">
+                    @if (!string.IsNullOrWhiteSpace(OrganizationLogoDataUrl))
+                    {
+                        <img src="@OrganizationLogoDataUrl"
+                             alt="@($"{OrganizationName} logo")"
+                             style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                    }
+                    else
+                    {
+                        <span>Organization Logo</span>
+                    }
+                </div>
+            </div>
+        </section>
+
+        @if (!IsConfigured || _editingSetup)
+        {
+            @* Setup is done inline here: the Setup Wizard's "Set Up Deposit Slips" step (#256) links to
+               this page, so the deposit slip configures itself rather than a separate /wizard page.
+               An already-configured org can reopen this form via the "Edit Setup" button below. *@
+            <section class="setup-needed" aria-label="Deposit slip setup">
+                <p class="setup-needed-title">Set up the Deposit Slip</p>
+                <p class="setup-needed-hint">
+                    Enter the bank Branch and Account, and choose which method of giving represents cheques
+                    and which represents cash. All four are required before the slip can be produced.
+                </p>
+
+                <div class="setup-field">
+                    <label for="setup-branch">Branch:</label>
+                    <input id="setup-branch" type="text" @bind="Branch" aria-label="Bank branch number" />
+                </div>
+                <div class="setup-field">
+                    <label for="setup-account">Account:</label>
+                    <input id="setup-account" type="text" @bind="Account" aria-label="Bank account number" />
+                </div>
+                <div class="setup-field">
+                    <label for="setup-cheque">Method of Giving for Cheques:</label>
+                    <select id="setup-cheque" @bind="ChequeMethodID" aria-label="Method of giving for cheques">
+                        <option value="">— Select —</option>
+                        @foreach (var m in Methods)
+                        {
+                            <option value="@m.EMAMethodOfGivingID">@m.Description</option>
+                        }
+                    </select>
+                </div>
+                <div class="setup-field">
+                    <label for="setup-cash">Method of Giving for Cash:</label>
+                    <select id="setup-cash" @bind="CashMethodID" aria-label="Method of giving for cash">
+                        <option value="">— Select —</option>
+                        @foreach (var m in Methods)
+                        {
+                            <option value="@m.EMAMethodOfGivingID">@m.Description</option>
+                        }
+                    </select>
+                </div>
+
+                @if (Methods.Count == 0)
+                {
+                    <p class="setup-error">
+                        No methods of giving are set up yet —
+                        <a href="/customization">set them up under Customization</a> first, then come back.
+                    </p>
+                }
+
+                <div class="setup-actions">
+                    <button type="button" class="setup-save" @onclick="SaveSetupAsync" disabled="@_savingSetup">Save</button>
+                    @if (IsConfigured)
+                    {
+                        <button type="button" class="setup-cancel" @onclick="CancelSetup" disabled="@_savingSetup">Cancel</button>
+                    }
+                    @if (_setupSaveFailed)
+                    {
+                        <span class="setup-error">Could not save. Please try again.</span>
+                    }
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="meta-row">
+                <div class="meta-field">
+                    <label>Date:</label>
+                    <div class="value-box value-box-input">
+                        <input type="date"
+                               class="date-input-overlay"
+                               @bind="DepositDate"
+                               @bind:format="yyyy-MM-dd"
+                               @bind:after="LoadChequesAsync"
+                               aria-label="Deposit date" />
+                    </div>
+                </div>
+
+                <div class="meta-field">
+                    <label>Branch:</label>
+                    <div class="value-box value-box-input">
+                        <input type="text"
+                               class="text-input-overlay"
+                               @bind="Branch"
+                               @bind:after="SaveBranchAccountAsync"
+                               aria-label="Branch" />
+                    </div>
+                </div>
+
+                <div class="meta-field wide">
+                    <label>Account:</label>
+                    <div class="value-box value-box-input">
+                        <input type="text"
+                               class="text-input-overlay"
+                               @bind="Account"
+                               @bind:after="SaveBranchAccountAsync"
+                               aria-label="Account" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="cheques-section">
+                <h4>Cheques</h4>
+
+                <div class="cheques-grid">
+                    <div class="cheque-table-wrap">
+                        <table class="cheque-table" aria-label="Cheque list left">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var row = 0; row < TableRowsPerSide; row++)
+                                {
+                                    var cheque = GetChequeAt(row);
+                                    <tr>
+                                        <td>@(cheque?.Name ?? string.Empty)</td>
+                                        <td>@(cheque is null ? string.Empty : FormatCurrency(cheque.Amount))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="cheque-table-wrap">
+                        <table class="cheque-table" aria-label="Cheque list right">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (var row = 0; row < TableRowsPerSide; row++)
+                                {
+                                    var cheque = GetChequeAt(row + TableRowsPerSide);
+                                    <tr>
+                                        <td>@(cheque?.Name ?? string.Empty)</td>
+                                        <td>@(cheque is null ? string.Empty : FormatCurrency(cheque.Amount))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+
+                        <div class="cheque-totals">
+                            <button type="button"># Cheques</button>
+                            <button type="button" class="blue-text">@ChequeCount</button>
+                            <button type="button">Total Cheques</button>
+                            <button type="button" class="blue-text">@FormatCurrency(TotalChequesAmount)</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cash-grid">
+                <div class="cash-card">
+                    <h4>Bills</h4>
+
+                    <table aria-label="Bills counting">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>$100</th>
+                                <th>$50</th>
+                                <th>$20</th>
+                                <th>$10</th>
+                                <th>$5</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th>#</th>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Bills100Count" @bind:event="oninput" aria-label="Number of $100 bills" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Bills50Count" @bind:event="oninput" aria-label="Number of $50 bills" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Bills20Count" @bind:event="oninput" aria-label="Number of $20 bills" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Bills10Count" @bind:event="oninput" aria-label="Number of $10 bills" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Bills5Count" @bind:event="oninput" aria-label="Number of $5 bills" /></td>
+                            </tr>
+                            <tr>
+                                <th>Value</th>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Bills100Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Bills50Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Bills20Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Bills10Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Bills5Value)</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="counting-notes">
+                        <div class="counting-notes-head">
+                            <p>Counting Steps:</p>
+                        </div>
+                        <textarea class="counting-steps-input"
+                                  rows="4"
+                                  @bind="CountingSteps"
+                                  @bind:after="SaveCountingStepsAsync"
+                                  aria-label="Counting steps"></textarea>
+                    </div>
+                </div>
+
+                <div class="cash-card">
+                    <h4>Coin</h4>
+
+                    <table aria-label="Coins counting">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>$2</th>
+                                <th>$1</th>
+                                <th>25c</th>
+                                <th>10c</th>
+                                <th>5c</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th>#</th>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Coin2Count" @bind:event="oninput" aria-label="Number of $2 coins" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Coin1Count" @bind:event="oninput" aria-label="Number of $1 coins" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Coin25Count" @bind:event="oninput" aria-label="Number of 25 cent coins" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Coin10Count" @bind:event="oninput" aria-label="Number of 10 cent coins" /></td>
+                                <td><input type="number" min="0" step="1" class="mini-input" @bind="Coin5Count" @bind:event="oninput" aria-label="Number of 5 cent coins" /></td>
+                            </tr>
+                            <tr>
+                                <th>Value</th>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Coin2Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Coin1Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Coin25Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Coin10Value)</button></td>
+                                <td><button type="button" class="mini blue-text">@FormatCurrency(Coin5Value)</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="totals-stack">
+                        <button type="button">Total Cash</button>
+                        <button type="button" class="blue-text">@FormatCurrency(TotalCashAmount)</button>
+                        <button type="button">Total Deposit</button>
+                        <button type="button" class="blue-text">@FormatCurrency(TotalDepositAmount)</button>
+                    </div>
+                </div>
+            </section>
+        }
+    </main>
+
+    @if (IsConfigured && !_editingSetup)
+    {
+        <section class="slip-actions" aria-label="Deposit slip actions">
+            <button type="button" class="slip-action-btn" @onclick="PrintPdfAsync">Print PDF</button>
+            <button type="button" class="slip-action-btn" @onclick="SaveAsPdfAsync">Save as PDF</button>
+            <button type="button" class="slip-action-btn" @onclick="() => _editingSetup = true">Edit Setup</button>
+        </section>
+    }
+</div>
+
+@code {
+    private int OrgID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+    private const int TableRowsPerSide = 12;
+
+    private OrganizationSummary? _org;
+
+    private DateTime DepositDate { get; set; } = DateTime.Today;
+    private string OrganizationName { get; set; } = "Loading organization...";
+    private string OrganizationPhone { get; set; } = "Loading phone...";
+    private string OrganizationLogoDataUrl { get; set; } = string.Empty;
+    private string Branch { get; set; } = string.Empty;
+    private string Account { get; set; } = string.Empty;
+    private string CountingSteps { get; set; } = string.Empty;
+
+    private IReadOnlyList<ChequeReportRow> ChequeRows { get; set; } = Array.Empty<ChequeReportRow>();
+
+    // Inline deposit-slip setup (shown until the org is configured).
+    private List<MethodOfGivingItem> Methods { get; set; } = new();
+    private int? ChequeMethodID { get; set; }
+    private int? CashMethodID { get; set; }
+    private bool _savingSetup;
+    private bool _setupSaveFailed;
+    private bool _editingSetup;   // reopened the setup form on an already-configured slip
+
+    // The org must designate its bank details and Cheque/Cash methods before the slip can be produced.
+    private bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(_org?.BankBranchNumber)
+        && !string.IsNullOrWhiteSpace(_org?.BankAccountNumber)
+        && _org?.EMAMethodOfGivingIDForCheques is > 0
+        && _org?.EMAMethodOfGivingIDForCash is > 0;
+
+    private int Bills100Count { get; set; }
+    private int Bills50Count { get; set; }
+    private int Bills20Count { get; set; }
+    private int Bills10Count { get; set; }
+    private int Bills5Count { get; set; }
+
+    private int Coin2Count { get; set; }
+    private int Coin1Count { get; set; }
+    private int Coin25Count { get; set; }
+    private int Coin10Count { get; set; }
+    private int Coin5Count { get; set; }
+
+    private int ChequeCount => ChequeRows.Count;
+    private decimal TotalChequesAmount => ChequeRows.Sum(x => x.Amount);
+
+    private decimal Bills100Value => Bills100Count * 100m;
+    private decimal Bills50Value => Bills50Count * 50m;
+    private decimal Bills20Value => Bills20Count * 20m;
+    private decimal Bills10Value => Bills10Count * 10m;
+    private decimal Bills5Value => Bills5Count * 5m;
+
+    private decimal Coin2Value => Coin2Count * 2m;
+    private decimal Coin1Value => Coin1Count * 1m;
+    private decimal Coin25Value => Coin25Count * 0.25m;
+    private decimal Coin10Value => Coin10Count * 0.10m;
+    private decimal Coin5Value => Coin5Count * 0.05m;
+
+    // Total Cash is derived from the manual Bills/Coin count; it updates live as counts are entered.
+    private decimal TotalCashAmount =>
+        Bills100Value + Bills50Value + Bills20Value + Bills10Value + Bills5Value +
+        Coin2Value + Coin1Value + Coin25Value + Coin10Value + Coin5Value;
+
+    // Total Deposit = cheques (from the designated Cheque method) + counted cash.
+    private decimal TotalDepositAmount => TotalChequesAmount + TotalCashAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var org = OrganizationStateService.CurrentOrganization;
+
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+
+            if (org is not null)
+            {
+                OrganizationStateService.UpdateOrganization(org);
+            }
+        }
+
+        _org = org;
+        OrganizationName = org?.OrganizationName ?? "Organization Name";
+        OrganizationPhone = org?.OrganizationPhone ?? "Organization Phone";
+        Branch = org?.BankBranchNumber ?? string.Empty;
+        Account = org?.BankAccountNumber ?? string.Empty;
+        ChequeMethodID = org?.EMAMethodOfGivingIDForCheques;
+        CashMethodID = org?.EMAMethodOfGivingIDForCash;
+        CountingSteps = string.IsNullOrWhiteSpace(org?.CountingSteps)
+            ? DefaultCountingSteps
+            : org!.CountingSteps!;
+
+        Methods = await CustomizationService.GetMethodsOfGivingAsync(OrgID, activeOnly: true);
+
+        await LoadOrganizationLogoAsync(org);
+        await LoadChequesAsync();
+    }
+
+    private const string DefaultCountingSteps =
+        "Counting Steps:\n1) Sort cheques in order by Amount\n2) Calculate Total Chqs & Enter into Computer\n3) Count Cash & Enter into Computer\n4) Print Deposit Slip, Check & Include in Bank Bag";
+
+    private async Task LoadOrganizationLogoAsync(OrganizationSummary? org)
+    {
+        OrganizationLogoDataUrl = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(org?.LogoBlobID))
+            return;
+
+        if (OrganizationStateService.TryGetLogoDataUrl(org.LogoBlobID, out var cachedLogoDataUrl))
+        {
+            OrganizationLogoDataUrl = cachedLogoDataUrl;
+            return;
+        }
+
+        OrganizationLogoDataUrl = await BlobService.BlobGetDataUrlAsync(org.LogoBlobID)
+            ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(OrganizationLogoDataUrl))
+        {
+            OrganizationStateService.UpdateLogoDataUrl(
+                org.LogoBlobID,
+                OrganizationLogoDataUrl);
+        }
+    }
+
+    private async Task LoadChequesAsync()
+    {
+        if (!IsConfigured)
+        {
+            ChequeRows = Array.Empty<ChequeReportRow>();
+            return;
+        }
+
+        try
+        {
+            ChequeRows = await DepositReportService.GetChequesAsync(OrgID, DepositDate);
+        }
+        catch
+        {
+            ChequeRows = Array.Empty<ChequeReportRow>();
+        }
+    }
+
+    private async Task SaveSetupAsync()
+    {
+        if (_org is null)
+            return;
+
+        _savingSetup = true;
+        _setupSaveFailed = false;
+
+        _org.BankBranchNumber = string.IsNullOrWhiteSpace(Branch) ? null : Branch.Trim();
+        _org.BankAccountNumber = string.IsNullOrWhiteSpace(Account) ? null : Account.Trim();
+        _org.EMAMethodOfGivingIDForCheques = ChequeMethodID;
+        _org.EMAMethodOfGivingIDForCash = CashMethodID;
+
+        var ok = await OrganizationService.UpdateOrganizationAsync(OrgID, _org);
+        if (ok)
+        {
+            OrganizationStateService.UpdateOrganization(_org);
+            _editingSetup = false;
+            // Now configured — load the cheques so the slip renders populated.
+            await LoadChequesAsync();
+        }
+
+        _setupSaveFailed = !ok;
+        _savingSetup = false;
+    }
+
+    // Close the setup form without saving (only reachable when already configured), reverting the
+    // fields to the org's current values.
+    private void CancelSetup()
+    {
+        Branch = _org?.BankBranchNumber ?? string.Empty;
+        Account = _org?.BankAccountNumber ?? string.Empty;
+        ChequeMethodID = _org?.EMAMethodOfGivingIDForCheques;
+        CashMethodID = _org?.EMAMethodOfGivingIDForCash;
+        _setupSaveFailed = false;
+        _editingSetup = false;
+    }
+
+    private async Task SaveBranchAccountAsync()
+    {
+        if (_org is null)
+            return;
+
+        _org.BankBranchNumber = string.IsNullOrWhiteSpace(Branch) ? null : Branch.Trim();
+        _org.BankAccountNumber = string.IsNullOrWhiteSpace(Account) ? null : Account.Trim();
+
+        await PersistOrganizationAsync();
+    }
+
+    private async Task SaveCountingStepsAsync()
+    {
+        if (_org is null)
+            return;
+
+        _org.CountingSteps = string.IsNullOrWhiteSpace(CountingSteps) ? null : CountingSteps;
+        await PersistOrganizationAsync();
+    }
+
+    private async Task PersistOrganizationAsync()
+    {
+        var saved = await OrganizationService.UpdateOrganizationAsync(OrgID, _org!);
+        if (saved)
+        {
+            OrganizationStateService.UpdateOrganization(_org!);
+        }
+    }
+
+    private ChequeReportRow? GetChequeAt(int index)
+        => index >= 0 && index < ChequeRows.Count ? ChequeRows[index] : null;
+
+    private static string FormatCurrency(decimal value)
+        => value.ToString("C2");
+
+    private async Task PrintPdfAsync()
+        => await JS.InvokeVoidAsync("depositSlipActions.printPdf", "deposit-slip-content");
+
+    private async Task SaveAsPdfAsync()
+        => await JS.InvokeVoidAsync("depositSlipActions.saveAsPdf", "deposit-slip-content", $"deposit-slip-{DepositDate:yyyy-MM-dd}");
+}

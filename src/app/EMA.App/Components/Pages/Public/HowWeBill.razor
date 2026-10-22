@@ -1,0 +1,16 @@
+@page "/how-we-bill"
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@inject NavigationManager Navigation
+
+<p class="route-redirect-message">Opening Pricing &amp; Invoicing...</p>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo(
+            "/pricing",
+            replace: true);
+    }
+}

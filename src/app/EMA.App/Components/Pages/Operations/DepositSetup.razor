@@ -1,0 +1,205 @@
+@page "/deposit"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationOnboardingService OnboardingService
+@inject ICustomizationService CustomizationService
+
+<PageTitle>Set Up Deposit Slip - EMA</PageTitle>
+
+<section class="task22-page">
+    <header class="task22-header">
+        <h1>Set Up Deposit Slip</h1>
+    </header>
+
+    @if (IsLoading)
+    {
+        <p class="task22-status">Loading...</p>
+    }
+    else
+    {
+        <div class="task22-card">
+            <div class="task22-row">
+                <label for="deposit-branch">
+                    Branch:
+                </label>
+
+                <div class="task22-control">
+                    <input id="deposit-branch"
+                           class="task22-input"
+                           placeholder="Start Typing to Select"
+                           @bind="Settings.BankBranchNumber"
+                           @bind:event="oninput" />
+                </div>
+            </div>
+
+            <div class="task22-row">
+                <label for="deposit-account">
+                    Account:
+                </label>
+
+                <div class="task22-control">
+                    <input id="deposit-account"
+                           class="task22-input"
+                           placeholder="Start Typing to Select"
+                           @bind="Settings.BankAccountNumber"
+                           @bind:event="oninput" />
+                </div>
+            </div>
+
+            <div class="task22-row">
+                <label for="deposit-cheques">
+                    Method of Giving for Cheques:
+                </label>
+
+                <div class="task22-control">
+                    <select id="deposit-cheques"
+                            class="task22-select"
+                            @bind="Settings.EMAMethodOfGivingIDForCheques">
+                        <option value="">Start Typing to Select</option>
+                        @foreach (var method in Methods)
+                        {
+                            <option value="@method.EMAMethodOfGivingID">
+                                @method.Description
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="task22-row">
+                <label for="deposit-cash">
+                    Method of Giving for Cash:
+                </label>
+
+                <div class="task22-control">
+                    <select id="deposit-cash"
+                            class="task22-select"
+                            @bind="Settings.EMAMethodOfGivingIDForCash">
+                        <option value="">Start Typing to Select</option>
+                        @foreach (var method in Methods)
+                        {
+                            <option value="@method.EMAMethodOfGivingID">
+                                @method.Description
+                            </option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="task22-actions">
+            <button type="button"
+                    class="task22-save-button"
+                    disabled="@IsSaving"
+                    @onclick="SaveAsync">
+                @(IsSaving ? "Saving..." : "Save")
+            </button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <p class="task22-status @(IsError ? "task22-status-error" : "task22-status-success")"
+           role="status">
+            @StatusMessage
+        </p>
+    }
+</section>
+
+@code {
+    private int OrganizationID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private OrganizationOnboardingSettings Settings = new();
+    private List<MethodOfGivingItem> Methods = new();
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsError;
+    private string StatusMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage =
+                "An organization session is required.";
+            IsLoading = false;
+            return;
+        }
+
+        var settingsTask =
+            OnboardingService.GetAsync(
+                OrganizationID);
+
+        var methodsTask =
+            CustomizationService.GetMethodsOfGivingAsync(
+                OrganizationID,
+                activeOnly: true);
+
+        await Task.WhenAll(
+            settingsTask,
+            methodsTask);
+
+        var settings =
+            await settingsTask;
+
+        if (settings is null)
+        {
+            IsError = true;
+            StatusMessage =
+                "The deposit slip setup could not be loaded.";
+            IsLoading = false;
+            return;
+        }
+
+        Settings = settings;
+        Methods =
+            await methodsTask;
+        IsLoading = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (IsSaving)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var result =
+            await OnboardingService.SaveAsync(
+                OrganizationID,
+                "deposit-slip",
+                new SaveOrganizationOnboardingSettingsRequest
+                {
+                    BankBranchNumber =
+                        Settings.BankBranchNumber,
+
+                    BankAccountNumber =
+                        Settings.BankAccountNumber,
+
+                    EMAMethodOfGivingIDForCheques =
+                        Settings.EMAMethodOfGivingIDForCheques,
+
+                    EMAMethodOfGivingIDForCash =
+                        Settings.EMAMethodOfGivingIDForCash
+                });
+
+        IsSaving = false;
+        IsError =
+            !result.Succeeded;
+        StatusMessage =
+            result.Message;
+    }
+}

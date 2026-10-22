@@ -1,0 +1,210 @@
+@using EMA.App.Models
+@implements IDisposable
+
+@if (VisibleOrganizations.Count >= MinimumRequiredCount)
+{
+    <div class="directory-carousel"
+         role="region"
+         aria-label="Participating Organizations Carousel"
+         @onmouseenter="HandleMouseEnter"
+         @onmouseleave="HandleMouseLeave">
+
+        <div class="directory-carousel-inner">
+            <!-- Trust Rating Badge (Left) -->
+            <div class="carousel-rating-box">
+                <div class="rating-stars" aria-label="Rated 4.8 out of 5 stars">
+                    <span class="star">★</span>
+                    <span class="star">★</span>
+                    <span class="star">★</span>
+                    <span class="star">★</span>
+                    <span class="star">★</span>
+                    <strong class="rating-score">4.8</strong>
+                </div>
+                <div class="rating-caption">
+                    Supporting Canadian Nonprofits
+                </div>
+            </div>
+
+            <div class="carousel-divider" aria-hidden="true"></div>
+
+            <!-- Carousel Viewport & Sliding Track -->
+            <div class="carousel-viewport">
+                <button type="button"
+                        class="carousel-nav-btn carousel-nav-prev"
+                        aria-label="Previous organizations"
+                        @onclick="PreviousSlide"
+                        disabled="@(_currentIndex == 0 && !_loop)">
+                    <span aria-hidden="true">&lsaquo;</span>
+                </button>
+
+                <div class="carousel-track-window">
+                    <div class="carousel-track"
+                         style="transform: translateX(-@(_currentIndex * _itemWidthPercent)%);">
+                        @foreach (var org in VisibleOrganizations)
+                        {
+                            <div class="carousel-item"
+                                 title="@org.Name"
+                                 role="group"
+                                 aria-label="@org.Name">
+                                @if (!string.IsNullOrWhiteSpace(org.LogoUrl))
+                                {
+                                    <img src="@org.LogoUrl"
+                                         alt="@org.Name logo"
+                                         class="carousel-item-logo" />
+                                }
+                                else
+                                {
+                                    <div class="carousel-item-brand @org.CustomClass">
+                                        <span class="brand-text">@org.Name</span>
+                                        @if (!string.IsNullOrWhiteSpace(org.Location))
+                                        {
+                                            <span class="brand-sub">@org.Location</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <button type="button"
+                        class="carousel-nav-btn carousel-nav-next"
+                        aria-label="Next organizations"
+                        @onclick="NextSlide"
+                        disabled="@(_currentIndex >= MaxIndex && !_loop)">
+                    <span aria-hidden="true">&rsaquo;</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Carousel Pagination Dots -->
+        @if (TotalPages > 1)
+        {
+            <div class="carousel-pagination" role="tablist" aria-label="Carousel pagination">
+                @for (int i = 0; i <= MaxIndex; i++)
+                {
+                    var pageIndex = i;
+                    <button type="button"
+                            role="tab"
+                            class="carousel-dot @(pageIndex == _currentIndex ? "is-active" : "")"
+                            aria-label="@($"Go to slide {pageIndex + 1}")"
+                            aria-selected="@(pageIndex == _currentIndex)"
+                            @onclick="() => GoToSlide(pageIndex)">
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public IReadOnlyList<DirectoryOrganizationItem>? Organizations { get; set; }
+
+    [Parameter]
+    public int MinimumRequiredCount { get; set; } = 5;
+
+    [Parameter]
+    public bool AutoPlay { get; set; } = true;
+
+    [Parameter]
+    public int AutoPlayIntervalMs { get; set; } = 3500;
+
+    private int _currentIndex = 0;
+    private const int _visibleItemsPerView = 4;
+    private const float _itemWidthPercent = 25f;
+    private bool _loop = true;
+    private bool _isHovered = false;
+    private System.Threading.Timer? _autoPlayTimer;
+
+    private IReadOnlyList<DirectoryOrganizationItem> VisibleOrganizations =>
+        Organizations ?? _defaultOrganizations;
+
+    private int MaxIndex =>
+        Math.Max(0, VisibleOrganizations.Count - _visibleItemsPerView);
+
+    private int TotalPages => MaxIndex + 1;
+
+    protected override void OnInitialized()
+    {
+        if (AutoPlay)
+        {
+            _autoPlayTimer = new System.Threading.Timer(
+                AutoPlayCallback,
+                null,
+                AutoPlayIntervalMs,
+                AutoPlayIntervalMs);
+        }
+    }
+
+    private void AutoPlayCallback(object? state)
+    {
+        if (_isHovered || VisibleOrganizations.Count <= _visibleItemsPerView)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            NextSlide();
+            StateHasChanged();
+        });
+    }
+
+    private void PreviousSlide()
+    {
+        if (_currentIndex > 0)
+        {
+            _currentIndex--;
+        }
+        else if (_loop)
+        {
+            _currentIndex = MaxIndex;
+        }
+    }
+
+    private void NextSlide()
+    {
+        if (_currentIndex < MaxIndex)
+        {
+            _currentIndex++;
+        }
+        else if (_loop)
+        {
+            _currentIndex = 0;
+        }
+    }
+
+    private void GoToSlide(int index)
+    {
+        _currentIndex = Math.Clamp(index, 0, MaxIndex);
+    }
+
+    private void HandleMouseEnter()
+    {
+        _isHovered = true;
+    }
+
+    private void HandleMouseLeave()
+    {
+        _isHovered = false;
+    }
+
+    public void Dispose()
+    {
+        _autoPlayTimer?.Dispose();
+    }
+
+    // Default sample of real Canadian non-profit organizations styled consistently
+    private static readonly IReadOnlyList<DirectoryOrganizationItem> _defaultOrganizations = new List<DirectoryOrganizationItem>
+    {
+        new() { OrganizationID = 1, Name = "Flow", CustomClass = "brand-flow", Category = "Non-Profit Giving", Location = "Calgary, AB" },
+        new() { OrganizationID = 2, Name = "alan", CustomClass = "brand-alan", Category = "Community Health", Location = "Montreal, QC" },
+        new() { OrganizationID = 3, Name = "PRIVATE AI", CustomClass = "brand-privateai", Category = "Education & Tech", Location = "Toronto, ON" },
+        new() { OrganizationID = 4, Name = "Stan", CustomClass = "brand-stan", Category = "Youth Outreach", Location = "Vancouver, BC" },
+        new() { OrganizationID = 5, Name = "Jiffy Hope", CustomClass = "brand-jiffy", Category = "Community Support", Location = "Edmonton, AB" },
+        new() { OrganizationID = 6, Name = "The Hut", CustomClass = "brand-thehut", Category = "Youth Center", Location = "Halifax, NS" },
+        new() { OrganizationID = 7, Name = "sherpa°", CustomClass = "brand-sherpa", Category = "Relief Society", Location = "Winnipeg, MB" },
+        new() { OrganizationID = 8, Name = "CLAY MOO", CustomClass = "brand-claymoo", Category = "Arts & Heritage", Location = "Ottawa, ON" }
+    };
+}

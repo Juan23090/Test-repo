@@ -1,0 +1,34 @@
+.access-denied-page {
+    width: min(100%, 720px);
+    margin: 3rem auto;
+    padding: 2rem;
+    text-align: center;
+}
+
+    .access-denied-page h1 {
+        margin-bottom: 1rem;
+        font-size: 2rem;
+    }
+
+    .access-denied-page p {
+        margin-bottom: 1.5rem;
+        font-size: 1rem;
+    }
+
+.access-denied-button {
+    min-height: 38px;
+    padding: 0.55rem 1rem;
+    border: 1px solid #8a8a8a;
+    background: #e9e9e9;
+    color: #000000;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+    .access-denied-button:hover,
+    .access-denied-button:focus-visible {
+        background: #dfdfdf;
+        outline: none;
+    }

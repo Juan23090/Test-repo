@@ -1,0 +1,118 @@
+@using EMA.App.Models
+@implements IDisposable
+
+@inject IMobileMenuStateService MobileMenuState
+
+<header class="brochure-header">
+    <div class="brochure-header-logo-slot">
+        @if (LogoClick.HasDelegate)
+        {
+            <button type="button"
+                    class="@GetPrimaryLogoClass()"
+                    title="Go to the brochure landing page"
+                    aria-label="Go to the brochure landing page"
+                    @onclick="HandleLogoClickAsync">
+                <img src="images/ema-logo.png"
+                     alt="@AppBranding.ApplicationName"
+                     class="brochure-header-logo" />
+            </button>
+        }
+        else
+        {
+            <a class="@GetPrimaryLogoClass()"
+               href="/about"
+               title="Go to the brochure landing page"
+               aria-label="Go to the brochure landing page">
+                <img src="images/ema-logo.png"
+                     alt="@AppBranding.ApplicationName"
+                     class="brochure-header-logo" />
+            </a>
+        }
+
+        @if (ShowCategorySwitcher)
+        {
+            <button type="button"
+                    class="brochure-header-logo-action brochure-header-logo-mobile"
+                    title="@(MobileMenuState.IsExpanded ? "Hide menu" : "Show menu")"
+                    aria-label="@(MobileMenuState.IsExpanded ? "Hide menu" : "Show menu")"
+                    aria-expanded="@MobileMenuState.IsExpanded"
+                    @onclick="ToggleMobileMenu">
+                @if (MobileMenuState.IsExpanded)
+                {
+                    <img src="images/ema-logo.png"
+                         alt="@AppBranding.ApplicationName"
+                         class="brochure-header-logo" />
+                }
+                else
+                {
+                    <span class="brochure-header-show-menu">
+                        Show Menu
+                    </span>
+                }
+            </button>
+        }
+    </div>
+
+    <h1 class="brochure-header-title">
+        @AppBranding.ApplicationName
+    </h1>
+
+    @if (ShowCategorySwitcher)
+    {
+        <div class="brochure-header-actions">
+            @if (CurrentMenuItem is not null)
+            {
+                <MenuItemPageActions CurrentMenuItem="@CurrentMenuItem" />
+                <ScreenLevelActions CurrentMenuItem="@CurrentMenuItem" />
+            }
+
+            <CategorySwitcher CurrentMenuItem="@CurrentMenuItem" />
+        </div>
+    }
+</header>
+
+@code {
+    [Parameter]
+    public bool ShowCategorySwitcher { get; set; } = true;
+
+    [Parameter]
+    public MenuItemDto? CurrentMenuItem { get; set; }
+
+    [Parameter]
+    public EventCallback LogoClick { get; set; }
+
+    protected override void OnInitialized()
+    {
+        MobileMenuState.OnChange +=
+            HandleMobileMenuChanged;
+    }
+
+    private string GetPrimaryLogoClass()
+    {
+        return ShowCategorySwitcher
+            ? "brochure-header-logo-action brochure-header-logo-desktop"
+            : "brochure-header-logo-action";
+    }
+
+    private Task HandleLogoClickAsync()
+    {
+        return LogoClick.InvokeAsync();
+    }
+
+    private void ToggleMobileMenu()
+    {
+        MobileMenuState.Toggle();
+    }
+
+    private void HandleMobileMenuChanged()
+    {
+        _ = InvokeAsync(
+            StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        MobileMenuState.OnChange -=
+            HandleMobileMenuChanged;
+    }
+}

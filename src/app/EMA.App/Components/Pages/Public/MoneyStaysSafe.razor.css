@@ -1,0 +1,39 @@
+.brochure-information-page {
+    width: min(100%, 56.5rem);
+    margin: 0 auto;
+    padding: 0 0 2rem;
+    font-family: var(--ema-ui-font);
+}
+
+.brochure-information-page h2 {
+    margin: 0 0 1rem;
+    text-align: center;
+}
+
+.brochure-information-page p {
+    font-size: 1.08rem;
+    line-height: 1.6;
+}
+
+.brochure-information-copy {
+    font-weight: 700;
+}
+
+.brochure-information-copy p {
+    margin: 0 0 1.2rem;
+}
+
+.brochure-information-emphasis {
+    margin: 1.5rem 0 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid #9b9b9b;
+    background: #fff;
+    text-align: center;
+    font-weight: 700;
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+    .brochure-information-page {
+        width: min(100%, 37.75rem);
+    }
+}

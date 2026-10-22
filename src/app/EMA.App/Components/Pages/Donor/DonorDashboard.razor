@@ -1,0 +1,329 @@
+@page "/donor-dashboard"
+
+@using EMA.App.Services
+@implements IDisposable
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Donor Dashboard - EMA</PageTitle>
+
+<DonorPortalShell Title="Donor Dashboard" Description="Your giving at a glance.">
+
+    <!-- ── Timeframe selector ─────────────────────────────────────────────── -->
+    <div class="donor-kpi-timeframe" role="radiogroup" aria-label="Timeframe">
+        @foreach (var option in _timeframeOptions)
+        {
+            <label class="donor-kpi-radio @(_timeframe == option.Value ? "selected" : "")">
+                <input type="radio" name="timeframe" value="@option.Value"
+                       checked="@(_timeframe == option.Value)"
+                       @onchange="@(() => OnTimeframeChangedAsync(option.Value))" />
+                @option.Label
+            </label>
+        }
+        <span class="donor-kpi-range">@_rangeLabel</span>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-warning py-2 mb-3"><small>@_error</small></div>
+    }
+
+    <!-- ── Landing graph picker: pressed toggle buttons. Reads the org's
+         KPIGraphDonorLandingPage default; switches the view only (no persist). ────── -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                <div class="toggle-btn-group" role="group" aria-label="Landing graph selector">
+                    <button type="button" class="toggle-btn @(_selectedGraph == "F" ? "selected" : "")"
+                            @onclick='() => OnGraphButtonClicked("F")'>Fund</button>
+                    <button type="button" class="toggle-btn @(_selectedGraph == "M" ? "selected" : "")"
+                            @onclick='() => OnGraphButtonClicked("M")'>Method</button>
+                    <button type="button" class="toggle-btn @(_selectedGraph == "V" ? "selected" : "")"
+                            @onclick='() => OnGraphButtonClicked("V")'>Value</button>
+                </div>
+                <p class="fw-semibold mb-0 text-muted" style="font-size:1rem;">@GraphTitle</p>
+            </div>
+            <div style="height: 280px;">
+                @if (_selectedGraph == "V")
+                {
+                    @if (_trendLoading)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading…</small></div>
+                    }
+                    else if (!_trendDataReady)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted fst-italic"><small>No donations in this period</small></div>
+                    }
+                    <canvas id="trendChart" @key="(1, _chartRefreshKey)" style="@(_trendLoading || !_trendDataReady ? "display:none" : "")"></canvas>
+                }
+                else if (_selectedGraph == "F")
+                {
+                    @if (_fundLoading)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading…</small></div>
+                    }
+                    else if (!_fundDataReady)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted fst-italic"><small>No donations in this period</small></div>
+                    }
+                    <canvas id="fundChart" @key="(2, _chartRefreshKey)" style="@(_fundLoading || !_fundDataReady ? "display:none" : "")"></canvas>
+                }
+                else
+                {
+                    @if (_methodLoading)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted"><small>Loading…</small></div>
+                    }
+                    else if (!_methodDataReady)
+                    {
+                        <div class="d-flex align-items-center justify-content-center h-100 text-muted fst-italic"><small>No donations in this period</small></div>
+                    }
+                    <canvas id="methodChart" @key="(3, _chartRefreshKey)" style="@(_methodLoading || !_methodDataReady ? "display:none" : "")"></canvas>
+                }
+            </div>
+        </div>
+    </div>
+
+</DonorPortalShell>
+
+@code {
+    private enum Timeframe { CurrentYear, PreviousYear, OrgDefined }
+
+    private readonly (Timeframe Value, string Label)[] _timeframeOptions =
+    {
+        (Timeframe.CurrentYear,  "Current Year"),
+        (Timeframe.PreviousYear, "Previous Year"),
+        (Timeframe.OrgDefined,   "Org-defined"),
+    };
+
+    private record MonthlyData(List<MonthlyEntry> Months);
+    private record MonthlyEntry(DateTime MonthStartDate, decimal TotalDonations, int DonationCount, decimal AverageGiftSize);
+    private record ChartDataItem(string Label, decimal Amount);
+    private record DonorDashboardSettings(int Days, string? Graph);
+
+    private int _orgID;
+
+    // Landing graph: one shows at a time (F=Fund, M=Method, V=Value). Reads the org's
+    // KPIGraphDonorLandingPage default; the buttons switch the view only (donors can't
+    // write the org table under the new security model, so no persist here).
+    private string _selectedGraph = "V";   // Value — Roger's donor default
+    private string GraphTitle => _selectedGraph switch
+    {
+        "F" => "Value by Fund",
+        "M" => "Value by Method",
+        _   => "Value by Month",
+    };
+
+    private int _historyDays = 7;                 // org's KPIDefaultHistoryDays (for "Org-defined")
+    private Timeframe _timeframe = Timeframe.CurrentYear;
+    private DateTime _from, _to;
+    private string _rangeLabel = string.Empty;
+
+    private string? _error;
+    private int _chartRefreshKey = 0;
+
+    private bool _trendLoading = true, _trendDataReady = false, _trendChartInitialised = false;
+    private string[][] _trendLabels = []; private decimal[] _trendAmounts = [];
+
+    private bool _fundLoading = true, _fundDataReady = false, _fundChartInitialised = false;
+    private string[] _fundLabels = []; private decimal[] _fundAmounts = [];
+
+    private bool _methodLoading = true, _methodDataReady = false, _methodChartInitialised = false;
+    private string[] _methodLabels = []; private decimal[] _methodAmounts = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        // Donor-only page: require a logged-in donor session.
+        if (SessionState.CurrentSession is not { IsDonorSession: true, DonorID: > 0 } session)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        _orgID = session.EMAOrganizationID;
+
+        await LoadSettingsAsync();
+        ComputeRange();
+        await FetchAllAsync();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        try
+        {
+            var settings =
+                await Http.GetFromJsonAsync<DonorDashboardSettings>(
+                    $"/api/dashboard/donor-settings/{_orgID}");
+
+            if (settings is not null)
+            {
+                if (settings.Days > 0)
+                {
+                    _historyDays =
+                        settings.Days;
+                }
+
+                if (settings.Graph is "F" or "M" or "V")
+                {
+                    _selectedGraph =
+                        settings.Graph;
+                }
+            }
+        }
+        catch
+        {
+            // Keep the safe defaults when donor settings are unavailable.
+        }
+    }
+
+    private Task FetchSelectedGraphAsync() => _selectedGraph switch
+    {
+        "F" => FetchByFundAsync(),
+        "M" => FetchByMethodAsync(),
+        _   => FetchMonthlyAsync(),   // V = Value
+    };
+
+    private async Task OnGraphButtonClicked(string graph)
+    {
+        if (graph == _selectedGraph) return;
+
+        // Switch the view only — donors can't write the org table under the new security
+        // model, so the choice is session-only (defaults come from KPIGraphDonorLandingPage).
+        _selectedGraph = graph;
+
+        _chartRefreshKey++;
+        _trendChartInitialised = _fundChartInitialised = _methodChartInitialised = false;
+        await FetchAllAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_trendDataReady && !_trendChartInitialised)
+        {
+            _trendChartInitialised = true;
+            await JS.InvokeVoidAsync("initTrendChart", _trendLabels, _trendAmounts);
+        }
+        if (_fundDataReady && !_fundChartInitialised)
+        {
+            _fundChartInitialised = true;
+            await JS.InvokeVoidAsync("initFundChart", _fundLabels, _fundAmounts);
+        }
+        if (_methodDataReady && !_methodChartInitialised)
+        {
+            _methodChartInitialised = true;
+            await JS.InvokeVoidAsync("initMethodChart", _methodLabels, _methodAmounts);
+        }
+    }
+
+    private async Task OnTimeframeChangedAsync(Timeframe timeframe)
+    {
+        _timeframe = timeframe;
+        ComputeRange();
+
+        // Force Blazor to recreate the canvases so Chart.js re-initialises with new data.
+        _chartRefreshKey++;
+        _trendChartInitialised = _fundChartInitialised = _methodChartInitialised = false;
+        await FetchAllAsync();
+    }
+
+    // Resolve the from/to date range for the selected timeframe.
+    private void ComputeRange()
+    {
+        var today = DateTime.Today;
+        switch (_timeframe)
+        {
+            case Timeframe.CurrentYear:
+                _from = new DateTime(today.Year, 1, 1);
+                _to   = new DateTime(today.Year, 12, 31);
+                _rangeLabel = today.Year.ToString();
+                break;
+            case Timeframe.PreviousYear:
+                _from = new DateTime(today.Year - 1, 1, 1);
+                _to   = new DateTime(today.Year - 1, 12, 31);
+                _rangeLabel = (today.Year - 1).ToString();
+                break;
+            default: // OrgDefined — the org's rolling History-Days window
+                _from = today.AddDays(-(_historyDays - 1));
+                _to   = today;
+                _rangeLabel = $"Last {_historyDays} days";
+                break;
+        }
+    }
+
+    private async Task FetchAllAsync()
+    {
+        _error = null;
+        _trendLoading = _fundLoading = _methodLoading = true;
+        _trendDataReady = _fundDataReady = _methodDataReady = false;
+        StateHasChanged();
+
+        await FetchSelectedGraphAsync();   // only the selected graph (reduces load)
+    }
+
+    private string Range =>
+        $"from={_from:yyyy-MM-dd}&to={_to:yyyy-MM-dd}";
+
+    private async Task FetchMonthlyAsync()
+    {
+        try
+        {
+            var monthly = await Http.GetFromJsonAsync<MonthlyData>(
+                $"/api/dashboard/donations-by-month/{_orgID}?{Range}");
+            if (monthly?.Months is { Count: > 0 } && monthly.Months.Any(m => m.TotalDonations != 0))
+            {
+                _trendLabels  = [.. monthly.Months.Select(m => new[] { m.MonthStartDate.ToString("MMM"), m.MonthStartDate.Year.ToString() })];
+                _trendAmounts = [.. monthly.Months.Select(m => m.TotalDonations)];
+                _trendDataReady = true;
+            }
+        }
+        catch { _error = "Could not reach the API."; }
+        finally { _trendLoading = false; }
+    }
+
+    private async Task FetchByFundAsync()
+    {
+        try
+        {
+            var items = await Http.GetFromJsonAsync<ChartDataItem[]>(
+                $"/api/dashboard/donations-by-fund/{_orgID}?{Range}");
+            if (items is { Length: > 0 })
+            {
+                // Drop $0 funds (e.g. a fund distribution recorded as 0) so they don't show as empty bars.
+                var ordered = items.Where(i => i.Amount != 0).ToArray();
+                if (ordered.Length > 0)
+                {
+                    // Biggest fund first; anything under 1% of the total collapses into "Other".
+                    (_fundLabels, _fundAmounts) = EMA.App.Utilities.ChartDataThreshold.GroupSmallEntries(
+                        ordered.Select(i => (i.Label, i.Amount)));
+                    _fundDataReady = true;
+                }
+            }
+        }
+        catch { /* leave empty-state */ }
+        finally { _fundLoading = false; }
+    }
+
+    private async Task FetchByMethodAsync()
+    {
+        try
+        {
+            var items = await Http.GetFromJsonAsync<ChartDataItem[]>(
+                $"/api/dashboard/donations-by-method/{_orgID}?{Range}");
+            if (items is { Length: > 0 })
+            {
+                // Biggest method first; anything under 1% of the total collapses into "Other".
+                (_methodLabels, _methodAmounts) = EMA.App.Utilities.ChartDataThreshold.GroupSmallEntries(
+                    items.Select(i => (i.Label, i.Amount)));
+                _methodDataReady = true;
+            }
+        }
+        catch { /* leave empty-state */ }
+        finally { _methodLoading = false; }
+    }
+
+    public void Dispose() { }
+}

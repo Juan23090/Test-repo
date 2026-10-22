@@ -1,0 +1,15 @@
+@inject NavigationManager Navigation
+
+<div class="ema-redirect-login p-4">
+    <p class="text-muted mb-0">Redirecting to sign-in…</p>
+</div>
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Navigation.NavigateTo($"authentication/login?returnUrl={Uri.EscapeDataString(Navigation.Uri)}");
+        }
+    }
+}

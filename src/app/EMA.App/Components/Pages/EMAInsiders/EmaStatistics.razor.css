@@ -1,0 +1,11 @@
+/* EMA Statistics shares the global .reports-page / .gift-* styling (see app.css), like
+   Gifts.razor. The only page-specific tweak: narrow the six filter fields so all three
+   columns fit on one line — giving the 2x3 filter grid from the mockup instead of the
+   third column (Scope / Measurement) wrapping to a second row. */
+.gift-field {
+    width: 320px;
+}
+
+.gift-label {
+    width: 150px;
+}

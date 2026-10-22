@@ -1,0 +1,229 @@
+.screen-level-actions {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    height: 44px;
+    gap: 0.35rem;
+}
+
+.screen-level-action {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    box-sizing: border-box;
+    border: 1px solid #8f8f8f;
+    border-radius: 3px;
+    background: #efefef;
+    color: #555;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.screen-level-action i {
+    display: block;
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+.screen-level-action.is-inactive {
+    opacity: 0.38;
+    cursor: default;
+}
+
+.screen-level-action.is-active:hover {
+    background: #e7e7e7;
+}
+
+.screen-level-action-faq.is-active {
+    color: #2454a6;
+}
+
+.screen-level-action-support.is-active {
+    color: #7b4315;
+}
+
+.screen-level-action-yellow.is-active {
+    color: #9a7600;
+}
+
+.screen-level-action-green.is-active {
+    color: #26713a;
+}
+
+.screen-level-action-red.is-active {
+    color: #a52828;
+}
+
+.screen-level-action-black.is-active {
+    color: #111;
+}
+
+.screen-level-action-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #fff;
+    border: 1px solid #888;
+    color: #222;
+    font-size: 0.68rem;
+    line-height: 15px;
+    text-align: center;
+}
+
+.screen-action-browser {
+    display: grid;
+    grid-template-columns: minmax(190px, 34%) 1fr;
+    gap: 1rem;
+    min-height: 250px;
+}
+
+.screen-action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 55vh;
+    overflow: auto;
+}
+
+.screen-action-list-item {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #c8c8c8;
+    border-radius: 3px;
+    background: #fff;
+    color: #111;
+    text-align: left;
+    cursor: pointer;
+}
+
+.screen-action-list-item:hover,
+.screen-action-list-item.is-selected {
+    border-color: #3159c8;
+    background: #eef2ff;
+}
+
+.screen-action-detail h3 {
+    margin-top: 0;
+}
+
+.screen-action-prewrap {
+    white-space: pre-wrap;
+}
+
+.screen-action-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.35rem 0.8rem;
+}
+
+.screen-action-facts dt {
+    font-weight: 700;
+}
+
+.screen-action-facts dd {
+    margin: 0;
+}
+
+.screen-action-vote-row,
+.screen-action-entry-buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.screen-action-vote-row select {
+    min-width: 120px;
+    padding: 0.45rem;
+}
+
+.screen-action-primary {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #2b4ea2;
+    border-radius: 3px;
+    background: #3159c8;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.screen-action-primary:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.screen-action-entry-form {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.screen-action-entry-form label {
+    font-weight: 700;
+}
+
+.screen-action-entry-form input,
+.screen-action-entry-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.55rem;
+    border: 1px solid #999;
+    border-radius: 3px;
+    font: inherit;
+}
+
+.screen-action-message {
+    margin-top: 0.8rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid #8ba1d8;
+    background: #eef2ff;
+}
+
+.screen-action-error {
+    border-color: #b85b5b;
+    background: #fff0f0;
+    color: #7b2020;
+}
+
+@media (max-width: 700px) {
+    .screen-level-actions {
+        gap: 0.25rem;
+    }
+
+    .screen-level-action {
+        width: 44px;
+        height: 44px;
+    }
+
+    .screen-action-browser {
+        grid-template-columns: 1fr;
+    }
+}
+/* Task 39 secondary modal action */
+.screen-action-secondary {
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #8f8f8f;
+    border-radius: 3px;
+    background: #f4f4f4;
+    color: #111;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.screen-action-secondary:hover:not(:disabled) {
+    background: #e7e7e7;
+}
+
+.screen-action-secondary:disabled {
+    opacity: 0.55;
+    cursor: default;
+}

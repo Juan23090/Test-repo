@@ -1,0 +1,55 @@
+.public-faq-page {
+    width: min(920px, calc(100% - 2rem));
+    margin: 1.5rem auto 3rem;
+}
+
+.public-faq-search-label {
+    display: block;
+    margin: 1.2rem 0 0.35rem;
+    font-weight: 700;
+}
+
+.public-faq-search {
+    width: 100%;
+    max-width: 560px;
+    padding: 0.65rem;
+    border: 1px solid #999;
+    border-radius: 3px;
+    font: inherit;
+}
+
+.public-faq-group {
+    margin-top: 1.8rem;
+}
+
+.public-faq-item {
+    margin: 0.55rem 0;
+    border: 1px solid #c8c8c8;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.public-faq-item summary {
+    padding: 0.8rem 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.public-faq-answer {
+    padding: 0 0.9rem 0.9rem;
+    white-space: pre-wrap;
+}
+
+.public-faq-error {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #b85b5b;
+    background: #fff0f0;
+}
+
+.public-faq-published-frame {
+    width: 100%;
+    min-height: 72vh;
+    border: 0;
+    background: #fff;
+}

@@ -1,0 +1,450 @@
+@page "/send-referrals"
+@page "/organization/send-referrals"
+@attribute [Authorize]
+@inject IReferralClientService ReferralService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Send Referrals - Email Money App</PageTitle>
+
+<div class="ema-page-container send-referrals-page">
+    <div class="referrals-shell">
+        <!-- Top Shell Header -->
+        <div class="shell-header">
+            <div class="shell-title-group">
+                <span class="shell-org-name">@(_sessionOrgName)</span>
+                <h1 class="shell-title">Send Referral Invitations</h1>
+            </div>
+            <div class="shell-header-actions">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm header-link-btn"
+                        @onclick='() => Navigation.NavigateTo("/referral-program")'>
+                    &larr; Referral Program
+                </button>
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm header-link-btn"
+                        @onclick='() => Navigation.NavigateTo("/referral-details")'>
+                    View Referral History &amp; Credits
+                </button>
+            </div>
+        </div>
+
+        <div class="shell-body">
+            <p class="shell-intro">
+                Invite fellow Canadian non-profits to EMA. When a referred organization completes their first monthly billing cycle, both of your organizations receive an invoice credit equal to the lower of the two invoices.
+            </p>
+
+            @if (_isLoading)
+            {
+                <div class="loading-state">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Checking referral program status...</p>
+                </div>
+            }
+            else if (_eligibility is not null && !_eligibility.IsEligible)
+            {
+                <!-- Ineligibility Notice -->
+                <div class="eligibility-notice-box" role="alert">
+                    <div class="notice-header">
+                        <h4 class="notice-title">Referral Program Eligibility Notice</h4>
+                    </div>
+                    <div class="notice-body">
+                        <p>
+                            Organizations may participate in the referral program once they have used EMA for at least <strong>14 days</strong> and have processed donations during that period.
+                        </p>
+                        <div class="metrics-pill-row">
+                            <div class="metric-chip @(_eligibility.DaysActive >= 14 ? "is-complete" : "is-pending")">
+                                <span class="chip-status">@(_eligibility.DaysActive >= 14 ? "✓" : "○")</span>
+                                <span>Active Days: <strong>@_eligibility.DaysActive / 14</strong></span>
+                            </div>
+                            <div class="metric-chip @(_eligibility.DonationCount > 0 ? "is-complete" : "is-pending")">
+                                <span class="chip-status">@(_eligibility.DonationCount > 0 ? "✓" : "○")</span>
+                                <span>Donations Recorded: <strong>@_eligibility.DonationCount</strong></span>
+                            </div>
+                        </div>
+                        <p class="notice-footer-text">
+                            @_eligibility.Reason
+                        </p>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <!-- Active Composer -->
+                <div class="composer-container">
+                    <!-- 1. Personal Preface Section -->
+                    <div class="composer-section">
+                        <div class="composer-title-row">
+                            <label for="prefaceText" class="composer-label">Your personal preface for the email (click to edit):</label>
+                        </div>
+                        <div class="preface-container-box">
+                            <div class="preface-greeting-header">
+                                Hi &lt;Greeting as above&gt;
+                            </div>
+                            <textarea id="prefaceText"
+                                      class="preface-textarea-seamless"
+                                      rows="7"
+                                      @bind="_prefaceText"
+                                      placeholder="Add your personal greeting or recommendation note..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- 2. Non-Editable Standard Email Message Section -->
+                    <div class="composer-section">
+                        <div class="composer-title-row">
+                            <span class="composer-label">Email Message (not editable):</span>
+                        </div>
+                        <div class="email-message-container-box">
+                            <p class="email-lead-line"><strong>@ParsedEmailMessage.LeadTitle</strong></p>
+                            <ul class="email-bullet-list">
+                                @foreach (var bullet in ParsedEmailMessage.Bullets)
+                                {
+                                    <li>@bullet</li>
+                                }
+                            </ul>
+                            @foreach (var paragraph in ParsedEmailMessage.TrailingParagraphs)
+                            {
+                                <p class="email-message-p">@paragraph</p>
+                            }
+                            <p class="email-message-p email-link-p">
+                                <a href="https://emailmoney.app/organization-signup" target="_blank" rel="noopener noreferrer" class="email-buzz-link"><u><strong>Click here to see what the buzz is about.</strong></u></a>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- 3. Multi-Row Recipients Table -->
+                    <div class="composer-section">
+                        <div class="section-heading">
+                            <div>
+                                <label class="section-title">Organizations to Invite</label>
+                                <span class="section-subtitle">
+                                    Please ensure you have received permission from each organization to share their contact information.
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="table-wrap">
+                            <table class="ema-data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 32%;">Organization Name *</th>
+                                        <th style="width: 28%;">Contact / Greeting Name</th>
+                                        <th style="width: 34%;">Email Address *</th>
+                                        <th style="width: 6%; text-align: center;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < _recipients.Count; i++)
+                                    {
+                                        var index = i;
+                                        var recipient = _recipients[index];
+                                        <tr>
+                                            <td>
+                                                <input type="text"
+                                                       class="form-control form-control-sm ema-input"
+                                                       placeholder="e.g. Hope Community Church"
+                                                       @bind="recipient.OrganizationName"
+                                                       @bind:event="oninput" />
+                                            </td>
+                                            <td>
+                                                <input type="text"
+                                                       class="form-control form-control-sm ema-input"
+                                                       placeholder="e.g. Pastor John"
+                                                       @bind="recipient.ContactName"
+                                                       @bind:event="oninput" />
+                                            </td>
+                                            <td>
+                                                <input type="email"
+                                                       class="form-control form-control-sm ema-input @(GetEmailInputClass(recipient.EmailAddress))"
+                                                       placeholder="e.g. office@hopecommunity.ca"
+                                                       @bind="recipient.EmailAddress"
+                                                       @bind:event="oninput" />
+                                            </td>
+                                            <td class="text-center">
+                                                @if (_recipients.Count > 1)
+                                                {
+                                                    <button type="button"
+                                                            class="btn-delete-row"
+                                                            title="Remove row"
+                                                            @onclick="() => RemoveRow(index)">
+                                                        ✕
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="table-actions-row">
+                            <button type="button"
+                                    class="btn btn-secondary btn-sm btn-add-recipient"
+                                    @onclick="AddRow">
+                                + Add Another Recipient
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Status Alert Banner -->
+                    @if (!string.IsNullOrWhiteSpace(_statusMessage))
+                    {
+                        <div class="alert @(_isSuccessAlert ? "alert-success" : "alert-danger") alert-dismissible fade show mt-3" role="alert">
+                            @_statusMessage
+                            <button type="button" class="btn-close" @onclick="() => _statusMessage = null" aria-label="Close"></button>
+                        </div>
+                    }
+
+                    <!-- Submit Actions -->
+                    <div class="submit-bar">
+                        <button type="button"
+                                class="btn btn-primary btn-submit-referrals"
+                                disabled="@(_isSubmitting || !HasValidRows())"
+                                @onclick="SendReferralsAsync">
+                            @if (_isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <span>Sending Invitations...</span>
+                            }
+                            else
+                            {
+                                <span>Send All Referral Invitations (@(GetValidRowCount()))</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+
+            <!-- 4. Referral History Section -->
+            @if (_summary is not null && _summary.History.Count > 0)
+            {
+                <div class="history-panel mt-4">
+                    <div class="history-header-bar">
+                        <h3 class="history-title">Referral History</h3>
+                        <div class="history-metrics-group">
+                            <span class="metric-tag">Sent: <strong>@_summary.TotalSent</strong></span>
+                            <span class="metric-tag">Accepted: <strong>@_summary.TotalAccepted</strong></span>
+                            <span class="metric-tag">Credited: <strong>@_summary.TotalCredited</strong></span>
+                            <span class="metric-tag highlight">Balance: <strong>$@_summary.AccumulatedCreditBalance.ToString("N2")</strong></span>
+                        </div>
+                    </div>
+
+                    <ReferralHistoryTable Items="_summary.History" />
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private bool _isSubmitting = false;
+    private string _prefaceText = string.Empty;
+    private string? _statusMessage;
+    private bool _isSuccessAlert = true;
+    private string _sessionOrgName = "Organization";
+    private int _orgID;
+
+    private ReferralEligibilityDto? _eligibility;
+    private ReferralSummaryDto? _summary;
+    private readonly List<SendReferralRecipientDto> _recipients = new();
+
+    private record EmailMessageSection(string LeadTitle, List<string> Bullets, List<string> TrailingParagraphs);
+
+    private EmailMessageSection ParsedEmailMessage
+    {
+        get
+        {
+            var body = _eligibility?.EmailBody;
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return new EmailMessageSection(
+                    "Why we think Email Money App is worth a look:",
+                    new List<string>
+                    {
+                        "EMA automatically records Interac e-Transfers and Pre-Authorized Debits (PADs) straight into your donation database.",
+                        "$1.00 per e-Transfer or PAD, which is far lower than typical credit-card fees (2.2–2.9% + 30¢) or CanadaHelps at 4% or more.",
+                        "One-month sandbox trial with absolutely no contact information required (no email, no phone)",
+                        "Easy to start — import your own donor data or have EMA assist with the conversion for a small one-time fee",
+                        "Built specifically for Canadian churches and non-profits"
+                    },
+                    new List<string>
+                    {
+                        "If your organization becomes an EMA customer, both of our organizations will receive a one-month EMA credit, based on the smaller organization's monthly EMA fee.",
+                        "PS – EMA will not use the name or email gathered for this message to market directly to you."
+                    });
+            }
+
+            var lines = body.ReplaceLineEndings("\n").Split('\n');
+            string lead = string.Empty;
+            var bullets = new List<string>();
+            var trailing = new List<string>();
+
+            foreach (var rawLine in lines)
+            {
+                var line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                if (line.StartsWith("•") || line.StartsWith("-"))
+                {
+                    bullets.Add(line.TrimStart('•', '-', ' ').Trim());
+                }
+                else if (bullets.Count == 0)
+                {
+                    lead = line;
+                }
+                else
+                {
+                    trailing.Add(line);
+                }
+            }
+
+            return new EmailMessageSection(
+                string.IsNullOrWhiteSpace(lead) ? "Why we think Email Money App is worth a look:" : lead,
+                bullets,
+                trailing);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        _sessionOrgName = SessionState.CurrentSession?.OrganizationName ?? "Your Organization";
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        _statusMessage = null;
+
+        if (_orgID <= 0)
+        {
+            _statusMessage = "Your session has expired. Please sign in again.";
+            _isSuccessAlert = false;
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            _eligibility = await ReferralService.GetEligibilityAsync(_orgID);
+            _summary = await ReferralService.GetReferralHistoryAsync(_orgID);
+
+            if (_eligibility is null)
+            {
+                _statusMessage = "Unable to load referral data. Please refresh.";
+                _isSuccessAlert = false;
+            }
+            else
+            {
+                _prefaceText = _eligibility.DefaultPreface;
+            }
+
+            if (_recipients.Count == 0)
+            {
+                AddRow();
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void AddRow()
+    {
+        if (_recipients.Count >= ReferralLimits.MaxRecipientsPerBatch)
+        {
+            _statusMessage = $"A single submission is limited to {ReferralLimits.MaxRecipientsPerBatch} recipients.";
+            _isSuccessAlert = false;
+            return;
+        }
+
+        _recipients.Add(new SendReferralRecipientDto());
+    }
+
+    private void RemoveRow(int index)
+    {
+        if (index >= 0 && index < _recipients.Count && _recipients.Count > 1)
+        {
+            _recipients.RemoveAt(index);
+        }
+    }
+
+    private bool HasValidRows() => GetValidRowCount() > 0;
+
+    private int GetValidRowCount() => ValidRecipients().Count;
+
+    private List<SendReferralRecipientDto> ValidRecipients() =>
+        _recipients
+            .Where(r => !string.IsNullOrWhiteSpace(r.OrganizationName)
+                        && ReferralEmail.IsValidFormat(r.EmailAddress))
+            .ToList();
+
+    private static string GetEmailInputClass(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return "";
+        return ReferralEmail.IsValidFormat(email) ? "is-valid" : "is-invalid";
+    }
+
+    private async Task SendReferralsAsync()
+    {
+        var validRecipients = ValidRecipients();
+
+        if (validRecipients.Count == 0)
+        {
+            _statusMessage = "Please complete at least one valid organization row.";
+            _isSuccessAlert = false;
+            return;
+        }
+
+        _isSubmitting = true;
+        _statusMessage = null;
+
+        try
+        {
+            var request = new SendReferralsRequest
+            {
+                PrefaceText = _prefaceText,
+                Recipients = validRecipients
+            };
+
+            var result = await ReferralService.SendBatchReferralsAsync(_orgID, request);
+
+            if (result is null)
+            {
+                _isSuccessAlert = false;
+                _statusMessage = "We could not reach the server. Please try again.";
+                return;
+            }
+
+            if (result.SentCount > 0)
+            {
+                _isSuccessAlert = true;
+                _statusMessage = $"Successfully sent {result.SentCount} referral invitation(s)!";
+
+                if (result.FailedCount > 0)
+                {
+                    _statusMessage += $" ({result.FailedCount} could not be sent.)";
+                }
+
+                _recipients.Clear();
+                AddRow();
+
+                _summary = await ReferralService.GetReferralHistoryAsync(_orgID);
+            }
+            else
+            {
+                _isSuccessAlert = false;
+                _statusMessage = result.Results.FirstOrDefault(r => !r.IsSuccess)?.ErrorMessage
+                    ?? "Failed to send referral invitations. Please review recipient details.";
+            }
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

@@ -1,0 +1,132 @@
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    min-height: 100vh;
+    background: #dcdcdc;
+}
+
+a {
+    color: #1d3fd1;
+}
+
+#blazor-error-ui {
+    background: #fff3cd;
+    bottom: 0;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
+
+
+/* BEGIN: Ready to Get Started page */
+.ready-started-page {
+    width: min(1120px, calc(100% - 2rem));
+    margin: 0.25rem auto 3rem;
+    font-family: var(--ema-ui-font, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif);
+}
+
+.ready-started-header {
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.ready-started-column-labels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    font-size: clamp(1rem, 2vw, 1.35rem);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.ready-started-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.ready-started-card {
+    display: flex;
+    min-height: 310px;
+    flex-direction: column;
+    padding: 1.4rem;
+    border: 1px solid #8d8d8d;
+    background: #f3f3f3;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 9%);
+}
+
+.ready-started-kicker {
+    margin: 0 0 0.35rem;
+    color: #555;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.ready-started-card h2 {
+    margin: 0 0 0.85rem;
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    line-height: 1.15;
+}
+
+.ready-started-card p {
+    line-height: 1.55;
+}
+
+.ready-started-action {
+    display: flex;
+    min-height: 3rem;
+    align-items: center;
+    justify-content: center;
+    margin-top: auto;
+    padding: 0.7rem 1rem;
+    border: 1px solid #606060;
+    background: #e3e3e3;
+    color: #000;
+    text-align: center;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.ready-started-action:hover,
+.ready-started-action:focus-visible {
+    background: #d5d5d5;
+}
+
+.ready-started-security-note {
+    margin: 1rem auto 0;
+    color: #444;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+    .ready-started-column-labels {
+        display: none;
+    }
+
+    .ready-started-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ready-started-card {
+        min-height: 0;
+    }
+}
+/* END: Ready to Get Started page */

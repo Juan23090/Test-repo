@@ -1,0 +1,80 @@
+@page "/ready-to-get-started"
+
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@using Microsoft.AspNetCore.Authorization
+
+<PageTitle>Ready to Get Started? - EMA</PageTitle>
+
+<section class="ready-started-page">
+    <header class="ready-started-header">
+        <div class="ready-started-column-labels"
+             aria-hidden="true">
+            <span>Explore</span>
+            <span>Implement</span>
+        </div>
+    </header>
+
+    <div class="ready-started-grid">
+        <article class="ready-started-card">
+            <p class="ready-started-kicker">Explore</p>
+            <h2>Sandbox</h2>
+            <p>
+                Poke around in your own private workspace with realistic dummy data.
+                No registration is needed for the first 30 days, and you can keep using
+                the sandbox for free while you explore EMA's features.
+            </p>
+            <a class="ready-started-action"
+               href="/explore-ema-instantly">
+                Click Here To Try the Sandbox
+            </a>
+        </article>
+
+        <article class="ready-started-card">
+            <p class="ready-started-kicker">Implement</p>
+            <h2>Do The Setup Yourself</h2>
+            <p>
+                Migrate your own information and configure EMA yourself. Reach out
+                when you are ready for help. Your first 30 days after the first
+                donation are free.
+            </p>
+            <a class="ready-started-action"
+               href="/book-a-demo?source=Production%20Setup%20on%20Own&amp;status=40">
+                Click Here To Do The Setup Yourself
+            </a>
+        </article>
+
+        <article class="ready-started-card">
+            <p class="ready-started-kicker">Explore</p>
+            <h2>Full Data Trial</h2>
+            <p>
+                Import your own information and explore the full analytics experience.
+                Trial data can be anonymized with dummy values, and you can evaluate
+                EMA for 30 days before deciding to implement.
+            </p>
+            <a class="ready-started-action"
+               href="/book-a-demo?source=Full%20Data%20Trial&amp;status=30">
+                Click Here For Full Data Trial
+            </a>
+        </article>
+
+        <article class="ready-started-card">
+            <p class="ready-started-kicker">Implement</p>
+            <h2>Have Us Do The Setup For You</h2>
+            <p>
+                Have the EMA team migrate your information and configure the system.
+                Contact us to arrange the setup. The first 30 days after your first
+                donation are free, with a $250 setup fee after the second month.
+            </p>
+            <a class="ready-started-action"
+               href="/book-a-demo?source=Production%20Setup%20for%20You&amp;status=50">
+                Click Here For White Glove Treatment
+            </a>
+        </article>
+    </div>
+
+    <p class="ready-started-security-note">
+        Choose the path that fits your organization. We will collect the setup details on the next screen.
+    </p>
+</section>

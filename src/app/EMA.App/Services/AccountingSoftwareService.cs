@@ -1,0 +1,29 @@
+﻿using System.Net.Http.Json;
+using EMA.App.Models;
+
+namespace EMA.App.Services;
+
+public class AccountingSoftwareService : IAccountingSoftwareService
+{
+    private const string ApiBase = "/api";
+    private readonly HttpClient _http;
+
+    public AccountingSoftwareService(HttpClient http)
+    {
+        _http = http;
+    }
+
+    public async Task<List<AccountingSoftwareSummary>> GetAccountingSoftwareAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<AccountingSoftwareSummary>>(
+                $"{ApiBase}/accounting-software",
+                cancellationToken) ?? new List<AccountingSoftwareSummary>();
+        }
+        catch
+        {
+            return new List<AccountingSoftwareSummary>();
+        }
+    }
+}

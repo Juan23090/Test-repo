@@ -1,0 +1,247 @@
+@page "/my-tax-receipts"
+
+@using EMA.App.Services
+@inject IUserSessionStateService SessionState
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>My Tax Receipts - EMA</PageTitle>
+
+<DonorPortalShell Title="My Tax Receipts" Description="View and print your official year-end tax receipts.">
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-warning py-2 mb-3"><small>@_error</small></div>
+    }
+
+    @if (_loading)
+    {
+        <p class="text-muted"><small>Loading your receipts…</small></p>
+    }
+    else if (_receipts.Count == 0)
+    {
+        <p class="text-muted fst-italic">You don't have any official tax receipts yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Tax Year</th>
+                    <th>Receipt #</th>
+                    <th>Date Issued</th>
+                    <th class="text-end">Total</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var receipt in _receipts)
+                {
+                    <tr>
+                        <td>@receipt.YearEnding</td>
+                        <td>@receipt.ReceiptID</td>
+                        <td>@receipt.DateIssued</td>
+                        <td class="text-end">@receipt.TotalAmount.ToString("C", System.Globalization.CultureInfo.GetCultureInfo("en-CA"))</td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-primary"
+                                    @onclick="() => DownloadOfficialReceiptAsync(receipt)"
+                                    disabled="@(_downloadingReceiptID == receipt.ReceiptID)">
+                                @(_downloadingReceiptID == receipt.ReceiptID ? "Preparing…" : "Download Official Receipt")
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+</DonorPortalShell>
+
+@code {
+    private int _donorID;
+    private int _orgID;
+
+    private List<DonorReceiptSummary> _receipts = new();
+    private bool _loading = true;
+    private string? _error;
+    private long? _downloadingReceiptID;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        // Donor-only page: require a logged-in donor session.
+        if (SessionState.CurrentSession is not { IsDonorSession: true, DonorID: { } donorId } session)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        _donorID = donorId;
+        _orgID = session.EMAOrganizationID;
+
+        await LoadReceiptsAsync();
+    }
+
+    private async Task LoadReceiptsAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _receipts = await Http.GetFromJsonAsync<List<DonorReceiptSummary>>(
+                $"/api/reports/year-end-receipt/donor/{_orgID}/{_donorID}") ?? new();
+        }
+        catch
+        {
+            _error = "Could not load your receipts. Please try again later.";
+            _receipts = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DownloadOfficialReceiptAsync(DonorReceiptSummary receipt)
+    {
+        _downloadingReceiptID = receipt.ReceiptID;
+        _error = null;
+        try
+        {
+            // Pull the full receipt data (org details, gifts, receipt number) for this donor's tax year,
+            // then render it through the shared official-receipt PDF endpoint.
+            // Pass receiptID so the preview returns exactly this receipt's stamped donations
+            // (regardless of date); startDate/endDate are still required by the endpoint but ignored.
+            var startDate = $"{receipt.YearEnding:D4}-01-01";
+            var preview = await Http.GetFromJsonAsync<PreviewBatchResponse>(
+                $"/api/reports/year-end-receipt/preview?EMAOrganizationID={_orgID}&donorID={_donorID}" +
+                $"&receiptID={receipt.ReceiptID}&startDate={startDate}&endDate={receipt.YearEndingDate}");
+
+            var donor = preview?.Donors?.FirstOrDefault();
+            if (preview is null || donor is null || string.IsNullOrWhiteSpace(donor.ReceiptNumber))
+            {
+                _error = "That receipt's details could not be loaded.";
+                return;
+            }
+
+            var payload = new PdfRequest
+            {
+                OrganizationName = preview.OrganizationName,
+                OrganizationAddressLine = preview.OrganizationAddressLine,
+                OrganizationContactLine = preview.OrganizationContactLine,
+                RegistrationNumber = preview.OrganizationRegistrationNumber,
+                DateText = preview.DateText,
+                RecipientName = donor.RecipientName,
+                LetterBody = preview.OfficialLetterBody,
+                DonorAddress = donor.DonorAddress,
+                ReceiptNumber = donor.ReceiptNumber,
+                YearReceived = donor.YearReceived,
+                DateReceipted = donor.DateReceipted,
+                ReceiptIssuedIn = donor.ReceiptIssuedIn,
+                UniqueIdentifier = donor.UniqueIdentifier,
+                DonationAmount = donor.DonationAmount,
+                Mode = "official",
+                ReceiptFooterText = preview.ReceiptFooterText,
+                LetterSignatureGraphic = preview.LetterSignatureGraphic,
+                LetterSignatureTitle = preview.LetterSignatureTitle,
+                ReceiptSignatureGraphic = preview.ReceiptSignatureGraphic,
+                ReceiptSignatureTitle = preview.ReceiptSignatureTitle,
+                Gifts = donor.Gifts,
+                FileName = $"tax-receipt-{receipt.YearEnding}-{donor.ReceiptNumber}.pdf"
+            };
+
+            using var response = await Http.PostAsJsonAsync("/api/reports/year-end-receipt/pdf", payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                _error = $"Could not generate the receipt PDF (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+            await module.InvokeVoidAsync("downloadFileFromBase64", payload.FileName, "application/pdf", base64);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Could not download the receipt. {ex.Message}";
+        }
+        finally
+        {
+            _downloadingReceiptID = null;
+        }
+    }
+
+    private sealed class DonorReceiptSummary
+    {
+        public long ReceiptID { get; set; }
+        public int YearEnding { get; set; }
+        public string YearEndingDate { get; set; } = string.Empty;
+        public string DateIssued { get; set; } = string.Empty;
+        public decimal TotalAmount { get; set; }
+    }
+
+    private sealed class PreviewBatchResponse
+    {
+        public string OrganizationName { get; set; } = string.Empty;
+        public string OrganizationAddressLine { get; set; } = string.Empty;
+        public string OrganizationContactLine { get; set; } = string.Empty;
+        public string OrganizationRegistrationNumber { get; set; } = string.Empty;
+        public string DateText { get; set; } = string.Empty;
+        public string OfficialLetterBody { get; set; } = string.Empty;
+        public byte[]? LetterSignatureGraphic { get; set; }
+        public string LetterSignatureTitle { get; set; } = string.Empty;
+        public byte[]? ReceiptSignatureGraphic { get; set; }
+        public string ReceiptSignatureTitle { get; set; } = string.Empty;
+        public string ReceiptFooterText { get; set; } = string.Empty;
+        public List<PreviewDonor> Donors { get; set; } = new();
+    }
+
+    private sealed class PreviewDonor
+    {
+        public string RecipientName { get; set; } = string.Empty;
+        public string DonorAddress { get; set; } = string.Empty;
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string YearReceived { get; set; } = string.Empty;
+        public string DateReceipted { get; set; } = string.Empty;
+        public string ReceiptIssuedIn { get; set; } = string.Empty;
+        public string UniqueIdentifier { get; set; } = string.Empty;
+        public decimal DonationAmount { get; set; }
+        public List<GiftRow> Gifts { get; set; } = new();
+    }
+
+    private sealed class GiftRow
+    {
+        public string Date { get; set; } = string.Empty;
+        public string Fund { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
+
+    private sealed class PdfRequest
+    {
+        public string OrganizationName { get; set; } = string.Empty;
+        public string OrganizationAddressLine { get; set; } = string.Empty;
+        public string OrganizationContactLine { get; set; } = string.Empty;
+        public string RegistrationNumber { get; set; } = string.Empty;
+        public string DateText { get; set; } = string.Empty;
+        public string RecipientName { get; set; } = string.Empty;
+        public string LetterBody { get; set; } = string.Empty;
+        public string DonorAddress { get; set; } = string.Empty;
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string YearReceived { get; set; } = string.Empty;
+        public string DateReceipted { get; set; } = string.Empty;
+        public string ReceiptIssuedIn { get; set; } = string.Empty;
+        public string UniqueIdentifier { get; set; } = string.Empty;
+        public decimal DonationAmount { get; set; }
+        public string Mode { get; set; } = "official";
+        public string ReceiptFooterText { get; set; } = string.Empty;
+        public byte[]? LetterSignatureGraphic { get; set; }
+        public string LetterSignatureTitle { get; set; } = string.Empty;
+        public byte[]? ReceiptSignatureGraphic { get; set; }
+        public string ReceiptSignatureTitle { get; set; } = string.Empty;
+        public List<GiftRow> Gifts { get; set; } = new();
+        public string FileName { get; set; } = "tax-receipt.pdf";
+    }
+}

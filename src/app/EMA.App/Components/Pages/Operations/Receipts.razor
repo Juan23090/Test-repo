@@ -1,0 +1,841 @@
+@page "/year-end-receipts"
+
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+
+<div class="receipts-page">
+    <nav class="sub-nav" aria-label="Report type navigation">
+    </nav>
+
+    <main class="receipts-shell" aria-label="Year End receipts layout">
+        <div class="howto-banner">Before your Start ... Click here to list to our audio recording on how receipts work.</div>
+
+        <section class="date-row" aria-label="Summary filters">
+            <label>Year:</label>
+            <select class="date-box" @bind="SelectedYear">
+                @foreach (var year in AvailableYears)
+                {
+                    <option value="@year">@year</option>
+                }
+            </select>
+
+            <button type="button" class="calc-btn" @onclick="Calculate" disabled="@IsCalculating">
+                @(IsCalculating ? "Calculating..." : "Calculate")
+            </button>
+
+            <button type="button" class="calc-btn" @onclick="AssignOfficialReceipts"
+                    title="Records official receipt numbers for the outstanding donations of every donor marked official."
+                    disabled="@(IsAssigning || IsCalculating || !CanAssign || !CanIssueOfficial)">
+                @(IsAssigning ? "Assigning..." : "Assign Official Receipts #s")
+            </button>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(CalculationMessage))
+        {
+            <div class="calc-status @(CalculationHasError ? "error" : "success")">@CalculationMessage</div>
+        }
+
+        @if (PreviewLoaded && !CanIssueOfficial)
+        {
+            <div class="receipt-warning">
+                Official receipts are blocked until your organization provides:
+                <strong>@string.Join(", ", MissingOfficialRequirements())</strong>.
+                The CRA requires these on official donation receipts — set them in
+                <a href="/organization-info">Organization Info</a>. (Unofficial receipts are still available.)
+            </div>
+        }
+
+        @if (DonorReceipts.Count > 0)
+        {
+            <section class="page-summary" aria-label="Receipt totals">
+                <div class="page-summary-corner"></div>
+                <div class="page-summary-head">Number</div>
+                <div class="page-summary-head">Value</div>
+
+                <div class="page-summary-label">Official</div>
+                <div class="page-summary-count">@TotalOfficialCount</div>
+                <div class="page-summary-value">@FormatCurrency(TotalOfficialAmount)</div>
+
+                <div class="page-summary-label">Unofficial</div>
+                <div class="page-summary-count">@TotalUnofficialCount</div>
+                <div class="page-summary-value">@FormatCurrency(TotalUnofficialAmount)</div>
+            </section>
+        }
+
+        @foreach (var donor in DonorReceipts)
+        {
+            <section class="donor-receipt-shell">
+                <div class="calc-status donor-name">Donor: @donor.RecipientName</div>
+
+                <section class="letter-actions">
+                    <div class="letter-btn">Preview the official tax receipt</div>
+                    <label class="top-checkbox" aria-label="Official letter mode">
+                        <input type="checkbox" checked="@donor.IsOfficialLetterSelected" @onchange="(args => OnOfficialCheckboxChanged(donor, args))" />
+                    </label>
+
+                    <div class="letter-btn">Preview the unofficial tax receipt</div>
+                    <label class="top-checkbox" aria-label="Unofficial letter mode">
+                        <input type="checkbox" checked="@donor.IsUnofficialLetterSelected" @onchange="(args => OnUnofficialCheckboxChanged(donor, args))" />
+                    </label>
+                </section>
+
+                <section class="letter-box">
+                    <article class="letter-paper" aria-label="Letter preview">
+                        <header class="paper-header">
+                            <h2>@OrganizationName</h2>
+                            <p>@OrganizationAddress</p>
+                            <p>@OrganizationWebsite &nbsp; • &nbsp; @OrganizationPhone &nbsp; • &nbsp; @OrganizationEmail</p>
+                            @if (!string.IsNullOrWhiteSpace(RegistrationNumber))
+                            {
+                                <p>Charity Registration Number: @RegistrationNumber</p>
+                            }
+                        </header>
+
+                        <p class="paper-date">@FormatDate(LetterDateText)</p>
+                        <p class="paper-salute">Dear @donor.RecipientName</p>
+
+                        @if (donor.IsOfficialLetterSelected)
+                        {
+                            <div class="paper-body" aria-label="Official letter">
+                                @OfficialLetterBody
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="paper-body" aria-label="Unofficial letter">
+                                @UnofficialLetterBody
+                            </div>
+                        }
+
+                        <p>Sincerely,</p>
+
+                        <section class="signatures-grid">
+                            <div class="label-cell">Letter<br />Signature</div>
+                            <div class="value-input signature-value" aria-label="Letter signature">
+                                @if (!string.IsNullOrWhiteSpace(LetterSignatureGraphicSource))
+                                {
+                                    <img src="@LetterSignatureGraphicSource" alt="Letter signature" class="signature-image" />
+                                }
+                            </div>
+
+                            <div class="label-cell">Receipt<br />Signature</div>
+                            <div class="value-input signature-value" aria-label="Receipt signature">
+                                @if (!string.IsNullOrWhiteSpace(ReceiptSignatureGraphicSource))
+                                {
+                                    <img src="@ReceiptSignatureGraphicSource" alt="Receipt signature" class="signature-image" />
+                                }
+                            </div>
+
+                            <div class="label-cell">Title</div>
+                            <div class="value-input signature-title-value" aria-label="Letter signer title">@LetterSignatureTitle</div>
+
+                            <div class="label-cell">Title</div>
+                            <div class="value-input signature-title-value" aria-label="Receipt signer title">@ReceiptSignatureTitle</div>
+                        </section>
+
+                        <section class="paper-receipt">
+                            <div class="receipt-left">
+                                <p class="receipt-field-title">Donor Address</p>
+                                <p class="receipt-field-value">@donor.DonorAddress</p>
+                            </div>
+
+                            <div class="receipt-right">
+                                @if (donor.IsUnofficialLetterSelected)
+                                {
+                                    <p><span class="receipt-field-value-inline">(Unofficial Receipt)</span></p>
+                                }
+                                else
+                                {
+                                    <p><span class="receipt-field-title-inline">RECEIPT #</span> <span class="receipt-field-value-inline">@donor.ReceiptNumber</span></p>
+                                }
+                                <p><span class="receipt-field-title-inline">Year Received:</span> <span class="receipt-field-value-inline">@donor.YearReceived</span></p>
+                                <p><span class="receipt-field-title-inline">Date Receipted:</span> <span class="receipt-field-value-inline">@FormatDate(donor.DateReceipted)</span></p>
+                                @if (!donor.IsUnofficialLetterSelected && !string.IsNullOrWhiteSpace(donor.ReceiptIssuedIn))
+                                {
+                                    <p><span class="receipt-field-title-inline">Receipt issued in:</span> <span class="receipt-field-value-inline">@donor.ReceiptIssuedIn</span></p>
+                                }
+                            </div>
+                        </section>
+
+                        <p class="receipt-footer">@(donor.IsUnofficialLetterSelected ? "(Unofficial Receipt for Gifts From or Via Other Charities)" : ReceiptFooterText)</p>
+                        @if (!donor.IsUnofficialLetterSelected)
+                        {
+                            <p class="receipt-cra-line">Canada Revenue Agency: canada.ca/charities-giving</p>
+                        }
+                    </article>
+
+                    <article class="summary-paper" aria-label="Summary of gifts preview">
+                        <h3>SUMMARY OF GIFTS</h3>
+
+                        <div class="summary-tables">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Fund</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (var i = 0; i < GetSummaryRowsPerTable(donor); i++)
+                                    {
+                                        var row = GetLeftSummaryRow(donor, i);
+
+                                        <tr>
+                                            <td class="summary-date-cell">@GetSummaryDate(row)</td>
+                                            <td>@(row?.Fund ?? string.Empty)</td>
+                                            <td class="summary-amount-cell">@GetSummaryAmount(row)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Fund</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (var i = 0; i < GetSummaryRowsPerTable(donor); i++)
+                                    {
+                                        var row = GetRightSummaryRow(donor, i);
+
+                                        <tr>
+                                            <td class="summary-date-cell">@GetSummaryDate(row)</td>
+                                            <td>@(row?.Fund ?? string.Empty)</td>
+                                            <td class="summary-amount-cell">@GetSummaryAmount(row)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </article>
+                </section>
+
+                @if (!string.IsNullOrWhiteSpace(donor.PdfMessage))
+                {
+                    <div class="calc-status @(donor.PdfMessageHasError ? "error" : "success")">@donor.PdfMessage</div>
+                }
+
+                <section class="receipt-grid">
+                    <div class="table-header-spacer"></div>
+                    <div class="mini-head">Number</div>
+                    <div class="mini-head">Value</div>
+
+                    <div class="row-label">Official</div>
+                    <div class="cell-count">@donor.OfficialCount</div>
+                    <div class="cell-value">@FormatCurrency(donor.OfficialAmount)</div>
+
+                    <button type="button" class="print-btn" title="@OfficialDraftTooltip" @onclick="(() => DownloadDraftOfficialReceiptsAsync(donor))" disabled="@(IsDownloadingPdf || !CanIssueOfficial)">
+                        Download Draft Official Receipts
+                    </button>
+
+                    <button type="button" class="print-btn" title="@OfficialReceiptTooltip" @onclick="(() => DownloadOfficialReceiptsAsync(donor))" disabled="@(IsDownloadingPdf || string.IsNullOrWhiteSpace(donor.ReceiptNumber) || !CanIssueOfficial)">
+                        Download Official Receipts
+                    </button>
+
+                    <div class="row-label">Unofficial</div>
+                    <div class="cell-count">@donor.UnofficialCount</div>
+                    <div class="cell-value">@FormatCurrency(donor.UnofficialAmount)</div>
+
+                    <button type="button" class="print-btn full" title="@UnofficialReceiptTooltip" @onclick="(() => DownloadUnofficialReceiptsAsync(donor))" disabled="@IsDownloadingPdf">
+                        Download Unofficial Receipts
+                    </button>
+                </section>
+            </section>
+        }
+    </main>
+</div>
+
+@code {
+    private int OrgID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private string OrganizationName { get; set; } = "Loading organization...";
+    private string OrganizationPhone { get; set; } = string.Empty;
+    private string OrganizationWebsite { get; set; } = string.Empty;
+    private string OrganizationAddress { get; set; } = string.Empty;
+    private string OrganizationEmail { get; set; } = string.Empty;
+
+    private string OfficialLetterBody { get; set; } = string.Empty;
+    private string UnofficialLetterBody { get; set; } = string.Empty;
+    private string LetterDateText { get; set; } = string.Empty;
+    private string ReceiptFooterText { get; set; } = "OFFICIAL RECEIPT FOR INCOME TAX PURPOSES";
+
+    private byte[]? LetterSignatureGraphic { get; set; }
+    private byte[]? ReceiptSignatureGraphic { get; set; }
+    private string LetterSignatureTitle { get; set; } = string.Empty;
+    private string ReceiptSignatureTitle { get; set; } = string.Empty;
+
+    private string RegistrationNumber { get; set; } = string.Empty;
+
+    // CRA-mandatory org details required before official receipts may be issued: issuing
+    // locality (City), the CRA registration number, and an authorized receipt signature.
+    // Any missing → official actions are hard-blocked (mirrored server-side).
+    private string OrganizationIssuedInLocation { get; set; } = string.Empty;
+    private bool HasIssuingLocation => !string.IsNullOrWhiteSpace(OrganizationIssuedInLocation);
+    private bool HasRegistrationNumber => !string.IsNullOrWhiteSpace(RegistrationNumber);
+    private bool HasReceiptSignature => ReceiptSignatureGraphic is { Length: > 0 };
+    private bool CanIssueOfficial => HasIssuingLocation && HasRegistrationNumber && HasReceiptSignature;
+    private bool PreviewLoaded { get; set; }
+
+    private IEnumerable<string> MissingOfficialRequirements()
+    {
+        if (!HasIssuingLocation) yield return "city (issuing location)";
+        if (!HasRegistrationNumber) yield return "CRA registration number";
+        if (!HasReceiptSignature) yield return "authorized receipt signature";
+    }
+
+    // Year-End receipts are generated a year at a time (Roger), defaulting to the previous year.
+    private int SelectedYear { get; set; } = DateTime.Today.Year - 1;
+    private int[] AvailableYears { get; } =
+        Enumerable.Range(0, 6).Select(offset => DateTime.Today.Year - offset).ToArray();
+
+    // The selected year maps to a Jan 1 – Dec 31 range behind the scenes.
+    private DateTime YearStart => new(SelectedYear, 1, 1);
+    private DateTime YearEnd => new(SelectedYear, 12, 31);
+
+    private bool IsCalculating { get; set; }
+    private bool IsAssigning { get; set; }
+    private bool IsDownloadingPdf { get; set; }
+    private bool CalculationHasError { get; set; }
+
+    // Assign is available once a calculation has loaded donors and there is at least one
+    // official donor still without a receipt number (Roger: don't let it run if already created).
+    private bool CanAssign =>
+        DonorReceipts.Any(d => d.IsOfficialLetterSelected && string.IsNullOrWhiteSpace(d.ReceiptNumber));
+
+    // Page-level totals: each donor's gifts count toward Official or Unofficial by their toggle.
+    private int TotalOfficialCount => DonorReceipts.Where(d => d.IsOfficialLetterSelected).Sum(d => d.OfficialCount);
+    private decimal TotalOfficialAmount => DonorReceipts.Where(d => d.IsOfficialLetterSelected).Sum(d => d.OfficialAmount);
+    private int TotalUnofficialCount => DonorReceipts.Where(d => d.IsUnofficialLetterSelected).Sum(d => d.OfficialCount);
+    private decimal TotalUnofficialAmount => DonorReceipts.Where(d => d.IsUnofficialLetterSelected).Sum(d => d.OfficialAmount);
+
+    private string CalculationMessage { get; set; } = string.Empty;
+
+    private List<DonorReceiptPreview> DonorReceipts { get; set; } = new();
+
+    private string OfficialDraftTooltip => "(No Receipt #s)";
+    private string OfficialReceiptTooltip => "(Receipt #s)";
+    private string UnofficialReceiptTooltip => "(Unofficial Receipt)";
+
+    private string? LetterSignatureGraphicSource => GetImageDataUri(LetterSignatureGraphic);
+    private string? ReceiptSignatureGraphicSource => GetImageDataUri(ReceiptSignatureGraphic);
+
+    private string? DateFormatId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        DateFormatId = org?.DateFormatID;
+    }
+
+    private string FormatDate(string? value)
+        => EMA.App.Utilities.OrgDateFormat.Format(value, DateFormatId);
+
+
+    private int GetSummaryRowsPerTable(DonorReceiptPreview donor)
+        => Math.Max(12, (int)Math.Ceiling(donor.SummaryRows.Count / 2.0));
+
+    private SummaryGiftRow? GetLeftSummaryRow(DonorReceiptPreview donor, int rowIndex)
+    {
+        var rowsPerTable = GetSummaryRowsPerTable(donor);
+
+        return rowIndex >= 0 && rowIndex < rowsPerTable && rowIndex < donor.SummaryRows.Count
+            ? donor.SummaryRows[rowIndex]
+            : null;
+    }
+
+    private SummaryGiftRow? GetRightSummaryRow(DonorReceiptPreview donor, int rowIndex)
+    {
+        var rowsPerTable = GetSummaryRowsPerTable(donor);
+        var targetIndex = rowsPerTable + rowIndex;
+
+        return targetIndex >= 0 && targetIndex < donor.SummaryRows.Count
+            ? donor.SummaryRows[targetIndex]
+            : null;
+    }
+
+    private string GetSummaryDate(SummaryGiftRow? row)
+        => FormatDate(row?.Date);
+
+    private static string GetSummaryAmount(SummaryGiftRow? row)
+        => row is null ? string.Empty : $"{row.Amount:C}";
+
+    private void OnOfficialCheckboxChanged(DonorReceiptPreview donor, ChangeEventArgs args)
+    {
+        var isChecked = ParseCheckboxValue(args.Value);
+
+        donor.IsOfficialLetterSelected = isChecked || !donor.IsUnofficialLetterSelected;
+        donor.IsUnofficialLetterSelected = !donor.IsOfficialLetterSelected;
+    }
+
+    private void OnUnofficialCheckboxChanged(DonorReceiptPreview donor, ChangeEventArgs args)
+    {
+        var isChecked = ParseCheckboxValue(args.Value);
+
+        donor.IsUnofficialLetterSelected = isChecked || !donor.IsOfficialLetterSelected;
+        donor.IsOfficialLetterSelected = !donor.IsUnofficialLetterSelected;
+    }
+
+    private static bool ParseCheckboxValue(object? value)
+        => value is bool checkedValue && checkedValue;
+
+    private async Task AssignOfficialReceipts()
+    {
+        if (DonorReceipts.Count == 0)
+            return;
+
+        CalculationMessage = string.Empty;
+        CalculationHasError = false;
+        IsAssigning = true;
+
+        try
+        {
+            var officialDonorIDs = DonorReceipts
+                .Where(d => d.IsOfficialLetterSelected)
+                .Select(d => d.DonorID)
+                .ToList();
+
+            var payload = new
+            {
+                EMAOrganizationID = OrgID,
+                StartDate = YearStart.ToString("yyyy-MM-dd"),
+                EndDate = YearEnd.ToString("yyyy-MM-dd"),
+                DonorIDs = officialDonorIDs
+            };
+
+            using var response = await Http.PostAsJsonAsync("/api/reports/year-end-receipt/assign", payload);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                CalculationHasError = true;
+                CalculationMessage = $"Could not assign receipts. API returned {(int)response.StatusCode} {response.StatusCode}. {errorBody}";
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<AssignReceiptsResponse>();
+            var assignedCount = result?.AssignedCount ?? 0;
+
+            // Reload so the freshly assigned receipt numbers appear on the receipts.
+            await Calculate();
+
+            if (!CalculationHasError)
+            {
+                CalculationMessage = assignedCount > 0
+                    ? $"Assigned {assignedCount} official receipt number{(assignedCount == 1 ? string.Empty : "s")}."
+                    : "No new receipts to assign — all eligible donors were already receipted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            CalculationHasError = true;
+            CalculationMessage = $"Could not assign receipts. {ex.Message}";
+        }
+        finally
+        {
+            IsAssigning = false;
+        }
+    }
+
+    private Task DownloadDraftOfficialReceiptsAsync(DonorReceiptPreview donor)
+        => DownloadPdfAsync(donor, ReceiptPdfMode.DraftOfficial);
+
+    private Task DownloadOfficialReceiptsAsync(DonorReceiptPreview donor)
+        => DownloadPdfAsync(donor, ReceiptPdfMode.Official);
+
+    private Task DownloadUnofficialReceiptsAsync(DonorReceiptPreview donor)
+        => DownloadPdfAsync(donor, ReceiptPdfMode.Unofficial);
+
+    private async Task DownloadPdfAsync(DonorReceiptPreview donor, ReceiptPdfMode mode)
+    {
+        donor.PdfMessage = string.Empty;
+        donor.PdfMessageHasError = false;
+        IsDownloadingPdf = true;
+
+        try
+        {
+            if (donor.SummaryRows.Count == 0 || string.IsNullOrWhiteSpace(donor.RecipientName))
+            {
+                donor.PdfMessageHasError = true;
+                donor.PdfMessage = "This donor has no gifts loaded to create a PDF.";
+                return;
+            }
+
+            var payload = BuildPdfRequest(mode, donor);
+
+            using var response = await Http.PostAsJsonAsync("/api/reports/year-end-receipt/pdf", payload);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+
+                donor.PdfMessageHasError = true;
+                donor.PdfMessage = $"Could not generate PDF. API returned {(int)response.StatusCode} {response.StatusCode}. {errorBody}";
+                return;
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+
+            if (bytes.Length == 0)
+            {
+                donor.PdfMessageHasError = true;
+                donor.PdfMessage = "Could not generate PDF. API returned an empty file.";
+                return;
+            }
+
+            var fileName = GetFileNameFromResponse(response) ?? payload.FileName ?? "ye-receipt.pdf";
+            var base64 = Convert.ToBase64String(bytes);
+
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./pdfDownload.js");
+            await module.InvokeVoidAsync("downloadFileFromBase64", fileName, "application/pdf", base64);
+
+            donor.PdfMessage = "PDF generated successfully.";
+        }
+        catch (Exception ex)
+        {
+            donor.PdfMessageHasError = true;
+            donor.PdfMessage = $"Could not generate PDF. {ex.Message}";
+        }
+        finally
+        {
+            IsDownloadingPdf = false;
+        }
+    }
+
+    private YearEndReceiptPdfRequest BuildPdfRequest(ReceiptPdfMode mode, DonorReceiptPreview donor)
+    {
+        var isUnofficial = mode == ReceiptPdfMode.Unofficial;
+
+        // Official receipts use the recorded receipt number as their unique identifier (a real
+        // per-receipt serial), matching the on-screen preview. Draft/unofficial carry none.
+        var uniqueIdentifier = mode == ReceiptPdfMode.Official
+            ? donor.UniqueIdentifier
+            : string.Empty;
+
+        var fileType = mode switch
+        {
+            ReceiptPdfMode.DraftOfficial => "official-draft",
+            ReceiptPdfMode.Official => "official",
+            ReceiptPdfMode.Unofficial => "unofficial",
+            _ => "official-draft"
+        };
+
+        return new YearEndReceiptPdfRequest
+        {
+            OrganizationName = OrganizationName,
+            OrganizationAddressLine = OrganizationAddress,
+            OrganizationContactLine = BuildOrganizationContactLine(),
+            RegistrationNumber = RegistrationNumber,
+            DateText = LetterDateText,
+            RecipientName = donor.RecipientName,
+            LetterBody = isUnofficial ? UnofficialLetterBody : OfficialLetterBody,
+            DonorAddress = donor.DonorAddress,
+            ReceiptNumber = donor.ReceiptNumber,
+            YearReceived = donor.YearReceived,
+            DateReceipted = donor.DateReceipted,
+            ReceiptIssuedIn = donor.ReceiptIssuedIn,
+            UniqueIdentifier = uniqueIdentifier,
+            DonationAmount = donor.OfficialAmount,
+            Mode = fileType,
+            ReceiptFooterText = ReceiptFooterText,
+            LetterSignatureGraphic = LetterSignatureGraphic,
+            LetterSignatureTitle = LetterSignatureTitle,
+            ReceiptSignatureGraphic = ReceiptSignatureGraphic,
+            ReceiptSignatureTitle = ReceiptSignatureTitle,
+            Gifts = donor.SummaryRows.Select(x => new YearEndReceiptGiftRow
+            {
+                Date = x.Date,
+                Fund = x.Fund,
+                Amount = x.Amount
+            }).ToList(),
+            FileName = $"ye-receipt-{fileType}-{donor.RecipientName}-{DateTime.Today:yyyyMMdd}.pdf"
+        };
+    }
+
+    private static string? GetFileNameFromResponse(HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues("Content-Disposition", out var values))
+            return null;
+
+        var header = values.FirstOrDefault();
+
+        if (string.IsNullOrWhiteSpace(header))
+            return null;
+
+        const string fileNameToken = "filename=";
+        var index = header.IndexOf(fileNameToken, StringComparison.OrdinalIgnoreCase);
+
+        if (index < 0)
+            return null;
+
+        var value = header[(index + fileNameToken.Length)..].Trim();
+
+        if (value.StartsWith("\"", StringComparison.Ordinal) && value.EndsWith("\"", StringComparison.Ordinal) && value.Length > 1)
+        {
+            value = value[1..^1];
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private async Task Calculate()
+    {
+        CalculationMessage = string.Empty;
+        CalculationHasError = false;
+
+        var startDate = YearStart;
+        var endDate = YearEnd;
+
+        IsCalculating = true;
+
+        try
+        {
+            var url = $"/api/reports/year-end-receipt/preview?EMAOrganizationID={OrgID}&startDate={startDate:yyyy-MM-dd}&endDate={endDate:yyyy-MM-dd}";
+
+            using var response = await Http.GetAsync(url);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+
+                CalculationHasError = true;
+                CalculationMessage = $"Could not load receipt preview. API returned {(int)response.StatusCode} {response.StatusCode}. {errorBody}";
+                DonorReceipts = new List<DonorReceiptPreview>();
+                return;
+            }
+
+            var preview = await response.Content.ReadFromJsonAsync<YearEndReceiptPreviewBatchResponse>();
+
+            if (preview is null)
+            {
+                CalculationHasError = true;
+                CalculationMessage = "Could not load receipt preview. The API returned no data.";
+                DonorReceipts = new List<DonorReceiptPreview>();
+                return;
+            }
+
+            OrganizationName = preview.OrganizationName;
+            OrganizationAddress = preview.OrganizationAddressLine;
+            OrganizationWebsite = preview.OrganizationWebsite;
+            OrganizationPhone = preview.OrganizationPhone;
+            OrganizationEmail = preview.OrganizationEmail;
+            LetterDateText = preview.DateText;
+            OfficialLetterBody = preview.OfficialLetterBody;
+            UnofficialLetterBody = preview.UnofficialLetterBody;
+            LetterSignatureGraphic = preview.LetterSignatureGraphic;
+            ReceiptSignatureGraphic = preview.ReceiptSignatureGraphic;
+            LetterSignatureTitle = preview.LetterSignatureTitle;
+            ReceiptSignatureTitle = preview.ReceiptSignatureTitle;
+            ReceiptFooterText = preview.ReceiptFooterText;
+            RegistrationNumber = preview.OrganizationRegistrationNumber;
+            OrganizationIssuedInLocation = preview.OrganizationIssuedInLocation;
+            PreviewLoaded = true;
+
+            DonorReceipts = preview.Donors.Select(x => new DonorReceiptPreview
+            {
+                DonorID = x.DonorID,
+                RecipientName = x.RecipientName,
+                DonorAddress = x.DonorAddress,
+                ReceiptNumber = x.ReceiptNumber,
+                YearReceived = x.YearReceived,
+                DateReceipted = x.DateReceipted,
+                ReceiptIssuedIn = x.ReceiptIssuedIn,
+                UniqueIdentifier = x.UniqueIdentifier,
+                IsOfficialLetterSelected = true,
+                IsUnofficialLetterSelected = false,
+                SummaryRows = x.Gifts.Select(g => new SummaryGiftRow
+                {
+                    Date = NormalizeDate(g.Date),
+                    Fund = g.Fund,
+                    Amount = g.Amount
+                }).ToList(),
+                OfficialAmount = x.DonationAmount,
+                OfficialCount = x.Gifts.Count,
+                UnofficialAmount = 0m,
+                UnofficialCount = 0
+            }).ToList();
+
+            if (DonorReceipts.Count == 0)
+            {
+                CalculationMessage = "No donor gifts found in the selected date range.";
+            }
+            else
+            {
+                var totalGifts = DonorReceipts.Sum(x => x.SummaryRows.Count);
+                CalculationMessage = $"Loaded {DonorReceipts.Count} donor receipt preview(s) and {totalGifts} gift row(s).";
+            }
+        }
+        catch (Exception ex)
+        {
+            DonorReceipts = new List<DonorReceiptPreview>();
+            CalculationHasError = true;
+            CalculationMessage = $"Could not load receipt preview. {ex.Message}";
+        }
+        finally
+        {
+            IsCalculating = false;
+        }
+    }
+
+    private static string NormalizeDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return DateTime.TryParse(value, out var parsed)
+            ? parsed.ToString("yyyy-MM-dd")
+            : value;
+    }
+
+    private string BuildOrganizationContactLine()
+        => string.Join(" • ", new[] { OrganizationWebsite, OrganizationPhone, OrganizationEmail }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string? GetImageDataUri(byte[]? imageBytes)
+    {
+        if (imageBytes is null || imageBytes.Length == 0)
+            return null;
+
+        return $"data:{GetImageMimeType(imageBytes)};base64,{Convert.ToBase64String(imageBytes)}";
+    }
+
+    private static string GetImageMimeType(byte[] imageBytes)
+    {
+        if (imageBytes.Length >= 4 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50 && imageBytes[2] == 0x4E && imageBytes[3] == 0x47)
+            return "image/png";
+
+        if (imageBytes.Length >= 3 && imageBytes[0] == 0xFF && imageBytes[1] == 0xD8 && imageBytes[2] == 0xFF)
+            return "image/jpeg";
+
+        if (imageBytes.Length >= 3 && imageBytes[0] == 0x47 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46)
+            return "image/gif";
+
+        return "image/png";
+    }
+
+    private static string FormatCurrency(decimal value)
+        => $"{value:C}";
+
+    private sealed class DonorReceiptPreview
+    {
+        public int DonorID { get; set; }
+        public string RecipientName { get; set; } = string.Empty;
+        public string DonorAddress { get; set; } = string.Empty;
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string YearReceived { get; set; } = string.Empty;
+        public string DateReceipted { get; set; } = string.Empty;
+        public string ReceiptIssuedIn { get; set; } = string.Empty;
+        public string UniqueIdentifier { get; set; } = string.Empty;
+        public bool IsOfficialLetterSelected { get; set; } = true;
+        public bool IsUnofficialLetterSelected { get; set; }
+        public decimal OfficialAmount { get; set; }
+        public int OfficialCount { get; set; }
+        public decimal UnofficialAmount { get; set; }
+        public int UnofficialCount { get; set; }
+        public string PdfMessage { get; set; } = string.Empty;
+        public bool PdfMessageHasError { get; set; }
+        public List<SummaryGiftRow> SummaryRows { get; set; } = new();
+    }
+
+    private sealed class SummaryGiftRow
+    {
+        public string Date { get; set; } = string.Empty;
+        public string Fund { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
+
+    private sealed class YearEndReceiptPreviewBatchResponse
+    {
+        public string OrganizationName { get; set; } = string.Empty;
+        public string OrganizationAddressLine { get; set; } = string.Empty;
+        public string OrganizationContactLine { get; set; } = string.Empty;
+        public string OrganizationWebsite { get; set; } = string.Empty;
+        public string OrganizationPhone { get; set; } = string.Empty;
+        public string OrganizationEmail { get; set; } = string.Empty;
+        public string OrganizationRegistrationNumber { get; set; } = string.Empty;
+        public string OrganizationIssuedInLocation { get; set; } = string.Empty;
+        public string DateText { get; set; } = string.Empty;
+        public string OfficialLetterBody { get; set; } = string.Empty;
+        public string UnofficialLetterBody { get; set; } = string.Empty;
+        public byte[]? LetterSignatureGraphic { get; set; }
+        public string LetterSignatureTitle { get; set; } = string.Empty;
+        public byte[]? ReceiptSignatureGraphic { get; set; }
+        public string ReceiptSignatureTitle { get; set; } = string.Empty;
+        public string ReceiptFooterText { get; set; } = string.Empty;
+        public List<YearEndReceiptPreviewResponse> Donors { get; set; } = new();
+    }
+
+    private sealed class YearEndReceiptPreviewResponse
+    {
+        public int DonorID { get; set; }
+        public string RecipientName { get; set; } = string.Empty;
+        public string DonorAddress { get; set; } = string.Empty;
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string YearReceived { get; set; } = string.Empty;
+        public string DateReceipted { get; set; } = string.Empty;
+        public string ReceiptIssuedIn { get; set; } = string.Empty;
+        public string UniqueIdentifier { get; set; } = string.Empty;
+        public decimal DonationAmount { get; set; }
+        public List<YearEndReceiptGiftRow> Gifts { get; set; } = new();
+    }
+
+    private sealed class YearEndReceiptGiftRow
+    {
+        public string Date { get; set; } = string.Empty;
+        public string Fund { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
+
+    private sealed class YearEndReceiptPdfRequest
+    {
+        public string OrganizationName { get; set; } = string.Empty;
+        public string OrganizationAddressLine { get; set; } = string.Empty;
+        public string OrganizationContactLine { get; set; } = string.Empty;
+        public string RegistrationNumber { get; set; } = string.Empty;
+        public string DateText { get; set; } = string.Empty;
+        public string RecipientName { get; set; } = string.Empty;
+        public string LetterBody { get; set; } = string.Empty;
+        public string DonorAddress { get; set; } = string.Empty;
+        public string ReceiptNumber { get; set; } = string.Empty;
+        public string YearReceived { get; set; } = string.Empty;
+        public string DateReceipted { get; set; } = string.Empty;
+        public string ReceiptIssuedIn { get; set; } = string.Empty;
+        public string UniqueIdentifier { get; set; } = string.Empty;
+        public decimal DonationAmount { get; set; }
+        public string Mode { get; set; } = "official";
+        public string ReceiptFooterText { get; set; } = string.Empty;
+        public byte[]? LetterSignatureGraphic { get; set; }
+        public string LetterSignatureTitle { get; set; } = string.Empty;
+        public byte[]? ReceiptSignatureGraphic { get; set; }
+        public string ReceiptSignatureTitle { get; set; } = string.Empty;
+        public List<YearEndReceiptGiftRow> Gifts { get; set; } = new();
+        public string? FileName { get; set; }
+    }
+
+    private enum ReceiptPdfMode
+    {
+        DraftOfficial,
+        Official,
+        Unofficial
+    }
+
+    private sealed class AssignReceiptsResponse
+    {
+        public int AssignedCount { get; set; }
+    }
+}

@@ -1,0 +1,502 @@
+@page "/explore-ema-instantly"
+
+@attribute [AllowAnonymous]
+
+@inject ISandboxService SandboxService
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationState
+@inject ICategoryLandingPageService CategoryLandingPageService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Explore EMA Instantly - EMA</PageTitle>
+
+<section class="sandbox-page">
+    <div class="sandbox-card">
+        @if (IsLoading)
+        {
+            <div class="sandbox-loading"
+                 role="status">
+                <div class="sandbox-spinner"
+                     aria-hidden="true">
+                </div>
+
+                <strong>
+                    Checking for your EMA sandbox...
+                </strong>
+            </div>
+        }
+        else if (
+            PageState ==
+                SandboxPageState.Returning &&
+            Workspace is not null)
+        {
+            <header class="sandbox-header">
+                <span class="sandbox-eyebrow">
+                    Explore EMA Instantly
+                </span>
+
+                <h1>Welcome Back!</h1>
+            </header>
+
+            <div class="sandbox-welcome-panel">
+                <p>
+                    It looks like you already have an active workspace running from this
+                    location, so we've brought your private testing environment right back
+                    for you!
+                </p>
+
+                <div class="sandbox-workspace-summary">
+                    <span>Workspace</span>
+
+                    <strong>
+                        @Workspace.OrganizationName
+                    </strong>
+                </div>
+
+                <div class="sandbox-returning-actions">
+                    <button type="button"
+                    class="sandbox-primary-button"
+                    @onclick="ResumeSandboxAsync"
+                    disabled="@IsWorking">
+                    @(IsWorking
+                    ? "Opening your sandbox..."
+                    : "Click HERE to Resume Your Sandbox")
+                    </button>
+
+                    <button type="button"
+                            class="sandbox-link-button sandbox-link-button-secondary"
+                            @onclick="OpenTestEmailAsync"
+                            disabled="@IsWorking">
+                        @(IsWorking
+                            ? "Opening the test email..."
+                            : "Tweak and Send a Test Interac Email")
+                    </button>
+                </div>
+            </div>
+        }
+        else if (
+            PageState ==
+                SandboxPageState.Ready &&
+            Workspace is not null)
+        {
+            <header class="sandbox-header">
+                <span class="sandbox-eyebrow">
+                    Private testing workspace
+                </span>
+
+                <h1>Explore EMA Instantly!</h1>
+            </header>
+
+            <div class="sandbox-ready-intro">
+                <p>
+                    Explore Canada's premier donation management platform with a
+                    factory-fresh, private workspace loaded with realistic sample data.
+                </p>
+            </div>
+
+            <ul class="sandbox-feature-list">
+                <li>
+                    <strong>Instant Access:</strong>
+                    No registration, no forms, and no email required.
+                </li>
+
+                <li>
+                    <strong>Full Feature Testing:</strong>
+                    Set up giving methods, funds, campuses, and other organization options,
+                    then safely test donation flows, mock tax receipts, and reports.
+                </li>
+
+                <li>
+                    You can also see how EMA's eTransfer automation works by sending a
+                    test Interac-style email into your sandbox.
+                </li>
+
+                <li>
+                    Your workspace remains active as long as a donation is created at least
+                    once every 180 days.
+                </li>
+            </ul>
+
+            <div class="sandbox-shortcut-panel">
+                <span>
+                    This browser holds a private key for this workspace.
+                </span>
+
+                <small>
+                    You can return from this browser or another device at the same
+                    location. The private browser key remains the preferred access path.
+                </small>
+            </div>
+
+            <p class="sandbox-print-note">
+                We suggest printing or saving this page before proceeding.
+            </p>
+
+            <div class="sandbox-actions">
+                <button type="button"
+                        class="sandbox-link-button sandbox-link-button-secondary"
+                        @onclick="OpenTestEmailAsync"
+                        disabled="@IsWorking">
+                    @(IsWorking
+                        ? "Opening the test email..."
+                        : "Tweak and Send a Test Interac Email")
+                </button>
+
+                <button type="button"
+                        class="sandbox-link-button"
+                        @onclick="ResumeSandboxAsync"
+                        disabled="@IsWorking">
+                    @(IsWorking
+                        ? "Opening your sandbox..."
+                        : "Go to Your Sandbox Organization")
+                </button>
+
+                <button type="button"
+                        class="sandbox-print-button"
+                        @onclick="PrintPageAsync">
+                    Print This Page
+                </button>
+            </div>
+        }
+        else
+        {
+            <header class="sandbox-header">
+                <span class="sandbox-eyebrow">
+                    No registration required
+                </span>
+
+                <h1>Explore EMA Instantly!</h1>
+            </header>
+
+            <div class="sandbox-new-intro">
+                <p>
+                    Explore Canada's premier donation management platform in a private,
+                    factory-fresh workspace loaded with realistic sample data.
+                </p>
+            </div>
+
+            <ul class="sandbox-feature-list">
+                <li>
+                    <strong>Instant Access:</strong>
+                    No registration, forms, or email are required.
+                </li>
+
+                <li>
+                    Configure giving methods, funds, campuses, and other settings without
+                    affecting a real organization.
+                </li>
+
+                <li>
+                    Safely test donation workflows, mock tax receipts, reports, and EMA's
+                    eTransfer automation.
+                </li>
+
+                <li>
+                    Return later from this browser or another device at the same location.
+                </li>
+            </ul>
+
+            <div class="sandbox-create-panel">
+                <p>
+                    EMA will prepare a private organization and user account from the
+                    sandbox template. This normally takes only a moment.
+                </p>
+
+                <button type="button"
+                        class="sandbox-primary-button"
+                        @onclick="CreateSandboxAsync"
+                        disabled="@IsWorking">
+                    @(IsWorking
+                        ? "Preparing your workspace..."
+                        : "Create My Sandbox")
+                </button>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(
+                 StatusMessage))
+        {
+            <div class="sandbox-status @(IsError ? "sandbox-status-error" : "sandbox-status-info")"
+                 role="status">
+                @StatusMessage
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private enum SandboxPageState
+    {
+        New,
+        Returning,
+        Ready
+    }
+
+    private SandboxPageState PageState =
+        SandboxPageState.New;
+
+    private SandboxWorkspaceSummary? Workspace;
+
+    private bool IsLoading = true;
+
+    private bool IsWorking;
+
+    private bool IsError;
+
+    private string StatusMessage =
+        string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadCurrentSandboxAsync();
+    }
+
+    private async Task LoadCurrentSandboxAsync()
+    {
+        IsLoading = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        try
+        {
+            var result =
+                await SandboxService
+                    .GetCurrentSandboxAsync();
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                Workspace = null;
+                PageState =
+                    SandboxPageState.New;
+
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "EMA could not check for an existing sandbox. Please try again."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            Workspace =
+                result.Value.Workspace;
+
+            PageState =
+                result.Value.HasActiveSandbox &&
+                Workspace is not null
+                    ? SandboxPageState.Returning
+                    : SandboxPageState.New;
+        }
+        catch
+        {
+            Workspace = null;
+
+            PageState =
+                SandboxPageState.New;
+
+            IsError = true;
+
+            StatusMessage =
+                "EMA could not check for an existing sandbox. Please try again.";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task CreateSandboxAsync()
+    {
+        IsWorking = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        try
+        {
+            var result =
+                await SandboxService
+                    .CreateSandboxAsync();
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "Your sandbox could not be created. Please try again."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            Workspace =
+                result.Value.Workspace;
+
+            PageState =
+                SandboxPageState.Ready;
+        }
+        catch
+        {
+            IsError = true;
+
+            StatusMessage =
+                "Your sandbox could not be created. Please try again.";
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    private async Task ResumeSandboxAsync()
+    {
+        if (Workspace is null)
+        {
+            return;
+        }
+
+        IsWorking = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        try
+        {
+            var result =
+                await SandboxService
+                    .ResumeSandboxAsync(
+                        Workspace
+                            .SandboxOrganizationID);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "Your sandbox could not be opened. Please try again."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            await CompleteSandboxLoginAsync(
+                result.Value);
+        }
+        catch
+        {
+            IsError = true;
+
+            StatusMessage =
+                "Your sandbox could not be opened. Please try again.";
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    private async Task CompleteSandboxLoginAsync(
+        LoginResponse loginResponse)
+    {
+        await SessionState.SignInAsync(
+            loginResponse);
+
+        var organization =
+            await OrganizationService
+                .GetOrganizationAsync(
+                    loginResponse.EMAOrganizationID);
+
+        if (organization is not null)
+        {
+            OrganizationState
+                .UpdateOrganization(
+                    organization);
+        }
+
+        var categoryID =
+            SessionState
+                .CurrentSession
+                ?.CurrentCategoryID
+            ?? loginResponse
+                .DefaultCategoryID;
+
+        var landingUrl =
+            await CategoryLandingPageService
+                .GetLandingUrlAsync(
+                    loginResponse.EMAOrganizationID,
+                    loginResponse.UserID,
+                    categoryID);
+
+        Navigation.NavigateTo(
+            landingUrl,
+            replace: true);
+    }
+
+    private async Task OpenTestEmailAsync()
+    {
+        if (Workspace is null)
+        {
+            return;
+        }
+
+        IsWorking = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        try
+        {
+            var result =
+                await SandboxService
+                    .ResumeSandboxAsync(
+                        Workspace
+                            .SandboxOrganizationID);
+
+            if (!result.IsSuccess ||
+                result.Value is null)
+            {
+                IsError = true;
+
+                StatusMessage =
+                    string.IsNullOrWhiteSpace(
+                        result.ErrorMessage)
+                        ? "The sandbox test email could not be opened."
+                        : result.ErrorMessage;
+
+                return;
+            }
+
+            await SessionState.SignInAsync(
+                result.Value);
+
+            Navigation.NavigateTo(
+                "/explore-ema-instantly/test-email" +
+                $"?organizationId={Workspace.SandboxOrganizationID}");
+        }
+        catch
+        {
+            IsError = true;
+            StatusMessage =
+                "The sandbox test email could not be opened.";
+        }
+        finally
+        {
+            IsWorking = false;
+        }
+    }
+
+    private async Task PrintPageAsync()
+    {
+        await JSRuntime.InvokeVoidAsync(
+            "window.print");
+    }
+
+}

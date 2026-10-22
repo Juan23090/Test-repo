@@ -1,0 +1,16 @@
+<section class="temporary-landing-page" aria-labelledby="temporary-landing-title">
+    <div class="temporary-landing-card">
+        <div class="temporary-landing-eyebrow">EMA Landing Page</div>
+        <h1 id="temporary-landing-title">@Title</h1>
+        <p>
+            This temporary page confirms that the category landing-page plumbing is working.
+            Future marketing or internal content can replace this page by creating a new versioned URL
+            and updating the active Landing Page MenuItem.
+        </p>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+}

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Email Money App - Donation Acknowledgement</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body style="margin:0; padding:0; background:#dcdcdc; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; background:#dcdcdc; border-collapse:collapse; margin:0; padding:0;">
+        <tr>
+            <td align="center" style="padding:8px 10px 24px 10px;">
+
+                <table role="presentation" width="800" cellpadding="0" cellspacing="0" border="0" style="width:800px; max-width:800px; border-collapse:collapse; background:#dcdcdc; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+
+                    <!-- Organization Banner -->
+                    <tr>
+                        <td align="center" style="padding:0 0 18px 0;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                                <tr>
+                                    <td align="center" style="min-width:540px; max-width:540px; padding:8px 18px; border:1px solid #9a9a9a; background:#efefef; color:#000000; font-size:32px; line-height:38px; font-weight:800;">
+                                        {{OrganizationName}}
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Intro -->
+                    <tr>
+                        <td align="center" style="padding:0 0 18px 0;">
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:collapse;">
+                                <tr>
+                                    <td style="padding:12px 14px; border:1px solid #8a8a8a; background:#ffffff; color:#000000; font-size:14px; line-height:20px; font-weight:700;">
+                                        Thank you for your donation by eTransfer, the most efficient way for you to donate! By using eTransfers we are able to use more of your donation to work in our mission.
+                                        Please check below to ensure we have everything right. You can click the button below to:
+                                        <ul>
+                                            <li>
+                                                Change the official name and address for your Year End Tax Receipt
+                                            </li>
+                                            <li>
+                                                Change your fund allocation (note multiple funds are allowed)
+                                            </li>
+                                            <li>
+                                                Make the fund allocation a template for future donations
+                                            </li>
+                                            <li>
+                                                Make your donation a tribute as a memorial, honor someone, or remember a special occasion
+                                            </li>
+                                            <li>
+                                                Change your donation to become anonymous
+                                            </li>
+                                        </ul>
+                                        This is not an official tax receipt.  Your official tax receipt, summarizing all donations for the year, will be issued in January.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Contact Info -->
+                    <tr>
+                        <td style="padding:0 20px 0 20px;">
+                            <div style="font-size:16px; line-height:20px; font-weight:700; text-decoration:underline; margin:0 0 8px 0;">
+                                Contact Information:
+                            </div>
+
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:separate; border-spacing:0 12px; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Official Name:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{OfficialName}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">eTransfer Name:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{ETransferName}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Address:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{Address}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">City/Town:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{CityTown}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Prov/State:</td>
+                                    <td style="vertical-align:middle;">
+                                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; border-collapse:collapse;">
+                                            <tr>
+                                                <td width="60" style="width:60px; padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                                    {{Province}}&nbsp;
+                                                </td>
+                                                <td width="100" align="right" style="width:100px; padding:0 10px; font-size:16px; font-weight:700; color:#000000;">Postal/Zip:</td>
+                                                <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                                    {{PostalCode}}&nbsp;
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Email:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{DonorEmail}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Phone:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{DonorPhone}}&nbsp;
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Donation Info -->
+                    <tr>
+                        <td style="padding:8px 20px 0 20px;">
+                            <div style="font-size:16px; line-height:20px; font-weight:700; text-decoration:underline; margin:0 0 8px 0;">
+                                Donation Information:
+                            </div>
+
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:separate; border-spacing:0 12px; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:middle;">Reference:</td>
+                                    <td style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{DonationReference}}&nbsp;
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <td width="180" style="width:180px; font-size:16px; font-weight:700; text-align:left; vertical-align:top; padding-top:8px;">Comments:</td>
+                                    <td height="80" valign="top" style="height:80px; padding:8px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px;">
+                                        {{DonationComments}}&nbsp;
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <div style="color:#0078CC; font-size:14px; line-height:18px; text-align:center; margin-top:-4px;">
+                                If anything looks wrong, click Make Changes Online before the deadline of {{DonationDeadlineToMakeFundChanges}}
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Fund Allocations -->
+                    <tr>
+                        <td style="padding:16px 20px 0 20px;">
+                            <div style="font-size:16px; line-height:20px; font-weight:700; text-decoration:underline; margin:0 0 8px 0;">
+                                Fund Allocations:
+                            </div>
+
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:collapse; color:#000000; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <tr>
+                                    <td width="300" align="center" style="font-size:15px; line-height:20px; font-weight:700; padding:0 6px 6px 6px;">Campus</td>
+                                    <td width="300" align="center" style="font-size:15px; line-height:20px; font-weight:700; padding:0 6px 6px 6px;">Fund</td>
+                                    <td width="160" align="center" style="font-size:15px; line-height:20px; font-weight:700; padding:0 6px 6px 6px;">Amount</td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <div style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px; text-align:center;">
+                                            {{CampusName}}&nbsp;
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0 12px;">
+                                        <div style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px; text-align:center;">
+                                            {{FundName}}&nbsp;
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="padding:6px 10px; border:1px solid #cccccc; background:#ffffff; color:#000000; font-size:14px; line-height:20px; text-align:center;">
+                                            {{DonationAmount}}&nbsp;
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Totals -->
+                    <tr>
+                        <td style="padding:8px 20px 0 20px;">
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width: 760px; border-collapse: collapse;">
+                                <tr>
+                                    <td width="330" valign="top" style="width:330px;">
+                                        <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:collapse;">
+                                            <tr>
+                                                <!-- Left empty space -->
+                                                <td width="500" style="width:500px; font-size:0; line-height:0;">
+                                                    &nbsp;
+                                                </td>
+
+                                                <!-- Right content area -->
+                                                <td width="283" valign="top" style="width:283px;">
+                                                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate; border-spacing:0 8px;">
+                                                        <tr>
+                                                            <td width="120" align="right" style="font-size:16px; font-weight:700; padding-right:12px;">
+                                                                Total:
+                                                            </td>
+                                                            <td width="190" style="padding: 6px 10px; border: 1px solid #cccccc; background: #ffffff; color: #000000; font-size: 14px; line-height: 20px; text-align: center;">
+                                                                {{DonationTotal}}&nbsp;
+                                                            </td>
+                                                        </tr>
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Buttons -->
+                    <tr>
+                        <td style="padding:20px 20px 0 20px;">
+                            <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="width:760px; border-collapse:collapse; justify-content: space-between;">
+                                <tr>
+                                    <td width="50%" align="left" style="padding-right:8px;">
+                                        <a href="{{MakeChangesUrl}}" style="display:block; width:75%; padding:16px 12px; background:#0000FF; color:#ffffff; font-size:16px; font-weight:700; line-height:20px; text-align:center; text-decoration:none;">
+                                            Make Changes Online
+                                        </a>
+                                    </td>
+                                    <td width="50%" align="right" style="padding-left:8px;">
+                                        <a href="{{GivingHistoryUrl}}" style="display:block; width:75%; padding:16px 12px; background:#00ffff; color:#000000; font-size:16px; font-weight:700; line-height:20px; text-align:center; text-decoration:none;">
+                                            EMA Giving History
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center" style="padding:16px 20px 0 20px; color:#0078CC; font-size:12px; line-height:18px;">
+                            {{FooterText}}
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

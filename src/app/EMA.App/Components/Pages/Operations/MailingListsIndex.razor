@@ -1,0 +1,135 @@
+@page "/mailing-lists-index"
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IMailingListService MailingListService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Mailing Lists - EMA</PageTitle>
+
+<div class="container my-4" style="max-width: 900px; font-family: Arial, sans-serif;">
+    <div class="d-flex align-items-center mb-4">
+        <a href="/mailing-lists-how-it-works" class="me-3 text-decoration-none" title="Return to previous page">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 14L4 9l5-5"/>
+                <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>
+            </svg>
+        </a>
+        <div class="flex-grow-1 text-center pe-5">
+            <div class="d-inline-block border border-dark px-5 py-2">
+                <h2 class="m-0 fw-bold">Mailing Lists</h2>
+            </div>
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle text-center shadow-sm">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-start">Mailing List Name (Click to View)@(ShowInactive ? " - Inactive" : "")</th>
+                        <th>Last Instance</th>
+                        <th>Send List</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (MailingLists != null && MailingLists.Any())
+                    {
+                        @foreach (var list in MailingLists)
+                        {
+                            <tr style="cursor: pointer;" @onclick="() => NavigateToDetails(list.MailingListID)" class="table-row-hover">
+                                <td class="text-start text-decoration-underline fw-bold text-dark">
+                                    @list.Name
+                                </td>
+                                <td class="fw-bold">@list.LastInstance</td>
+                                <td class="fw-bold">@list.SendListCount</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-4">
+                                @if (ShowInactive)
+                                {
+                                    <span>No inactive mailing lists found.</span>
+                                }
+                                else
+                                {
+                                    <span>No active mailing lists found. Click "Create New Mailing List" below to add one.</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex justify-content-center gap-3 mt-4">
+            <button class="btn btn-primary rounded-0 border border-dark fw-bold px-4 py-2" @onclick="NavigateToCreate">
+                Create New Mailing List
+            </button>
+            <button class="btn btn-outline-secondary rounded-0 border border-dark fw-bold px-4 py-2" @onclick="ToggleShowInactive">
+                @(ShowInactive ? "Show Active" : "Show Inactive")
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .table-row-hover:hover {
+        background-color: #f8f9fa !important;
+    }
+</style>
+
+@code {
+    private List<MailingListItem>? MailingLists;
+    private bool IsLoading = true;
+    private bool ShowInactive = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadListsAsync();
+    }
+
+    private async Task LoadListsAsync()
+    {
+        IsLoading = true;
+        int orgID = SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+        if (orgID <= 0)
+        {
+            MailingLists = new List<MailingListItem>();
+            IsLoading = false;
+            return;
+        }
+
+        MailingLists = await MailingListService.GetMailingListsAsync(orgID, ShowInactive);
+        IsLoading = false;
+    }
+
+    private async Task ToggleShowInactive()
+    {
+        ShowInactive = !ShowInactive;
+        await LoadListsAsync();
+    }
+
+    private void NavigateToDetails(int listID)
+    {
+        Navigation.NavigateTo($"/mailing-list-details/{listID}");
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/mailing-list-create");
+    }
+}

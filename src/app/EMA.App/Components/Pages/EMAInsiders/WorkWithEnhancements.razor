@@ -1,0 +1,256 @@
+@page "/ww-enhancements"
+
+@inject IScreenFeedbackService ScreenFeedbackService
+@inject IOrganizationStateService OrganizationStateService
+
+<PageTitle>Work With Enhancements - EMA</PageTitle>
+
+<section class="task39-admin-page">
+    <h1>Work with Enhancement Requests</h1>
+
+    <div class="task39-admin-filters">
+        <label>Status
+            <select @bind="_statusFilter">
+                <option value="">All</option>
+                @foreach (var status in _statuses)
+                {
+                    <option value="@status.EnhancementRequestStatusID">@status.Description</option>
+                }
+            </select>
+        </label>
+        <label>Active
+            <select @bind="_activeFilter">
+                <option value="">All</option>
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select>
+        </label>
+        <label>Start Date
+            <input type="date" @bind="_startDate" />
+        </label>
+        <label>End Date
+            <input type="date" @bind="_endDate" />
+        </label>
+        <label class="task39-admin-search">Find Request
+            <input type="search"
+                   placeholder="Start typing or leave blank"
+                   @bind="_search"
+                   @bind:event="oninput" />
+        </label>
+    </div>
+
+    <p class="task39-note">Active follows the selected status's <code>ShowIcon</code> setting because the current EnhancementRequest table has no separate Active column.</p>
+
+    @if (_loading)
+    {
+        <p>Loading...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="task39-message task39-error" role="alert">@_error</div>
+    }
+    else
+    {
+        <div class="task39-admin-browser">
+            <div class="task39-admin-list">
+                @foreach (var item in FilteredItems)
+                {
+                    <button type="button"
+                            class="@(item.EnhancementRequestID == _selected?.EnhancementRequestID ? "is-selected" : string.Empty)"
+                            @onclick="@(() => Select(item))">
+                        <span>@item.Title</span>
+                        <small>@item.StatusDescription · @item.ScreenTitle</small>
+                    </button>
+                }
+            </div>
+
+            <div class="task39-admin-detail">
+                @if (_selected is null)
+                {
+                    <p>Select an enhancement request to work with it.</p>
+                }
+                else
+                {
+                    <div class="task39-meta-grid">
+                        <strong>Organization</strong><span>@DisplayOrganization(_selected.OrganizationName, _selected.OrganizationID)</span>
+                        <strong>User</strong><span>@DisplayUser(_selected.EnteredByUserName, _selected.EnteredByUserID)</span>
+                        <strong>Screen</strong><span>@_selected.ScreenTitle (@_selected.MenuItemID)</span>
+                        <strong>Entered</strong><span>@FormatDateTime(_selected.DateTimeEntered)</span>
+                        <strong>Yes Votes</strong><span>@_selected.YesVotes</span>
+                        <strong>No Votes</strong><span>@_selected.NoVotes</span>
+                    </div>
+
+                    <label>Title
+                        <input maxlength="256" @bind="_selected.Title" />
+                    </label>
+                    <label>Description
+                        <textarea rows="7" @bind="_selected.Description"></textarea>
+                    </label>
+                    <label>EMA Comments <small>(private)</small>
+                        <textarea rows="5" @bind="_selected.EMAComments"></textarea>
+                    </label>
+
+                    <div class="task39-inline-fields">
+                        <label>Status
+                            <select @bind="_selected.EnhancementRequestStatusID" @bind:after="SyncSelectedStatus">
+                                @foreach (var status in _statuses)
+                                {
+                                    <option value="@status.EnhancementRequestStatusID">@status.Description</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Active
+                            <input value="@(SelectedStatus?.ShowIcon == true ? "Yes" : "No")" readonly />
+                        </label>
+                    </div>
+
+                    <div class="task39-meta-grid task39-meta-grid-bottom">
+                        <strong>Updated By</strong><span>@DisplayUser(_selected.UpdatedByUserName, _selected.UpdatedByUserID)</span>
+                        <strong>Updated</strong><span>@FormatDateTime(_selected.DateTimeUpdated)</span>
+                    </div>
+
+                    <div class="task39-admin-actions">
+                        <button type="button" disabled="@_saving" @onclick="SaveAsync">@(_saving ? "Saving..." : "Save Enhancement")</button>
+                        @if (!string.IsNullOrWhiteSpace(_message))
+                        {
+                            <span role="status">@_message</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private List<EnhancementAdminItem> _items = new();
+    private List<EnhancementStatus> _statuses = new();
+    private EnhancementAdminItem? _selected;
+    private string _statusFilter = string.Empty;
+    private string _activeFilter = string.Empty;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string? _message;
+
+    private EnhancementStatus? SelectedStatus =>
+        _selected is null
+            ? null
+            : _statuses.FirstOrDefault(status => status.EnhancementRequestStatusID == _selected.EnhancementRequestStatusID);
+
+    private IEnumerable<EnhancementAdminItem> FilteredItems =>
+        _items.Where(item =>
+            (string.IsNullOrWhiteSpace(_statusFilter) || item.EnhancementRequestStatusID.ToString() == _statusFilter) &&
+            MatchesYesNo(_activeFilter, item.ShowIcon) &&
+            IsInDateRange(item.DateTimeEntered) &&
+            MatchesSearch(item.Title, item.Description, item.ScreenTitle));
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var response = await ScreenFeedbackService.GetEnhancementAdminAsync();
+            _items = response.Items;
+            _statuses = response.Statuses;
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Select(EnhancementAdminItem item)
+    {
+        _selected = item;
+        _message = null;
+    }
+
+    private void SyncSelectedStatus()
+    {
+        if (_selected is null || SelectedStatus is null) return;
+        _selected.StatusDescription = SelectedStatus.Description;
+        _selected.ShowIcon = SelectedStatus.ShowIcon;
+        _selected.IconColor = SelectedStatus.IconColor;
+        _selected.MaxDaysAtStatus = SelectedStatus.MaxDaysAtStatus;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selected is null) return;
+        var id = _selected.EnhancementRequestID;
+        _saving = true;
+        _message = null;
+        try
+        {
+            await ScreenFeedbackService.UpdateEnhancementAsync(
+                id,
+                new UpdateEnhancementAdminRequest
+                {
+                    Title = _selected.Title,
+                    Description = _selected.Description,
+                    EMAComments = _selected.EMAComments,
+                    EnhancementRequestStatusID = _selected.EnhancementRequestStatusID
+                });
+            _message = "Saved.";
+            await LoadAsync();
+            _selected = _items.FirstOrDefault(item => item.EnhancementRequestID == id);
+        }
+        catch (Exception exception)
+        {
+            _message = exception.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool IsInDateRange(DateTime value)
+    {
+        var localDate = AsLocal(value).Date;
+        if (_startDate.HasValue && localDate < _startDate.Value.Date) return false;
+        if (_endDate.HasValue && localDate > _endDate.Value.Date) return false;
+        return true;
+    }
+
+    private bool MatchesSearch(params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        return values.Any(value => value?.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static bool MatchesYesNo(string filter, bool value) =>
+        string.IsNullOrWhiteSpace(filter) || (filter == "Y") == value;
+
+    private static string DisplayOrganization(string name, int? id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id?.ToString() ?? "Unknown";
+
+    private static string DisplayUser(string name, int id) =>
+        !string.IsNullOrWhiteSpace(name) ? name : id.ToString();
+
+    private string FormatDateTime(DateTime value)
+    {
+        var localValue = AsLocal(value);
+        var date = EMA.App.Utilities.OrgDateFormat.Format(
+            localValue,
+            OrganizationStateService.CurrentOrganization?.DateFormatID);
+        return $"{date} {localValue:HH:mm}";
+    }
+
+    private static DateTime AsLocal(DateTime value) =>
+        (value.Kind == DateTimeKind.Utc
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        .ToLocalTime();
+}

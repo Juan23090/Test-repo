@@ -1,0 +1,45 @@
+.brochure-five-button-page {
+    width: min(100%, 56.5rem);
+    margin: 0 auto;
+}
+
+.ema-etran-aligned-content {
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+h2 {
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    text-align: center;
+    font-family: var(--ema-ui-font);
+    font-weight: bold;
+}
+
+.ema-etran-detail-block {
+    position: relative;
+    left: 2.75rem;
+}
+
+h3 {
+    margin-bottom: 0.8rem;
+    font-family: var(--ema-ui-font);
+    font-weight: bold;
+}
+
+@media (min-width: 701px) and (max-width: 900px) {
+    .brochure-five-button-page {
+        width: min(100%, 37.75rem);
+    }
+}
+
+@media (max-width: 700px) {
+    .ema-etran-aligned-content {
+        width: 100%;
+    }
+
+    .ema-etran-detail-block {
+        left: 0;
+    }
+}

@@ -1,0 +1,770 @@
+@page "/organization-journey"
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IOrganizationJourneyService OrgJourneyService
+@inject IOrganizationService OrganizationService
+@inject ICustomizationService CustomizationService
+@inject IUserSessionStateService SessionState
+@inject NavigationManager Navigation
+
+<PageTitle>Organization Journey - EMA</PageTitle>
+
+<div class="donors-container" style="max-width: 1100px; margin: 0 auto; padding: 20px;">
+    <div class="donors-form" style="width: 100%; max-width: 100%; box-sizing: border-box;">
+
+        @if (!string.IsNullOrEmpty(ValidationMessage))
+        {
+            <div class="text-center validation-message" style="color: red; font-weight: bold; margin-bottom: 15px;">
+                @ValidationMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="text-center success-message" style="color: green; font-weight: bold; margin-bottom: 15px;">
+                @SuccessMessage
+            </div>
+        }
+
+        <div class="form-row" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+            <button class="btn-save btn-save-donations" style="background-color: #e21a9a; border-color: #e21a9a; cursor: pointer; max-width: 180px;" @onclick="OpenFollowUpModal">
+                <strong>Pick Follow Up</strong>
+            </button>
+            <span class="badge" style="background-color: #e9ecef; color: #495057; padding: 6px 12px; border-radius: 4px; font-weight: bold; border: 1px solid #ced4da;">
+                @FollowUpQueue.Count Queued
+            </span>
+        </div>
+
+        <div class="form-row-group">
+            <div class="form-row">
+                <label class="form-label" style="min-width: 210px;"><strong><u>Organization Name:</u></strong></label>
+                <div class="journey-typeahead-wrapper">
+                    <input class="form-input typeahead" placeholder="(Start typing to select Organization)" 
+                           value="@SearchText" @bind:event="oninput" @oninput="OnSearchInput" style="width: 100%;" />
+                    @if (SearchResults.Any())
+                    {
+                        <div class="typeahead-dropdown journey-typeahead-dropdown">
+                            @foreach (var org in SearchResults)
+                            {
+                                <div class="typeahead-item" @onclick="() => SelectOrganization(org)">
+                                    @org.OrganizationName
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Contact Name:</u></strong></label>
+            <input class="form-input" placeholder="Contact Name" @bind="CurrentOrg.ContactName" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Contact Phone:</u></strong></label>
+            <input class="form-input" placeholder="Contact Phone" @bind="CurrentOrg.ContactPhone" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Contact Email:</u></strong></label>
+            <input class="form-input" placeholder="Contact Email" @bind="CurrentOrg.ContactEmail" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Admin Name:</u></strong></label>
+            <input class="form-input" placeholder="Admin Name" @bind="CurrentOrg.AdminName" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Admin Phone:</u></strong></label>
+            <input class="form-input" placeholder="Admin Phone" @bind="CurrentOrg.AdminPhone" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Admin Email:</u></strong></label>
+            <input class="form-input" placeholder="Admin Email" @bind="CurrentOrg.AdminEmail" @bind:event="oninput" />
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Annual Budget:</u></strong></label>
+            <select class="form-input journey-select-input" @bind="CurrentOrg.AnnualBudget">
+                <option value="">(Select Budget)</option>
+                <option value="Under $250k">Under $250k</option>
+                <option value="$250k - $500k">$250k - $500k</option>
+                <option value="$500k - $1M">$500k - $1M</option>
+                <option value="$1M - $2.5M">$1M - $2.5M</option>
+                <option value="Over $2.5M">Over $2.5M</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Current ChMS:</u></strong></label>
+            <select class="form-input journey-select-input" @bind="SelectedChMSId">
+                <option value="">(Select ChMS)</option>
+                @foreach (var chms in ChMSList)
+                {
+                    <option value="@chms.ChMSID">@chms.ChMSName</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Current Accounting:</u></strong></label>
+            <select class="form-input journey-select-input" @bind="SelectedAccountingSoftwareId">
+                <option value="">(Select Accounting Software)</option>
+                @foreach (var acc in AccountingSoftwareList)
+                {
+                    <option value="@acc.AccountingSoftwareID">@acc.Name</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label class="form-label" style="min-width: 210px;"><strong><u>Status:</u></strong></label>
+            <select class="form-input journey-select-input" @bind="SelectedStatusId">
+                <option value="">(Select Status)</option>
+                @foreach (var status in OrgStatuses)
+                {
+                    <option value="@status.OrganizationStatusID">@status.Description</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-actions-row journey-actions-row">
+            <button class="btn-save btn-save-donations journey-save-btn" @onclick="SaveOrganizationInfo">
+                <strong>Save Organization</strong>
+            </button>
+        </div>
+
+        <hr class="journey-divider" />
+
+        <h3 style="margin-bottom: 15px; font-weight: bold;">Log Interaction</h3>
+
+        @if (!string.IsNullOrEmpty(LogValidationMessage))
+        {
+            <div class="validation-message" style="color: red; font-weight: bold; margin-bottom: 10px;">
+                @LogValidationMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(LogSuccessMessage))
+        {
+            <div class="success-message" style="color: green; font-weight: bold; margin-bottom: 10px;">
+                @LogSuccessMessage
+            </div>
+        }
+
+        <div class="journey-log-form" style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 25px; border: 1px solid #dee2e6;">
+            <div class="organization-journey-feedback-row">
+                <div class="organization-journey-name">
+                    <span class="organization-journey-name-label">Organization Name:</span>
+                    <span>@(CurrentOrg.EMAOrganizationID > 0 ? CurrentOrg.OrganizationName : "Select an organization")</span>
+                </div>
+                <div class="organization-journey-feedback-actions" aria-label="Organization FAQ, enhancement, and support history">
+                    @if (JourneyFeedback.Faqs.Count > 0)
+                    {
+                        <button type="button"
+                                class="organization-journey-feedback-button"
+                                title="Frequently Asked Questions for this organization"
+                                aria-label="Frequently Asked Questions for this organization"
+                                @onclick="@(() => OpenFeedbackViewer(JourneyFeedbackKind.Faq))">
+                            <i class="bi bi-question-circle-fill" aria-hidden="true"></i>
+                            <span>@JourneyFeedback.Faqs.Count</span>
+                        </button>
+                    }
+                    @if (JourneyFeedback.Enhancements.Count > 0)
+                    {
+                        <button type="button"
+                                class="organization-journey-feedback-button"
+                                title="Enhancement Requests for this organization"
+                                aria-label="Enhancement Requests for this organization"
+                                @onclick="@(() => OpenFeedbackViewer(JourneyFeedbackKind.Enhancement))">
+                            <i class="bi bi-lightbulb-fill" aria-hidden="true"></i>
+                            <span>@JourneyFeedback.Enhancements.Count</span>
+                        </button>
+                    }
+                    @if (JourneyFeedback.SupportTickets.Count > 0)
+                    {
+                        <button type="button"
+                                class="organization-journey-feedback-button"
+                                title="Support Tickets for this organization"
+                                aria-label="Support Tickets for this organization"
+                                @onclick="@(() => OpenFeedbackViewer(JourneyFeedbackKind.Support))">
+                            <i class="bi bi-ticket-perforated-fill" aria-hidden="true"></i>
+                            <span>@JourneyFeedback.SupportTickets.Count</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Who:</label>
+                            <div class="form-input" style="background: #e9ecef; padding: 6px 12px; border-radius: 4px;">
+                                @(SessionState.CurrentSession?.UserName ?? "Current User")
+                            </div>
+                        </div>
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Activity:</label>
+                            <select class="form-input" @bind="SelectedLogActivityTypeId">
+                                <option value="">(Select Activity)</option>
+                                @foreach (var act in ActivityTypes)
+                                {
+                                    <option value="@act.OrganizationJournalActivityTypeID">@act.ActivityDescription</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="log-field">
+                            <label style="display: block; font-weight: bold; text-decoration: underline; margin-bottom: 4px;">Status:</label>
+                            <div class="mirrored-status-box" style="background: #e9ecef; padding: 6px 12px; border-radius: 4px; color: #555;">
+                                @(OrgStatuses.FirstOrDefault(s => s.OrganizationStatusID == CurrentOrg.OrganizationStatusID)?.Description ?? "No Status")
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <textarea class="form-input journey-comments-area" style="width: 100%; height: 90px;" placeholder="Comments about the interaction go here" @bind="NewEntry.InteractionComments"></textarea>
+                    </div>
+                </div>
+
+                <div style="width: 220px; display: flex; flex-direction: column; gap: 8px; align-self: flex-start;">
+                    <label style="font-weight: bold; text-decoration: underline; margin: 0;">Followup:</label>
+                    <select class="form-input" @bind="SelectedFollowUpActivityTypeId">
+                        <option value="">(Select Activity)</option>
+                        @foreach (var act in ActivityTypes)
+                        {
+                            <option value="@act.OrganizationJournalActivityTypeID">@act.ActivityDescription</option>
+                        }
+                    </select>
+                    <input type="datetime-local" class="form-input" @bind="NewEntry.FollowUpDateTime" onclick="this.showPicker()" placeholder="Optional Date/Time" />
+                    <button class="btn-save btn-save-donations" style="background-color: #e21a9a; border-color: #e21a9a; width: 100%; font-weight: bold; margin-top: 4px;" @onclick="SaveJourneyEntry">
+                        <strong>Done</strong>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 style="margin-bottom: 15px; font-weight: bold;">History</h3>
+
+        <div class="journey-history-list">
+            @if (HistoryEntries == null || !HistoryEntries.Any())
+            {
+                <div class="text-center" style="padding: 20px; color: #777;">
+                    No interaction logs found for this organization.
+                </div>
+            }
+            else
+            {
+                @foreach (var entry in HistoryEntries)
+                {
+                    <div class="history-card" style="border: 1px solid #dee2e6; padding: 15px; border-radius: 6px; margin-bottom: 12px; background: white; display: flex; gap: 20px;">
+                        <div style="flex: 1;">
+                            <div class="history-meta-row" style="display: grid; grid-template-columns: 1.3fr 1.3fr 0.9fr; gap: 15px; margin-bottom: 8px; font-weight: bold;">
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Who:</u> @(entry.UserName ?? $"User #{entry.UserId}")</div>
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Activity:</u> @(entry.ActivityDescription ?? $"Activity #{entry.ActivityTypeID}")</div>
+                                <div style="overflow-wrap: break-word; word-break: break-word;"><u style="font-weight: bold;">Status:</u> @(entry.OrganizationStatusDescription ?? "No Status")</div>
+                            </div>
+                            <div style="white-space: pre-wrap; margin-top: 8px; color: #333; line-height: 1.4;">
+                                @entry.InteractionComments
+                            </div>
+                        </div>
+                        <div style="width: 180px; border-left: 1px solid #eee; padding-left: 15px; font-size: 0.9em; color: #495057;">
+                            <div style="margin-bottom: 8px;">
+                                <u style="font-weight: bold;">Followup:</u><br />
+                                @(ActivityTypes.FirstOrDefault(a => a.OrganizationJournalActivityTypeID == entry.FollowUpActivityTypeID)?.ActivityDescription ?? (entry.FollowUpDateTime.HasValue ? "Scheduled" : "None"))
+                            </div>
+                            <div>
+                                <u style="font-weight: bold;">Date/Time:</u><br />
+                                @(entry.FollowUpDateTime?.ToString("yyyy-MM-dd HH:mm") ?? entry.ActivityDateTime.ToString("yyyy-MM-dd HH:mm"))
+                            </div>
+                            @if (HasLinkedFeedback(entry))
+                            {
+                                <button type="button"
+                                        class="organization-journey-linked-feedback"
+                                        title="Open the FAQ, enhancement, or support item linked to this journey entry"
+                                        @onclick="@(() => OpenLinkedFeedback(entry))">
+                                    <i class="bi @GetLinkedFeedbackIcon(entry)" aria-hidden="true"></i>
+                                    View linked item
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+    </div>
+</div>
+
+@if (ShowFollowUpModal)
+{
+    <div class="savings-modal-backdrop" @onclick="CloseFollowUpModal">
+        <div class="savings-modal-card" style="width: 750px; max-width: 95%; max-height: 85vh; overflow-y: auto;" @onclick:stopPropagation="true">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 class="savings-modal-title" style="margin: 0;">Select Follow Up</h3>
+                <button type="button" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" @onclick="CloseFollowUpModal">&times;</button>
+            </div>
+            <hr />
+            <div class="savings-modal-body">
+                <table class="table" style="width: 100%; border-collapse: collapse; margin-bottom: 0; background: white;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #dee2e6; text-align: left; background-color: #f8f9fa;">
+                            <th style="padding: 10px;">Activity</th>
+                            <th style="padding: 10px;">Follow Up Date/Time</th>
+                            <th style="padding: 10px;">Name</th>
+                            <th style="padding: 10px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!FollowUpQueue.Any())
+                        {
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 25px; color: #777;">
+                                    No pending follow-ups found.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in FollowUpQueue)
+                            {
+                                <tr style="border-bottom: 1px solid #eee; cursor: pointer;" @onclick="() => SelectFollowUpItem(item)">
+                                    <td style="padding: 10px; color: #007bff; text-decoration: underline;">@item.ActivityDescription</td>
+                                    <td style="padding: 10px;">@item.FollowUpDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td style="padding: 10px;">@item.OrganizationName</td>
+                                    <td style="padding: 10px;">@item.StatusDescription</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="savings-modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="CloseFollowUpModal" style="background-color: #6c757d; color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer;">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<FloatingPanel IsOpen="@(_feedbackViewerKind == JourneyFeedbackKind.Faq)"
+               Title="Organization FAQs"
+               IconClass="bi bi-question-circle-fill"
+               Size="wide"
+               OnClose="CloseFeedbackViewerAsync">
+    <div class="organization-journey-feedback-browser">
+        <div class="organization-journey-feedback-list">
+            @foreach (var faq in JourneyFeedback.Faqs)
+            {
+                <button type="button" class="@GetFeedbackListClass(_selectedFaq?.FAQID == faq.FAQID)" @onclick="@(() => _selectedFaq = faq)">
+                    <strong>@faq.Question</strong>
+                    <span>@FeedbackContext(faq.ScreenTitle, faq.DateTimeEntered)</span>
+                </button>
+            }
+        </div>
+        <div class="organization-journey-feedback-detail">
+            @if (_selectedFaq is not null)
+            {
+                <h3>@_selectedFaq.Question</h3>
+                <p class="organization-journey-feedback-prewrap">@_selectedFaq.Answer</p>
+                <div class="organization-journey-feedback-meta">Screen: @_selectedFaq.ScreenTitle · Reviewed: @(_selectedFaq.IsReviewed ? "Yes" : "No") · Active: @(_selectedFaq.IsActive ? "Yes" : "No")</div>
+            }
+        </div>
+    </div>
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@(_feedbackViewerKind == JourneyFeedbackKind.Enhancement)"
+               Title="Organization Enhancements"
+               IconClass="bi bi-lightbulb-fill"
+               Size="wide"
+               OnClose="CloseFeedbackViewerAsync">
+    <div class="organization-journey-feedback-browser">
+        <div class="organization-journey-feedback-list">
+            @foreach (var enhancement in JourneyFeedback.Enhancements)
+            {
+                <button type="button" class="@GetFeedbackListClass(_selectedEnhancement?.EnhancementRequestID == enhancement.EnhancementRequestID)" @onclick="@(() => _selectedEnhancement = enhancement)">
+                    <strong>@enhancement.Title</strong>
+                    <span>@FeedbackContext(enhancement.ScreenTitle, enhancement.DateTimeEntered)</span>
+                </button>
+            }
+        </div>
+        <div class="organization-journey-feedback-detail">
+            @if (_selectedEnhancement is not null)
+            {
+                <h3>@_selectedEnhancement.Title</h3>
+                <p class="organization-journey-feedback-prewrap">@_selectedEnhancement.Description</p>
+                <div class="organization-journey-feedback-meta">Screen: @_selectedEnhancement.ScreenTitle · Status: @_selectedEnhancement.StatusDescription</div>
+            }
+        </div>
+    </div>
+</FloatingPanel>
+
+<FloatingPanel IsOpen="@(_feedbackViewerKind == JourneyFeedbackKind.Support)"
+               Title="Organization Support Tickets"
+               IconClass="bi bi-ticket-perforated-fill"
+               Size="wide"
+               OnClose="CloseFeedbackViewerAsync">
+    <div class="organization-journey-feedback-browser">
+        <div class="organization-journey-feedback-list">
+            @foreach (var ticket in JourneyFeedback.SupportTickets)
+            {
+                <button type="button" class="@GetFeedbackListClass(_selectedSupport?.SupportTicketID == ticket.SupportTicketID)" @onclick="@(() => _selectedSupport = ticket)">
+                    <strong>@ticket.Title</strong>
+                    <span>@FeedbackContext(ticket.ScreenTitle, ticket.DateTimeEntered)</span>
+                </button>
+            }
+        </div>
+        <div class="organization-journey-feedback-detail">
+            @if (_selectedSupport is not null)
+            {
+                <h3>@_selectedSupport.Title</h3>
+                <p class="organization-journey-feedback-prewrap">@_selectedSupport.Description</p>
+                <div class="organization-journey-feedback-meta">Screen: @_selectedSupport.ScreenTitle · Status: @_selectedSupport.StatusDescription</div>
+            }
+        </div>
+    </div>
+</FloatingPanel>
+
+@code {
+    private int UserOrgID => SessionState.CurrentSession?.EMAOrganizationID ?? 0;
+
+    private OrganizationSummary CurrentOrg = new();
+    private List<OrganizationSummary> AllOrganizations = new();
+    private List<OrganizationStatusItem> OrgStatuses = new();
+    private List<ChMSOption> ChMSList = new();
+    private List<AccountingSoftwareSummary> AccountingSoftwareList = new();
+    
+    private string SearchText = string.Empty;
+    private List<OrganizationSummary> SearchResults = new();
+
+    private string ValidationMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+
+    private List<OrganizationJourneyActivityType> ActivityTypes = new();
+    private List<OrganizationJourneyEntry> HistoryEntries = new();
+    private OrganizationJourneyFeedbackSummary JourneyFeedback = new();
+    private OrganizationJourneyEntry NewEntry = new();
+
+    private JourneyFeedbackKind? _feedbackViewerKind;
+    private OrganizationJourneyFaq? _selectedFaq;
+    private OrganizationJourneyEnhancement? _selectedEnhancement;
+    private OrganizationJourneySupportTicket? _selectedSupport;
+
+    private List<OrganizationFollowUpItem> FollowUpQueue = new();
+    private bool ShowFollowUpModal = false;
+
+    private string LogValidationMessage = string.Empty;
+    private string LogSuccessMessage = string.Empty;
+
+    private string SelectedStatusId
+    {
+        get => CurrentOrg.OrganizationStatusID?.ToString() ?? string.Empty;
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                CurrentOrg.OrganizationStatusID = parsed;
+                NewEntry.OrganizationStatusID = parsed;
+            }
+            else
+            {
+                CurrentOrg.OrganizationStatusID = null;
+                NewEntry.OrganizationStatusID = null;
+            }
+        }
+    }
+
+    private string SelectedChMSId
+    {
+        get => CurrentOrg.ChMSID?.ToString() ?? string.Empty;
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                CurrentOrg.ChMSID = parsed;
+            }
+            else
+            {
+                CurrentOrg.ChMSID = null;
+            }
+        }
+    }
+
+    private string SelectedAccountingSoftwareId
+    {
+        get => CurrentOrg.AccountingSoftwareID?.ToString() ?? string.Empty;
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                CurrentOrg.AccountingSoftwareID = parsed;
+            }
+            else
+            {
+                CurrentOrg.AccountingSoftwareID = null;
+            }
+        }
+    }
+
+    private string SelectedLogActivityTypeId
+    {
+        get => NewEntry.ActivityTypeID == 0 ? string.Empty : NewEntry.ActivityTypeID.ToString();
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                NewEntry.ActivityTypeID = parsed;
+            }
+            else
+            {
+                NewEntry.ActivityTypeID = 0;
+            }
+        }
+    }
+
+    private string SelectedFollowUpActivityTypeId
+    {
+        get => NewEntry.FollowUpActivityTypeID?.ToString() ?? string.Empty;
+        set
+        {
+            if (int.TryParse(value, out var parsed))
+            {
+                NewEntry.FollowUpActivityTypeID = parsed;
+            }
+            else
+            {
+                NewEntry.FollowUpActivityTypeID = null;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserOrgID <= 0)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        try
+        {
+            OrgStatuses = await OrgJourneyService.GetOrganizationStatusesAsync();
+            ActivityTypes = await OrgJourneyService.GetJourneyActivityTypesAsync();
+            FollowUpQueue = await OrgJourneyService.GetFollowUpQueueAsync();
+            AllOrganizations = await OrgJourneyService.GetAllOrganizationsAsync();
+            ChMSList = await OrgJourneyService.GetChMSListAsync();
+            AccountingSoftwareList = await OrgJourneyService.GetAccountingSoftwareAsync();
+        }
+        catch (Exception ex)
+        {
+            ValidationMessage = "Error loading metadata.";
+            Console.WriteLine(ex);
+        }
+
+        ResetNewEntry();
+    }
+
+    private void ResetNewEntry()
+    {
+        NewEntry = new OrganizationJourneyEntry
+        {
+            EMAOrganizationID = CurrentOrg.EMAOrganizationID,
+            UserId = SessionState.CurrentSession?.UserID ?? 0,
+            ActivityDateTime = DateTime.Now,
+            OrganizationStatusID = CurrentOrg.OrganizationStatusID
+        };
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        SearchText = e.Value?.ToString() ?? string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (SearchText.Length >= 2)
+        {
+            SearchResults = AllOrganizations
+                .Where(o => (o.OrganizationName ?? "").Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        else
+        {
+            SearchResults.Clear();
+        }
+    }
+
+    private async Task SelectOrganization(OrganizationSummary org)
+    {
+        CurrentOrg = org;
+        SearchText = org.OrganizationName ?? string.Empty;
+        SearchResults.Clear();
+
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        ResetNewEntry();
+        await LoadJourneyHistory();
+        await LoadJourneyFeedback();
+    }
+
+    private async Task LoadJourneyHistory()
+    {
+        if (CurrentOrg.EMAOrganizationID > 0)
+        {
+            HistoryEntries = await OrgJourneyService.GetJourneyHistoryAsync(CurrentOrg.EMAOrganizationID);
+        }
+        else
+        {
+            HistoryEntries.Clear();
+        }
+    }
+
+    private async Task LoadJourneyFeedback()
+    {
+        JourneyFeedback = CurrentOrg.EMAOrganizationID > 0
+            ? await OrgJourneyService.GetJourneyFeedbackAsync(CurrentOrg.EMAOrganizationID)
+            : new OrganizationJourneyFeedbackSummary();
+
+        _selectedFaq = JourneyFeedback.Faqs.FirstOrDefault();
+        _selectedEnhancement = JourneyFeedback.Enhancements.FirstOrDefault();
+        _selectedSupport = JourneyFeedback.SupportTickets.FirstOrDefault();
+    }
+
+    private void OpenFeedbackViewer(JourneyFeedbackKind kind)
+    {
+        _feedbackViewerKind = kind;
+        if (kind == JourneyFeedbackKind.Faq) _selectedFaq ??= JourneyFeedback.Faqs.FirstOrDefault();
+        if (kind == JourneyFeedbackKind.Enhancement) _selectedEnhancement ??= JourneyFeedback.Enhancements.FirstOrDefault();
+        if (kind == JourneyFeedbackKind.Support) _selectedSupport ??= JourneyFeedback.SupportTickets.FirstOrDefault();
+    }
+
+    private Task CloseFeedbackViewerAsync()
+    {
+        _feedbackViewerKind = null;
+        return Task.CompletedTask;
+    }
+
+    private void OpenLinkedFeedback(OrganizationJourneyEntry entry)
+    {
+        if (entry.FAQID is int faqID)
+        {
+            _selectedFaq = JourneyFeedback.Faqs.FirstOrDefault(item => item.FAQID == faqID) ?? JourneyFeedback.Faqs.FirstOrDefault();
+            _feedbackViewerKind = JourneyFeedbackKind.Faq;
+            return;
+        }
+
+        if (entry.EnhancementRequestID is int enhancementID)
+        {
+            _selectedEnhancement = JourneyFeedback.Enhancements.FirstOrDefault(item => item.EnhancementRequestID == enhancementID) ?? JourneyFeedback.Enhancements.FirstOrDefault();
+            _feedbackViewerKind = JourneyFeedbackKind.Enhancement;
+            return;
+        }
+
+        if (entry.SupportTicketID is int supportID)
+        {
+            _selectedSupport = JourneyFeedback.SupportTickets.FirstOrDefault(item => item.SupportTicketID == supportID) ?? JourneyFeedback.SupportTickets.FirstOrDefault();
+            _feedbackViewerKind = JourneyFeedbackKind.Support;
+        }
+    }
+
+    private static bool HasLinkedFeedback(OrganizationJourneyEntry entry) =>
+        entry.FAQID.HasValue || entry.EnhancementRequestID.HasValue || entry.SupportTicketID.HasValue;
+
+    private static string GetLinkedFeedbackIcon(OrganizationJourneyEntry entry) =>
+        entry.FAQID.HasValue ? "bi-question-circle-fill" :
+        entry.EnhancementRequestID.HasValue ? "bi-lightbulb-fill" :
+        "bi-ticket-perforated-fill";
+
+    private static string GetFeedbackListClass(bool selected) =>
+        selected ? "organization-journey-feedback-list-item selected" : "organization-journey-feedback-list-item";
+
+    private static string FeedbackContext(string screenTitle, DateTime dateTime) =>
+        $"{(string.IsNullOrWhiteSpace(screenTitle) ? "EMA screen" : screenTitle)} · {dateTime.ToLocalTime():yyyy-MM-dd HH:mm}";
+
+    private enum JourneyFeedbackKind
+    {
+        Faq,
+        Enhancement,
+        Support
+    }
+
+    private async Task SaveOrganizationInfo()
+    {
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        if (CurrentOrg.EMAOrganizationID <= 0)
+        {
+            ValidationMessage = "Please select an organization first.";
+            return;
+        }
+
+        bool success = await OrgJourneyService.UpdateOrganizationDetailsAsync(CurrentOrg.EMAOrganizationID, CurrentOrg);
+        if (success)
+        {
+            SuccessMessage = "Organization details saved successfully.";
+        }
+        else
+        {
+            ValidationMessage = "Failed to update organization details.";
+        }
+    }
+
+    private async Task SaveJourneyEntry()
+    {
+        LogValidationMessage = string.Empty;
+        LogSuccessMessage = string.Empty;
+
+        if (CurrentOrg.EMAOrganizationID <= 0)
+        {
+            LogValidationMessage = "Please select an organization first.";
+            return;
+        }
+
+        if (NewEntry.ActivityTypeID <= 0)
+        {
+            LogValidationMessage = "Please select an Activity type.";
+            return;
+        }
+
+        NewEntry.EMAOrganizationID = CurrentOrg.EMAOrganizationID;
+        NewEntry.UserId = SessionState.CurrentSession?.UserID ?? 0;
+        if (!NewEntry.OrganizationStatusID.HasValue || NewEntry.OrganizationStatusID.Value <= 0)
+        {
+            NewEntry.OrganizationStatusID = CurrentOrg.OrganizationStatusID ?? (OrgStatuses.FirstOrDefault()?.OrganizationStatusID ?? 1);
+        }
+
+        int? newId = await OrgJourneyService.CreateJourneyEntryAsync(CurrentOrg.EMAOrganizationID, NewEntry);
+        if (newId.HasValue && newId.Value > 0)
+        {
+            LogSuccessMessage = "Journey entry saved successfully.";
+            ResetNewEntry();
+            await LoadJourneyHistory();
+            FollowUpQueue = await OrgJourneyService.GetFollowUpQueueAsync();
+        }
+        else
+        {
+            LogValidationMessage = "Failed to save journey entry.";
+        }
+    }
+
+    private void OpenFollowUpModal()
+    {
+        ShowFollowUpModal = true;
+    }
+
+    private void CloseFollowUpModal()
+    {
+        ShowFollowUpModal = false;
+    }
+
+    private async Task SelectFollowUpItem(OrganizationFollowUpItem item)
+    {
+        ShowFollowUpModal = false;
+        var targetOrg = AllOrganizations.FirstOrDefault(o => o.EMAOrganizationID == item.EMAOrganizationID);
+        if (targetOrg != null)
+        {
+            await SelectOrganization(targetOrg);
+        }
+    }
+}

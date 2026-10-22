@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "EMA_Api": {
+      "commandName": "Project",
+      "launchBrowser": false
+    }
+  }
+}

@@ -1,0 +1,61 @@
+@page "/faqs"
+@layout PublicLayout
+@attribute [AllowAnonymous]
+
+@inject IScreenFeedbackService ScreenFeedbackService
+
+<PageTitle>Frequently Asked Questions - EMA</PageTitle>
+
+<section class="public-faq-page">
+    @if (_loading)
+    {
+        <p>Loading FAQs...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_publishedHtml))
+    {
+        <iframe class="public-faq-published-frame"
+                title="Frequently Asked Questions"
+                sandbox
+                srcdoc="@_publishedHtml"></iframe>
+    }
+    else
+    {
+        <h1>Frequently Asked Questions</h1>
+        <p>Answers to common questions about EmailMoney.App.</p>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="public-faq-error" role="alert">@_error</div>
+        }
+        else
+        {
+            <p>No public FAQs are currently available.</p>
+        }
+    }
+</section>
+
+@code {
+    private bool _loading = true;
+    private string? _publishedHtml;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Task 41 uses an explicit publication boundary. The public page must
+            // never fall back to live FAQ rows when no snapshot exists or when
+            // published-blob loading fails.
+            _publishedHtml = await ScreenFeedbackService.GetPublishedFaqHtmlAsync();
+        }
+        catch
+        {
+            _publishedHtml = null;
+            _error = "The public FAQ page is temporarily unavailable. Please try again later.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

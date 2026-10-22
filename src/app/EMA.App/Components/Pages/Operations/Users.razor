@@ -1,0 +1,241 @@
+@page "/users"
+
+@using EMA.App.Models
+@using EMA.App.Services
+@inject IUserSessionStateService SessionState
+
+<PageTitle>Users & Roles - EMA</PageTitle>
+
+<div class="ema-settings-shell">
+
+    <div class="users-container">
+        <div class="users-form">
+            <h3 class="section-title">Add/Edit User:</h3>
+
+            @if (!string.IsNullOrEmpty(ValidationMessage))
+            {
+                <div class="validation-message" role="alert">
+                    @ValidationMessage
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(SuccessMessage))
+            {
+                <div class="success-message" role="alert">
+                    @SuccessMessage
+                </div>
+            }
+
+            <div class="form-row-horizontal">
+                <div class="form-group">
+                    <span class="form-label-horizontal">Name</span>
+                    <input class="form-input-horizontal" type="text" @bind="CurrentUser.UserName" placeholder="John Brown" />
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">Email</span>
+                    <input class="form-input-horizontal" type="email" @bind="CurrentUser.EmailAddress" placeholder="john.brown@gmail.com" />
+                </div>
+
+                <div class="form-group">
+                    <span class="form-label-horizontal">Phone</span>
+                    <input class="form-input-horizontal" type="tel" @bind="CurrentUser.PhoneNumber" placeholder="780-123-4567" />
+                </div>
+
+                <div class="form-group-active">
+                    <span class="form-label-horizontal">Active</span>
+                    <div class="form-checkbox-container">
+                        <input type="checkbox" @bind="CurrentUser.IsActive" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="roles-section">
+                <div class="roles-title">Select Roles (must select at least one role)</div>
+                <table class="roles-table">
+                    <tbody>
+                        @foreach (var role in MasterRoles)
+                        {
+                            <tr>
+                                <td>@role.RoleName</td>
+                                <td class="cell-check">
+                                    <input type="checkbox" 
+                                           aria-label="Toggle role @role.RoleName"
+                                           checked="@CurrentUser.RoleIDs.Contains(role.RoleID)" 
+                                           @onchange="(e) => ToggleRole(role.RoleID, e.Value)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <button class="btn-save-user" @onclick="SaveUser">
+                    Save User with Roles
+                </button>
+            </div>
+        </div>
+
+        <div class="users-table-section">
+            <h3 class="section-title">Existing Users - Click the Name to view, then make the edits above</h3>
+            <div class="users-grid-flex">
+                <div class="grid-column">
+                    <div class="grid-header">Name</div>
+                    @foreach (var user in UsersList)
+                    {
+                        <div class="grid-cell">
+                            <span class="link-name" @onclick="() => SelectUser(user)">@user.UserName</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">Email</div>
+                    @foreach (var user in UsersList)
+                    {
+                        <div class="grid-cell">@user.EmailAddress</div>
+                    }
+                </div>
+
+                <div class="grid-column">
+                    <div class="grid-header">Phone</div>
+                    @foreach (var user in UsersList)
+                    {
+                        <div class="grid-cell">@user.PhoneNumber</div>
+                    }
+                </div>
+
+                <div class="grid-column roles-column">
+                    <div class="grid-header cell-center"># Roles</div>
+                    @foreach (var user in UsersList)
+                    {
+                        <div class="grid-cell cell-center">@user.RoleCount</div>
+                    }
+                </div>
+
+                <div class="grid-column active-column">
+                    <div class="grid-header cell-center">Active</div>
+                    @foreach (var user in UsersList)
+                    {
+                        <div class="grid-cell cell-center">
+                            <input type="checkbox" checked="@user.IsActive" disabled />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Inject]
+    private IOrganizationService OrganizationService { get; set; } = default!;
+
+    private UserItem CurrentUser = new();
+    private List<UserItem> UsersList = new();
+    private List<RoleItem> MasterRoles = new();
+
+    private string ValidationMessage = string.Empty;
+    private string SuccessMessage = string.Empty;
+    private int EMAOrganizationID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsersAsync();
+        var rolesResult = await OrganizationService.GetRolesAsync();
+        MasterRoles = rolesResult ?? new List<RoleItem>();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        var result = await OrganizationService.GetUsersAsync(EMAOrganizationID);
+        UsersList = result ?? new List<UserItem>();
+    }
+
+    private void SelectUser(UserItem user)
+    {
+        ValidationMessage = string.Empty;
+        SuccessMessage = string.Empty;
+
+        CurrentUser = new UserItem
+        {
+            UserID = user.UserID,
+            UserName = user.UserName,
+            EmailAddress = user.EmailAddress,
+            PhoneNumber = user.PhoneNumber,
+            IsActive = user.IsActive,
+            RoleIDs = new List<int>(user.RoleIDs)
+        };
+    }
+
+    private void ToggleRole(int roleID, object? checkedValue)
+    {
+        bool isChecked = checkedValue is bool val && val;
+        if (isChecked)
+        {
+            if (!CurrentUser.RoleIDs.Contains(roleID))
+            {
+                CurrentUser.RoleIDs.Add(roleID);
+            }
+        }
+        else
+        {
+            CurrentUser.RoleIDs.Remove(roleID);
+        }
+    }
+
+    private async Task SaveUser()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentUser.UserName))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Name is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentUser.EmailAddress))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Email is required.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentUser.PhoneNumber))
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Phone number is required.";
+            return;
+        }
+
+        if (CurrentUser.RoleIDs == null || !CurrentUser.RoleIDs.Any())
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "You must select at least one role.";
+            return;
+        }
+
+        ValidationMessage = string.Empty;
+
+        var ok = await OrganizationService.SaveUserAsync(EMAOrganizationID, CurrentUser);
+        if (ok)
+        {
+            SuccessMessage = $"Successfully saved user {CurrentUser.UserName}.";
+            CurrentUser = new UserItem();
+            await LoadUsersAsync();
+            _ = ClearSuccessMessageAfterDelay();
+        }
+        else
+        {
+            SuccessMessage = string.Empty;
+            ValidationMessage = "Failed to save user to database.";
+        }
+    }
+
+    private async Task ClearSuccessMessageAfterDelay()
+    {
+        await Task.Delay(4000);
+        SuccessMessage = string.Empty;
+        StateHasChanged();
+    }
+}

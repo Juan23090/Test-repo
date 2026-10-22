@@ -1,0 +1,232 @@
+@page "/anonymous"
+
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IUserSessionStateService SessionState
+@inject IOrganizationOnboardingService OnboardingService
+@inject IDonorService DonorService
+@inject NavigationManager Navigation
+
+<PageTitle>Set Up Anonymous Donor - EMA</PageTitle>
+
+<section class="task22-page">
+    <header class="task22-header">
+        <h1>Set Up Anonymous Donor</h1>
+    </header>
+
+    <button type="button"
+            class="task22-anonymous-callout"
+            @onclick="OpenDonorMaintenance">
+        Click Here to Setup the Anonymous Donor<br />
+        Then Come Back Here to Select It Below
+    </button>
+
+    @if (IsLoading)
+    {
+        <p class="task22-status">Loading...</p>
+    }
+    else
+    {
+        <div class="task22-card task22-single-row-card">
+            <div class="task22-row task22-typeahead-row">
+                <label for="anonymous-donor-search">
+                    Anonymous Donor:
+                </label>
+
+                <div class="task22-control task22-typeahead-control">
+                    <input id="anonymous-donor-search"
+                           class="task22-input"
+                           placeholder="Start Typing to Select"
+                           value="@SearchText"
+                           @oninput="SearchDonorsAsync"
+                           autocomplete="off" />
+
+                    @if (SearchResults.Count > 0)
+                    {
+                        <div class="task22-typeahead-results"
+                             role="listbox"
+                             aria-label="Anonymous donor search results">
+                            @foreach (var donor in SearchResults)
+                            {
+                                <button type="button"
+                                        class="task22-typeahead-item"
+                                        @onclick="@(() => SelectDonor(donor))">
+                                    @DisplayDonor(donor)
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="task22-actions">
+            <button type="button"
+                    class="task22-save-button"
+                    disabled="@(IsSaving || SelectedDonorID is null or <= 0)"
+                    @onclick="SaveAsync">
+                @(IsSaving ? "Saving..." : "Save")
+            </button>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <p class="task22-status @(IsError ? "task22-status-error" : "task22-status-success")"
+           role="status">
+            @StatusMessage
+        </p>
+    }
+</section>
+
+@code {
+    private int OrganizationID =>
+        SessionState.CurrentSession
+            ?.EMAOrganizationID
+        ?? 0;
+
+    private bool IsLoading = true;
+    private bool IsSaving;
+    private bool IsError;
+    private string StatusMessage = string.Empty;
+    private string SearchText = string.Empty;
+    private int? SelectedDonorID;
+    private List<DonorItem> SearchResults = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (OrganizationID <= 0)
+        {
+            IsError = true;
+            StatusMessage =
+                "An organization session is required.";
+            IsLoading = false;
+            return;
+        }
+
+        var settings =
+            await OnboardingService.GetAsync(
+                OrganizationID);
+
+        if (settings is null)
+        {
+            IsError = true;
+            StatusMessage =
+                "The anonymous donor setup could not be loaded.";
+            IsLoading = false;
+            return;
+        }
+
+        SelectedDonorID =
+            settings.EMADonorIDForAnonymous;
+
+        if (SelectedDonorID is > 0)
+        {
+            var donor =
+                await DonorService.GetByIDAsync(
+                    SelectedDonorID.Value);
+
+            SearchText =
+                donor is null
+                    ? $"Donor #{SelectedDonorID.Value}"
+                    : DisplayDonor(
+                        donor);
+        }
+
+        IsLoading = false;
+    }
+
+    private async Task SearchDonorsAsync(
+        ChangeEventArgs args)
+    {
+        SearchText =
+            args.Value?.ToString()
+            ?? string.Empty;
+
+        SelectedDonorID = null;
+        StatusMessage = string.Empty;
+
+        var query =
+            SearchText.Trim();
+
+        if (query.Length < 2)
+        {
+            SearchResults.Clear();
+            return;
+        }
+
+        SearchResults =
+            await DonorService.SearchAsync(
+                OrganizationID,
+                query);
+    }
+
+    private void SelectDonor(
+        DonorItem donor)
+    {
+        SelectedDonorID =
+            donor.EMADonorID;
+
+        SearchText =
+            DisplayDonor(
+                donor);
+
+        SearchResults.Clear();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (SelectedDonorID is null or <= 0 ||
+            IsSaving)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        IsError = false;
+        StatusMessage = string.Empty;
+
+        var result =
+            await OnboardingService.SaveAsync(
+                OrganizationID,
+                "anonymous",
+                new SaveOrganizationOnboardingSettingsRequest
+                {
+                    EMADonorIDForAnonymous =
+                        SelectedDonorID
+                });
+
+        IsSaving = false;
+        IsError =
+            !result.Succeeded;
+        StatusMessage =
+            result.Message;
+    }
+
+    private void OpenDonorMaintenance()
+    {
+        Navigation.NavigateTo(
+            "/donor-maintenance?mode=anonymous-setup");
+    }
+
+    private static string DisplayDonor(
+        DonorItem donor)
+    {
+        if (!string.IsNullOrWhiteSpace(
+                donor.OfficialDonorName))
+        {
+            return donor.OfficialDonorName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+                donor.EmailAddress))
+        {
+            return donor.EmailAddress;
+        }
+
+        return $"Donor #{donor.EMADonorID}";
+    }
+}

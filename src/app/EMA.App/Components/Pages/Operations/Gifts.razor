@@ -1,0 +1,292 @@
+@page "/gift-report"
+
+@using System.Globalization
+@using EMA.App.Models
+@using EMA.App.Services
+
+@inject IGiftReportService GiftReportService
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject ICustomizationService CustomizationService
+@inject IUserSessionStateService SessionState
+
+<PageTitle>Giving Metrics - EMA</PageTitle>
+
+<div class="reports-page">
+    <main class="reports-body" aria-label="Gift report">
+        <section class="gift-filters" aria-label="Gift report filters">
+            <div class="gift-col">
+                <div class="gift-field">
+                    <span class="gift-label">Start Date:</span>
+                    <input type="date" @bind="StartDate" onclick="this.showPicker()" />
+                </div>
+                <div class="gift-field">
+                    <span class="gift-label">End Date:</span>
+                    <input type="date" @bind="EndDate" onclick="this.showPicker()" />
+                </div>
+            </div>
+
+            <div class="gift-col">
+                <div class="gift-field">
+                    <span class="gift-label">Time Period:</span>
+                    <select @bind="TimePeriod">
+                        <option value="Day">Day</option>
+                        <option value="Week">Week</option>
+                        <option value="Month">Month</option>
+                        <option value="Quarter">Quarter</option>
+                        <option value="Year">Year</option>
+                    </select>
+                </div>
+                <div class="gift-field">
+                    <span class="gift-label">Classification:</span>
+                    <select @bind="Classification">
+                        @foreach (var option in AvailableClassifications)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="gift-metrics" role="group" aria-label="Metric">
+                @foreach (var metricOption in MetricOptions)
+                {
+                    var value = metricOption;
+                    <label>
+                        <input type="checkbox" checked="@(Metric == value)" @onchange="() => Metric = value" />
+                        @value
+                    </label>
+                }
+            </div>
+        </section>
+
+        <div class="gift-actions">
+            <button type="button" @onclick="LoadReportAsync" disabled="@IsLoading">Display</button>
+        </div>
+
+        @if (IsLoading)
+        {
+            <p class="status-text">Loading report...</p>
+        }
+        else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <p class="status-text error">@ErrorMessage</p>
+        }
+        else if (Data is { Rows.Count: > 0 })
+        {
+            <div class="gift-grid-wrapper">
+                <table class="gift-grid">
+                    <thead>
+                        <tr>
+                            <th class="sortable" @onclick='() => SortBy("__period")'><span class="gift-hdr">Period Ending</span><span class="gift-sort-arrow">@Indicator("__period")</span></th>
+                            <th class="sortable amount" @onclick='() => SortBy("__total")'><span class="gift-hdr">Total</span><span class="gift-sort-arrow">@Indicator("__total")</span></th>
+                            @foreach (var cls in Data.Classifications)
+                            {
+                                <th class="sortable amount" @onclick="() => SortBy(cls)"><span class="gift-hdr">@cls</span><span class="gift-sort-arrow">@Indicator(cls)</span></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="gift-grand-total">
+                            <td>All Periods</td>
+                            <td class="amount">@FormatValue(Data.GrandTotal)</td>
+                            @foreach (var cls in Data.Classifications)
+                            {
+                                <td class="amount">@FormatValue(ColumnTotal(cls))</td>
+                            }
+                        </tr>
+                        @foreach (var row in SortedRows())
+                        {
+                            <tr>
+                                <td>@FormatPeriod(row.PeriodDate)</td>
+                                <td class="amount">@FormatValue(row.Total)</td>
+                                @foreach (var cls in Data.Classifications)
+                                {
+                                    <td class="amount">@FormatValue(row.Values.TryGetValue(cls, out var v) ? v : 0m)</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (HasLoadedAtLeastOnce)
+        {
+            <p class="status-text">No gift data found for the selected filters.</p>
+        }
+        else
+        {
+            <p class="status-text">Select a date range and click Display.</p>
+        }
+    </main>
+</div>
+
+@code {
+    private int OrgID =>
+        SessionState.CurrentSession?.EMAOrganizationID
+        ?? 0;
+
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+    private string TimePeriod { get; set; } = "Month";
+    private string Classification { get; set; } = "Fund";
+    private string Metric { get; set; } = "Dollars";
+
+    private string? DateFormatId { get; set; }
+    private List<(string Label, string Value)> AvailableClassifications { get; set; } = ClassificationOptions.ToList();
+
+    private bool IsLoading { get; set; }
+    private string? ErrorMessage { get; set; }
+    private GiftReportResult? Data { get; set; }
+    private string LoadedMetric { get; set; } = "Dollars";
+    private bool HasLoadedAtLeastOnce { get; set; }
+
+    private string SortColumn { get; set; } = "__period";
+    private bool SortAscending { get; set; } = false; // default: Period Ending descending (newest first)
+
+    // Dropdown label (UI) -> canonical token sent to the API.
+    private static readonly (string Label, string Value)[] ClassificationOptions =
+    {
+        ("Campus", "Campus"),
+        ("Event", "Event"),
+        ("Funds", "Fund"),
+        ("Method of Giving", "Method"),
+        ("Source", "Source"),
+        ("Tribute Type", "TributeType"),
+    };
+
+    private static readonly string[] MetricOptions = { "Dollars", "Count", "Average" };
+
+    // Classification token -> Organization Use flag that gates it.
+    private static readonly (string Value, string Flag)[] ClassificationFlags =
+    {
+        ("Campus", "UseCampuses"),
+        ("Event", "UseEvents"),
+        ("Fund", "UseFunds"),
+        ("Method", "UseMethodsOfGiving"),
+        ("Source", "UseSources"),
+        ("TributeType", "UseTributeTypes"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Org date format for the Period Ending column.
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        DateFormatId = org?.DateFormatID;
+
+        // Classification dropdown honours the org's Use flags.
+        var enabled = await LoadEnabledClassificationsAsync();
+        if (enabled.Count > 0)
+        {
+            AvailableClassifications = enabled;
+            if (!AvailableClassifications.Any(c => c.Value == Classification))
+                Classification = AvailableClassifications[0].Value;
+        }
+    }
+
+    private async Task<List<(string Label, string Value)>> LoadEnabledClassificationsAsync()
+    {
+        var settings = await CustomizationService.GetOrgSettingsAsync(OrgID);
+        if (settings is null) return ClassificationOptions.ToList();
+
+        bool On(string flag) =>
+            settings.Value.TryGetProperty(flag, out var p) &&
+            string.Equals(p.GetString(), "Y", StringComparison.OrdinalIgnoreCase);
+
+        return ClassificationOptions
+            .Where(o => ClassificationFlags.Any(f => f.Value == o.Value && On(f.Flag)))
+            .ToList();
+    }
+
+    private string FormatPeriod(string isoPeriodDate)
+        => EMA.App.Utilities.OrgDateFormat.Format(isoPeriodDate, DateFormatId);
+
+    private async Task LoadReportAsync()
+    {
+        ErrorMessage = null;
+
+        if (!StartDate.HasValue || !EndDate.HasValue)
+        {
+            Data = null;
+            ErrorMessage = "Please select both Start Date and End Date.";
+            return;
+        }
+
+        var startDate = DateOnly.FromDateTime(StartDate.Value);
+        var endDate = DateOnly.FromDateTime(EndDate.Value);
+
+        if (endDate < startDate)
+        {
+            Data = null;
+            ErrorMessage = "Please ensure the End Date is not before the Start Date.";
+            return;
+        }
+
+        IsLoading = true;
+
+        var result = await GiftReportService.GetGiftReportAsync(
+            OrgID, startDate, endDate, TimePeriod, Classification, Metric);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            Data = result.Data;
+            LoadedMetric = Metric;
+            HasLoadedAtLeastOnce = true;
+            SortColumn = "__period";
+            SortAscending = false; // default: Period Ending descending (newest first)
+        }
+        else
+        {
+            Data = null;
+            ErrorMessage = result.ErrorMessage ?? "Unable to load report data.";
+        }
+
+        IsLoading = false;
+    }
+
+    private void SortBy(string column)
+    {
+        if (SortColumn == column)
+        {
+            SortAscending = !SortAscending;
+        }
+        else
+        {
+            SortColumn = column;
+            SortAscending = true;
+        }
+    }
+
+    private IEnumerable<GiftReportRow> SortedRows()
+    {
+        if (Data?.Rows is null)
+        {
+            return Enumerable.Empty<GiftReportRow>();
+        }
+
+        Func<GiftReportRow, IComparable> key = SortColumn switch
+        {
+            "__period" => r => r.PeriodDate,
+            "__total" => r => r.Total,
+            _ => r => r.Values.TryGetValue(SortColumn, out var v) ? v : 0m
+        };
+
+        return SortAscending ? Data.Rows.OrderBy(key) : Data.Rows.OrderByDescending(key);
+    }
+
+    private string Indicator(string column)
+        => SortColumn == column ? (SortAscending ? "▲" : "▼") : string.Empty;
+
+    private decimal ColumnTotal(string classification)
+        => Data?.Rows.Sum(r => r.Values.TryGetValue(classification, out var v) ? v : 0m) ?? 0m;
+
+    private string FormatValue(decimal value)
+        => LoadedMetric == "Count"
+            ? value.ToString("#,##0", CultureInfo.InvariantCulture)
+            : value.ToString("$#,##0.00", CultureInfo.InvariantCulture);
+}

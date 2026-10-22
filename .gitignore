@@ -1,0 +1,30 @@
+node_modules/
+bin/
+obj/
+__pycache__/
+*.py[cod]
+
+.env
+local.settings.json
+*.csproj.user
+
+.DS_Store
+
+.vs/
+.vscode/
+
+run.txt
+sql.txt
+CLAUDE.md
+test.sql
+azurite
+
+src/api/EMA.Api/PowerShellModules/
+
+### Local Azurite development files ###
+**/AzuriteConfig
+**/__azurite_db_*.json
+
+### Local settings backups ###
+**/local.settings.json.backup
+**/local.settings.json.*backup*

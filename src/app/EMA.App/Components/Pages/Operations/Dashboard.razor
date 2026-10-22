@@ -1,0 +1,1259 @@
+@page "/dashboard"
+
+@using System.Text.Json
+@using System.Net.Http.Json
+
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject IUserSessionStateService SessionState
+@inject IOrganizationService OrganizationService
+@inject IOrganizationStateService OrganizationStateService
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - EMA</PageTitle>
+
+<HeadContent>
+    <meta name="description"
+          content="EMA Dashboard — filter-driven donation reports for nonprofit administrators." />
+</HeadContent>
+
+<div class="dashboard-container">
+
+    <!-- ── Reporting Dashboard ───────────────────────────────────────────────── -->
+    <h4 class="mb-3">Reports</h4>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0 d-flex flex-column" style="min-height: 420px;">
+
+            <!-- Main area: filter sidebar + results -->
+            <div class="d-flex flex-grow-1">
+
+                <!-- Left filter sidebar -->
+                <div class="filter-sidebar d-flex flex-column gap-2 p-3">
+                    @foreach (var filter in VisibleFilterNames)
+                    {
+                        <button class="btn btn-filter text-start @(IsFilterActive(filter) ? "btn-filter--active" : "")"
+                                @onclick="() => OpenFilter(filter)">
+                            @FilterLabel(filter)
+                        </button>
+                    }
+                </div>
+
+                <!-- Results area -->
+                <div class="flex-grow-1 p-4 d-flex align-items-center justify-content-center">
+                    @if (!_reportDisplayed)
+                    {
+                        <div class="text-center py-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52"
+                                 fill="currentColor" viewBox="0 0 16 16"
+                                 class="d-block mx-auto mb-3 text-muted" style="opacity:0.3;">
+                                <path d="M4 11H2v3h2v-3zm5-4H7v7h2V7zm5-5v12h-2V2h2zm-2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1h-2zM6 7a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm-5 4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-3z"/>
+                            </svg>
+                            <p class="text-muted fw-semibold mb-0">Click <strong>Display</strong> to See the Report</p>
+                        </div>
+                    }
+                    else if (_reportLoading)
+                    {
+                        <p class="text-muted fst-italic mb-0">Loading report...</p>
+                    }
+                    else if (_reportError is not null)
+                    {
+                        <div class="alert alert-warning py-2 mb-0 w-100" role="alert">
+                            <small>@_reportError</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="w-100" id="report-print-area">
+                            <div class="text-center mb-3">
+                                <div class="fw-bold" style="font-size:1.4rem;">Email Money App</div>
+                                <div class="fw-semibold" style="font-size:1.15rem;">Giving Summaries</div>
+                            </div>
+                            @{
+                                var cols = ColumnsByLevel[_summarizeLevel];
+                            }
+                            @{
+                                bool _isDetail = _summarizeLevel == "None";
+                                string _amtKey = _isDetail ? "DonationAmount" : "TotalDonations";
+                                decimal _footerTotal = 0m;
+                                int _footerCount = 0;
+
+                                if (_reportRows is not null)
+                                {
+                                    foreach (var _r in _reportRows)
+                                    {
+                                        if (_r.TryGetValue(_amtKey, out var _ae) && _ae.TryGetDecimal(out var _a))
+                                            _footerTotal += _a;
+
+                                        if (!_isDetail && _r.TryGetValue("DonationCount", out var _ce) && _ce.TryGetInt32(out var _c))
+                                            _footerCount += _c;
+                                    }
+                                }
+                            }
+
+                            <table class="table table-striped table-hover table-sm mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        @foreach (var col in cols)
+                                        {
+                                            <th class="@(col.IsCurrency || col.IsCount ? "text-end" : "")">
+                                                @col.Header
+                                            </th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (_reportRows == null || _reportRows.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="@cols.Length" class="text-center text-muted fst-italic py-3">
+                                                No results found.
+                                            </td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var row in _reportRows)
+                                        {
+                                            <tr>
+                                                @foreach (var col in cols)
+                                                {
+                                                    <td class="@(col.IsCurrency || col.IsCount ? "text-end" : "")">
+                                                        @CellDisplay(row, col)
+                                                    </td>
+                                                }
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+
+                                @if (_reportRows is { Count: > 0 })
+                                {
+                                    <tfoot class="fw-bold" style="border-top: 2px solid #6c757d;">
+                                        <tr>
+                                            @foreach (var col in cols)
+                                            {
+                                                <td class="@(col.IsCurrency || col.IsCount ? "text-end" : "")">
+                                                    @if (_isDetail)
+                                                    {
+                                                        @if (col.Key == "DateTimeReceived")
+                                                        {
+                                                            <span>@_reportRows.Count rows</span>
+                                                        }
+                                                        else if (col.IsCurrency)
+                                                        {
+                                                            <span>$@_footerTotal.ToString("N2")</span>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        @if (col.Key is "DonationDate" or "WeekStartDate" or "MonthStartDate" or "QuarterStartDate" or "DonationYear")
+                                                        {
+                                                            <span>Total</span>
+                                                        }
+                                                        else if (col.Key == "TotalDonations")
+                                                        {
+                                                            <span>$@_footerTotal.ToString("N2")</span>
+                                                        }
+                                                        else if (col.Key == "DonationCount")
+                                                        {
+                                                            <span>@_footerCount.ToString("N0")</span>
+                                                        }
+                                                        else if (col.Key == "AverageGiftSize")
+                                                        {
+                                                            <span>$@((_footerCount > 0 ? _footerTotal / _footerCount : 0m).ToString("N2"))</span>
+                                                        }
+                                                    }
+                                                </td>
+                                            }
+                                        </tr>
+                                    </tfoot>
+                                }
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Bottom action bar -->
+            <div class="border-top p-3 d-flex align-items-center gap-2 flex-wrap">
+                <button class="btn btn-primary" @onclick="DisplayReport">Display</button>
+                <button class="btn btn-outline-secondary"
+                        disabled="@(_reportRows is not { Count: > 0 })"
+                        @onclick="PrintReport">Print</button>
+                <button class="btn btn-sm btn-outline-danger ms-auto"
+                        @onclick="ClearAllFilters">
+                    Clear Filters
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── Filter Modal (pure Blazor, no JS) ─────────────────────────────────── -->
+    @if (ActiveFilter is not null)
+    {
+        <div class="ema-modal-backdrop" @onclick="CloseFilter"></div>
+        <div class="ema-modal-dialog card shadow-lg p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">@ActiveFilter</h5>
+                <button type="button" class="btn-close" @onclick="CloseFilter"></button>
+            </div>
+
+            @if (ActiveFilter == "Catalog")
+            {
+                @if (_catalogLoading)
+                {
+                    <p class="text-muted fst-italic small mb-0">Loading saved queries...</p>
+                }
+                else if (_catalogError is not null)
+                {
+                    <div class="alert alert-warning py-2 mb-2"><small>@_catalogError</small></div>
+                }
+                else if (_savedQueries is { Count: 0 })
+                {
+                    <p class="text-muted fst-italic small mb-3">No saved queries yet.</p>
+                }
+                else if (_savedQueries is not null)
+                {
+                    <div class="d-flex flex-column gap-1 mb-3" style="max-height:200px;overflow-y:auto;">
+                        @foreach (var q in _savedQueries)
+                        {
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-outline-primary flex-grow-1 text-start"
+                                        @onclick="() => ApplySavedQuery(q)">
+                                    @q.Name
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        disabled="@(_deletingQueryName == q.Name)"
+                                        @onclick="() => DeleteSavedQueryAsync(q.Name)">
+                                    @(_deletingQueryName == q.Name ? "…" : "×")
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <hr class="my-2" />
+                <p class="small fw-semibold mb-2">Save Current Filters</p>
+                <div class="d-flex gap-2">
+                    <input type="text" class="form-control form-control-sm"
+                           placeholder="Query name"
+                           @bind="_newQueryName"
+                           @bind:event="oninput" />
+                    <button class="btn btn-sm btn-primary"
+                            disabled="@(string.IsNullOrWhiteSpace(_newQueryName) || _saveQueryLoading)"
+                            @onclick="SaveCurrentQueryAsync">
+                        @(_saveQueryLoading ? "…" : "Save")
+                    </button>
+                </div>
+
+                @if (_saveQueryError is not null)
+                {
+                    <div class="text-danger small mt-1">@_saveQueryError</div>
+                }
+            }
+            else if (ActiveFilter == "Summarize")
+            {
+                <div class="d-flex flex-column gap-2">
+                    @foreach (var level in SummarizeLevels)
+                    {
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="summarize-radio"
+                                   id="sum-@level"
+                                   checked="@(_pendingSummarize == level)"
+                                   @onchange="@(() => _pendingSummarize = level)" />
+                            <label class="form-check-label" for="sum-@level">@level</label>
+                        </div>
+                    }
+                </div>
+            }
+            else if (ActiveFilter == "Dates")
+            {
+                <div class="d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label small fw-semibold mb-1" for="date-start">Start Date</label>
+                        <input type="date" id="date-start" class="form-control" style="max-width: 170px;"
+                               @bind="_pendingDateStart"
+                               @bind:format="yyyy-MM-dd" />
+                    </div>
+                    <div>
+                        <label class="form-label small fw-semibold mb-1" for="date-end">End Date</label>
+                        <input type="date" id="date-end" class="form-control" style="max-width: 170px;"
+                               @bind="_pendingDateEnd"
+                               @bind:format="yyyy-MM-dd" />
+                    </div>
+                </div>
+            }
+            else if (ActiveFilter == "Name")
+            {
+                <div>
+                    <label class="form-label small fw-semibold mb-1" for="filter-name">Donor Name</label>
+                    <div class="task22-typeahead-control">
+                        <input type="text" id="filter-name" class="form-control"
+                               placeholder="e.g. Smith"
+                               value="@_pendingFilterName"
+                               @oninput="OnFilterNameInputAsync"
+                               autocomplete="off" />
+                        @if (_nameSuggestions.Count > 0)
+                        {
+                            <div class="task22-typeahead-results" role="listbox" aria-label="Donor name suggestions">
+                                @foreach (var name in _nameSuggestions)
+                                {
+                                    <button type="button" class="task22-typeahead-item"
+                                            @onclick="() => SelectNameSuggestion(name)">
+                                        @name
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="form-text">Searches InteracDonorName (partial match).</div>
+                </div>
+            }
+            else if (ActiveFilter == "Amount")
+            {
+                <div class="d-flex flex-column gap-3">
+                    <div>
+                        <label class="form-label small fw-semibold mb-1" for="amount-min">Minimum Amount ($)</label>
+                        <input type="number" id="amount-min" class="form-control"
+                               min="0" step="0.01" placeholder="e.g. 50"
+                               @bind="_pendingAmountMin" />
+                    </div>
+                    <div>
+                        <label class="form-label small fw-semibold mb-1" for="amount-max">Maximum Amount ($)</label>
+                        <input type="number" id="amount-max" class="form-control"
+                               min="0" step="0.01" placeholder="e.g. 500"
+                               @bind="_pendingAmountMax" />
+                    </div>
+                </div>
+            }
+            else if (ActiveFilter == "Methods")
+            {
+                @if (_methodItemsLoading)
+                {
+                    <p class="text-muted fst-italic small">Loading…</p>
+                }
+                else if (_methodItemsError is not null)
+                {
+                    <div class="alert alert-warning py-2"><small>@_methodItemsError</small></div>
+                }
+                else if (_methodItems is { Count: 0 })
+                {
+                    <p class="text-muted fst-italic small">No methods found.</p>
+                }
+                else if (_methodItems is not null)
+                {
+                    <div class="d-flex flex-column gap-2" style="max-height:240px;overflow-y:auto;overflow-x:hidden;padding-right:4px;">
+                        @foreach (var m in _methodItems)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="method-@m.EMAMethodOfGivingID"
+                                       checked="@(_pendingMethods.Contains(m.EMAMethodOfGivingID))"
+                                       @onchange="e => TogglePending(_pendingMethods, m.EMAMethodOfGivingID, (bool)e.Value!)" />
+                                <label class="form-check-label" for="method-@m.EMAMethodOfGivingID">@m.Description</label>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (ActiveFilter == "Campuses")
+            {
+                @if (_campusItemsLoading)
+                {
+                    <p class="text-muted fst-italic small">Loading…</p>
+                }
+                else if (_campusItemsError is not null)
+                {
+                    <div class="alert alert-warning py-2"><small>@_campusItemsError</small></div>
+                }
+                else if (_campusItems is { Count: 0 })
+                {
+                    <p class="text-muted fst-italic small">No campuses found.</p>
+                }
+                else if (_campusItems is not null)
+                {
+                    <div class="d-flex flex-column gap-2" style="max-height:240px;overflow-y:auto;overflow-x:hidden;padding-right:4px;">
+                        @foreach (var c in _campusItems)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="campus-@c.EMACampusID"
+                                       checked="@(_pendingCampuses.Contains(c.EMACampusID))"
+                                       @onchange="e => TogglePending(_pendingCampuses, c.EMACampusID, (bool)e.Value!)" />
+                                <label class="form-check-label" for="campus-@c.EMACampusID">@c.Name</label>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (ActiveFilter == "Fund")
+            {
+                @if (_fundItemsLoading)
+                {
+                    <p class="text-muted fst-italic small">Loading…</p>
+                }
+                else if (_fundItemsError is not null)
+                {
+                    <div class="alert alert-warning py-2"><small>@_fundItemsError</small></div>
+                }
+                else if (_fundItems is { Count: 0 })
+                {
+                    <p class="text-muted fst-italic small">No funds found.</p>
+                }
+                else if (_fundItems is not null)
+                {
+                    <div class="d-flex flex-column gap-2" style="max-height:240px;overflow-y:auto;overflow-x:hidden;padding-right:4px;">
+                        @foreach (var f in _fundItems)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="fund-@f.EMAFundID"
+                                       checked="@(_pendingFunds.Contains(f.EMAFundID))"
+                                       @onchange="e => TogglePending(_pendingFunds, f.EMAFundID, (bool)e.Value!)" />
+                                <label class="form-check-label" for="fund-@f.EMAFundID">@f.Name</label>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (ActiveFilter == "Type")
+            {
+                @if (_currencyTypeItemsLoading)
+                {
+                    <p class="text-muted fst-italic small">Loading…</p>
+                }
+                else if (_currencyTypeItemsError is not null)
+                {
+                    <div class="alert alert-warning py-2"><small>@_currencyTypeItemsError</small></div>
+                }
+                else if (_currencyTypeItems is { Count: 0 })
+                {
+                    <p class="text-muted fst-italic small">No currency types found.</p>
+                }
+                else if (_currencyTypeItems is not null)
+                {
+                    <div class="d-flex flex-column gap-2" style="max-height:240px;overflow-y:auto;overflow-x:hidden;padding-right:4px;">
+                        @foreach (var t in _currencyTypeItems)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="currtype-@t.EMACurrencyTypeID"
+                                       checked="@(_pendingCurrencyTypes.Contains(t.EMACurrencyTypeID))"
+                                       @onchange="e => TogglePending(_pendingCurrencyTypes, t.EMACurrencyTypeID, (bool)e.Value!)" />
+                                <label class="form-check-label" for="currtype-@t.EMACurrencyTypeID">@t.Description</label>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="text-muted fst-italic">
+                    @ActiveFilter filter options will be wired up once the schema is confirmed.
+                </div>
+            }
+
+            <div class="mt-4 d-flex justify-content-end">
+                @if (ActiveFilter == "Catalog")
+                {
+                    <button class="btn btn-outline-secondary" @onclick="CloseFilter">Close</button>
+                }
+                else
+                {
+                    <button class="btn btn-primary" @onclick="ApplyFilter">Apply</button>
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    // ── API response models ───────────────────────────────────────────────────
+    private record ReportResult(List<string> Columns, List<Dictionary<string, JsonElement>> Rows);
+
+    // ── Saved query models ────────────────────────────────────────────────────
+    private record SavedQueryItem(string Name, string Filters, DateTime DateTimeCreated);
+
+    private record FilterSnapshot(
+        string? Summarize,
+        DateRangeSnapshot? DateRange,
+        string? Name,
+        AmountSnapshot? Amount,
+        List<int>? Methods,
+        List<int>? Funds,
+        List<int>? Campuses,
+        List<int>? CurrencyTypes);
+
+    private record DateRangeSnapshot(DateTime? Start, DateTime? End);
+    private record AmountSnapshot(decimal? Min, decimal? Max);
+
+    // ── Lookup item records (for checkbox filters) ────────────────────────────
+    private record MethodItem(int EMAMethodOfGivingID, string Description);
+    private record CampusItem(int EMACampusID, string Name);
+    private record FundItem(int EMAFundID, string Name);
+    private record CurrencyTypeItem(int EMACurrencyTypeID, string Description);
+
+    // ── Org settings ──────────────────────────────────────────────────────────
+    private record OrgSettings(bool UseCampuses, bool UseCurrencyTypes, bool UseFunds, bool UseMethodsOfGiving);
+
+    private int OrgID;
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SessionState.InitializeAsync();
+
+        if (SessionState.CurrentSession is not { } session)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        OrgID = session.EMAOrganizationID;
+
+        var org = OrganizationStateService.CurrentOrganization;
+        if (org is null || org.EMAOrganizationID != OrgID)
+        {
+            org = await OrganizationService.GetOrganizationAsync(OrgID);
+            if (org is not null) OrganizationStateService.UpdateOrganization(org);
+        }
+        _dateFormatId = org?.DateFormatID;
+
+        await FetchOrgSettingsAsync();
+    }
+
+    private string? _dateFormatId;
+
+    // ── Report column definitions ─────────────────────────────────────────────
+
+    private record ColumnDef(string Key, string Header, bool IsCurrency = false, bool IsCount = false);
+
+    private static readonly string[] SummarizeLevels = ["None", "Day", "Week", "Month", "Quarter", "Year"];
+
+    /// <summary>Maps each Summarize level to the columns that should appear in the results table.</summary>
+    private static readonly Dictionary<string, ColumnDef[]> ColumnsByLevel = new()
+    {
+        ["None"] =
+        [
+            new("DateTimeReceived", "Date"),
+            new("InteracDonorName", "Donor Name"),
+            new("MethodName", "Method"),
+            new("FundName", "Fund"),
+            new("DonationAmount", "Amount", IsCurrency: true),
+        ],
+        ["Day"] =
+        [
+            new("DonationDate", "Date"),
+            new("TotalDonations", "Total Donations", IsCurrency: true),
+            new("DonationCount", "Donation Count", IsCount: true),
+            new("AverageGiftSize", "Average Gift Size", IsCurrency: true),
+        ],
+        ["Week"] =
+        [
+            new("WeekStartDate", "Week Starting"),
+            new("TotalDonations", "Total Donations", IsCurrency: true),
+            new("DonationCount", "Donation Count", IsCount: true),
+            new("AverageGiftSize", "Average Gift Size", IsCurrency: true),
+        ],
+        ["Month"] =
+        [
+            new("MonthStartDate", "Month"),
+            new("TotalDonations", "Total Donations", IsCurrency: true),
+            new("DonationCount", "Donation Count", IsCount: true),
+            new("AverageGiftSize", "Average Gift Size", IsCurrency: true),
+        ],
+        ["Quarter"] =
+        [
+            new("QuarterStartDate", "Quarter"),
+            new("TotalDonations", "Total Donations", IsCurrency: true),
+            new("DonationCount", "Donation Count", IsCount: true),
+            new("AverageGiftSize", "Average Gift Size", IsCurrency: true),
+        ],
+        ["Year"] =
+        [
+            new("DonationYear", "Year"),
+            new("TotalDonations", "Total Donations", IsCurrency: true),
+            new("DonationCount", "Donation Count", IsCount: true),
+            new("AverageGiftSize", "Average Gift Size", IsCurrency: true),
+        ],
+    };
+
+    // Renders a cell. Average Gift Size isn't returned by the period roll-up views
+    // (Day/Week/Quarter/Year), so compute it from the row's total and count when absent.
+    private string CellDisplay(Dictionary<string, JsonElement> row, ColumnDef col)
+    {
+        if (row.TryGetValue(col.Key, out var elem))
+            return FormatCell(elem, col);
+
+        if (col.Key == "AverageGiftSize"
+            && row.TryGetValue("TotalDonations", out var tEl) && tEl.TryGetDecimal(out var total)
+            && row.TryGetValue("DonationCount", out var cEl) && cEl.TryGetInt32(out var count)
+            && count > 0)
+        {
+            return $"${total / count:N2}";
+        }
+
+        return "—";
+    }
+
+    private string FormatCell(JsonElement elem, ColumnDef col)
+    {
+        if (elem.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return "—";
+
+        switch (col.Key)
+        {
+            // Month/Quarter are period labels, not full dates — keep their own formats.
+            case "MonthStartDate":
+                if (DateTime.TryParse(elem.GetString(), out var mDate))
+                    return mDate.ToString("MMM yyyy");
+                break;
+
+            case "QuarterStartDate":
+                if (DateTime.TryParse(elem.GetString(), out var qDate))
+                    return $"Q{(qDate.Month - 1) / 3 + 1} {qDate.Year}";
+                break;
+
+            // Full-date columns honour the org's DateFormatID.
+            case "WeekStartDate" or "DonationDate" or "DateTimeReceived":
+                if (DateTime.TryParse(elem.GetString(), out var dDate))
+                    return EMA.App.Utilities.OrgDateFormat.Format(dDate, _dateFormatId);
+                break;
+        }
+
+        if (col.IsCurrency && elem.TryGetDecimal(out var dec))
+            return $"${dec:N2}";
+
+        if (col.IsCount && elem.TryGetInt32(out var cnt))
+            return cnt.ToString("N0");
+
+        return elem.ToString();
+    }
+
+    // ── Filter modal state ────────────────────────────────────────────────────
+    // Catalog/Summarize/Dates/Name/Amount are always visible.
+    // Type/Methods/Campuses/Fund are shown only when the org has that feature enabled.
+    // While _orgSettings is null (still loading) all buttons are shown so the UI
+    // doesn't flicker — buttons simply disappear if the org has a feature disabled.
+    private IEnumerable<string> VisibleFilterNames
+    {
+        get
+        {
+            yield return "Catalog";
+            yield return "Summarize";
+            yield return "Dates";
+            yield return "Name";
+
+            if (_orgSettings is null || _orgSettings.UseCurrencyTypes)
+                yield return "Type";
+
+            if (_orgSettings is null || _orgSettings.UseMethodsOfGiving)
+                yield return "Methods";
+
+            if (_orgSettings is null || _orgSettings.UseCampuses)
+                yield return "Campuses";
+
+            if (_orgSettings is null || _orgSettings.UseFunds)
+                yield return "Fund";
+
+            yield return "Amount";
+        }
+    }
+
+    private string? ActiveFilter;
+    private string _summarizeLevel = "None";
+    private string _pendingSummarize = "None";
+
+    private DateTime? _dateStart;
+    private DateTime? _dateEnd;
+    private DateTime? _pendingDateStart;
+    private DateTime? _pendingDateEnd;
+
+    private decimal? _amountMin;
+    private decimal? _amountMax;
+    private decimal? _pendingAmountMin;
+    private decimal? _pendingAmountMax;
+
+    private string? _filterName;
+    private string? _pendingFilterName;
+    private List<string> _nameSuggestions = new();
+
+    // ── Methods filter state ──────────────────────────────────────────────────
+    private List<MethodItem>? _methodItems;
+    private bool _methodItemsLoading = false;
+    private string? _methodItemsError;
+    private List<int> _selectedMethods = [];
+    private List<int> _pendingMethods = [];
+
+    // ── Campuses filter state ─────────────────────────────────────────────────
+    private List<CampusItem>? _campusItems;
+    private bool _campusItemsLoading = false;
+    private string? _campusItemsError;
+    private List<int> _selectedCampuses = [];
+    private List<int> _pendingCampuses = [];
+
+    // ── Fund filter state ─────────────────────────────────────────────────────
+    private List<FundItem>? _fundItems;
+    private bool _fundItemsLoading = false;
+    private string? _fundItemsError;
+    private List<int> _selectedFunds = [];
+    private List<int> _pendingFunds = [];
+
+    // ── Currency type filter state ────────────────────────────────────────────
+    private List<CurrencyTypeItem>? _currencyTypeItems;
+    private bool _currencyTypeItemsLoading = false;
+    private string? _currencyTypeItemsError;
+    private List<int> _selectedCurrencyTypes = [];
+    private List<int> _pendingCurrencyTypes = [];
+
+    // ── Org settings state ────────────────────────────────────────────────────
+    private OrgSettings? _orgSettings;
+
+    // ── Catalog state ─────────────────────────────────────────────────────────
+    private List<SavedQueryItem>? _savedQueries;
+    private bool _catalogLoading = false;
+    private string? _catalogError;
+    private string _newQueryName = "";
+    private bool _saveQueryLoading = false;
+    private string? _saveQueryError;
+    private string? _deletingQueryName;
+
+    private string FilterLabel(string name) => name switch
+    {
+        "Summarize" when _summarizeLevel != "None"
+            => $"Summarize: {_summarizeLevel}",
+
+        "Dates" when _dateStart is not null || _dateEnd is not null
+            => $"Dates: {_dateStart?.ToString("MMM d") ?? "∞"}–{_dateEnd?.ToString("MMM d") ?? "∞"}",
+
+        "Amount" when _amountMin is not null || _amountMax is not null
+            => $"Amount: {(_amountMin is not null ? $"${_amountMin:N0}" : "∞")}–{(_amountMax is not null ? $"${_amountMax:N0}" : "∞")}",
+
+        "Name" when !string.IsNullOrWhiteSpace(_filterName)
+            => $"Name: {_filterName}",
+
+        "Type" when _selectedCurrencyTypes.Count > 0
+            => $"Type: {_selectedCurrencyTypes.Count} selected",
+
+        "Methods" when _selectedMethods.Count > 0
+            => $"Methods: {_selectedMethods.Count} selected",
+
+        "Campuses" when _selectedCampuses.Count > 0
+            => $"Campuses: {_selectedCampuses.Count} selected",
+
+        "Fund" when _selectedFunds.Count > 0
+            => $"Fund: {_selectedFunds.Count} selected",
+
+        _ => name,
+    };
+
+    private bool IsFilterActive(string name) => name switch
+    {
+        "Summarize" => _summarizeLevel != "None",
+        "Dates" => _dateStart is not null || _dateEnd is not null,
+        "Amount" => _amountMin is not null || _amountMax is not null,
+        "Name" => !string.IsNullOrWhiteSpace(_filterName),
+        "Type" => _selectedCurrencyTypes.Count > 0,
+        "Methods" => _selectedMethods.Count > 0,
+        "Campuses" => _selectedCampuses.Count > 0,
+        "Fund" => _selectedFunds.Count > 0,
+        _ => false,
+    };
+
+    private async Task OpenFilter(string name)
+    {
+        ActiveFilter = name;
+
+        if (name == "Summarize")
+        {
+            _pendingSummarize = _summarizeLevel;
+        }
+        else if (name == "Dates")
+        {
+            _pendingDateStart = _dateStart;
+            _pendingDateEnd = _dateEnd;
+        }
+        else if (name == "Amount")
+        {
+            _pendingAmountMin = _amountMin;
+            _pendingAmountMax = _amountMax;
+        }
+        else if (name == "Name")
+        {
+            _pendingFilterName = _filterName;
+            _nameSuggestions.Clear();
+        }
+        else if (name == "Type")
+        {
+            _pendingCurrencyTypes = [.. _selectedCurrencyTypes];
+
+            if (_currencyTypeItems is null)
+                await LoadCurrencyTypeItemsAsync();
+        }
+        else if (name == "Methods")
+        {
+            _pendingMethods = [.. _selectedMethods];
+
+            if (_methodItems is null)
+                await LoadMethodItemsAsync();
+        }
+        else if (name == "Campuses")
+        {
+            _pendingCampuses = [.. _selectedCampuses];
+
+            if (_campusItems is null)
+                await LoadCampusItemsAsync();
+        }
+        else if (name == "Fund")
+        {
+            _pendingFunds = [.. _selectedFunds];
+
+            if (_fundItems is null)
+                await LoadFundItemsAsync();
+        }
+        else if (name == "Catalog")
+        {
+            await LoadCatalogAsync();
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        if (ActiveFilter == "Summarize")
+        {
+            _summarizeLevel = _pendingSummarize;
+
+            // Clear stale results so old data for a different view is never displayed.
+            _reportRows = null;
+            _reportDisplayed = false;
+            _reportError = null;
+        }
+        else if (ActiveFilter == "Dates")
+        {
+            _dateStart = _pendingDateStart;
+            _dateEnd = _pendingDateEnd;
+        }
+        else if (ActiveFilter == "Amount")
+        {
+            _amountMin = _pendingAmountMin;
+            _amountMax = _pendingAmountMax;
+        }
+        else if (ActiveFilter == "Name")
+        {
+            _filterName = string.IsNullOrWhiteSpace(_pendingFilterName)
+                ? null
+                : _pendingFilterName.Trim();
+            _nameSuggestions.Clear();
+        }
+        else if (ActiveFilter == "Type")
+        {
+            _selectedCurrencyTypes = [.. _pendingCurrencyTypes];
+        }
+        else if (ActiveFilter == "Methods")
+        {
+            _selectedMethods = [.. _pendingMethods];
+        }
+        else if (ActiveFilter == "Campuses")
+        {
+            _selectedCampuses = [.. _pendingCampuses];
+        }
+        else if (ActiveFilter == "Fund")
+        {
+            _selectedFunds = [.. _pendingFunds];
+        }
+
+        ActiveFilter = null;
+    }
+
+    private void CloseFilter()
+    {
+        ActiveFilter = null;
+        _nameSuggestions.Clear();
+    }
+
+    private async Task OnFilterNameInputAsync(ChangeEventArgs e)
+    {
+        _pendingFilterName = e.Value?.ToString();
+
+        var query = _pendingFilterName?.Trim() ?? string.Empty;
+        if (query.Length < 2)
+        {
+            _nameSuggestions.Clear();
+            return;
+        }
+
+        try
+        {
+            _nameSuggestions = await Http.GetFromJsonAsync<List<string>>(
+                $"/api/dashboard/donor-names/{OrgID}?q={Uri.EscapeDataString(query)}") ?? [];
+        }
+        catch (Exception)
+        {
+            _nameSuggestions = [];
+        }
+    }
+
+    private void SelectNameSuggestion(string name)
+    {
+        _pendingFilterName = name;
+        _nameSuggestions.Clear();
+    }
+
+    // ── Catalog helpers ───────────────────────────────────────────────────────
+
+    private async Task LoadCatalogAsync()
+    {
+        _catalogLoading = true;
+        _catalogError = null;
+        _savedQueries = null;
+
+        try
+        {
+            _savedQueries = await Http.GetFromJsonAsync<List<SavedQueryItem>>(
+                $"/api/savedqueries/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? [];
+        }
+        catch (Exception)
+        {
+            _catalogError = "Could not load saved queries. Ensure the API is running.";
+            _savedQueries = [];
+        }
+        finally
+        {
+            _catalogLoading = false;
+        }
+    }
+
+    private void ApplySavedQuery(SavedQueryItem query)
+    {
+        try
+        {
+            var snap = JsonSerializer.Deserialize<FilterSnapshot>(
+                query.Filters,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (snap is not null)
+            {
+                _summarizeLevel = snap.Summarize ?? "None";
+                _pendingSummarize = _summarizeLevel;
+
+                _dateStart = snap.DateRange?.Start;
+                _dateEnd = snap.DateRange?.End;
+
+                _amountMin = snap.Amount?.Min;
+                _amountMax = snap.Amount?.Max;
+
+                _filterName = snap.Name;
+
+                _selectedMethods = snap.Methods is { Count: > 0 } ? snap.Methods : [];
+                _selectedFunds = snap.Funds is { Count: > 0 } ? snap.Funds : [];
+                _selectedCampuses = snap.Campuses is { Count: > 0 } ? snap.Campuses : [];
+                _selectedCurrencyTypes = snap.CurrencyTypes is { Count: > 0 } ? snap.CurrencyTypes : [];
+
+                _reportRows = null;
+                _reportDisplayed = false;
+                _reportError = null;
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        ActiveFilter = null;
+    }
+
+    private async Task SaveCurrentQueryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newQueryName))
+            return;
+
+        _saveQueryLoading = true;
+        _saveQueryError = null;
+
+        var filtersJson = JsonSerializer.Serialize(new
+        {
+            Summarize = _summarizeLevel == "None" ? null : _summarizeLevel,
+            DateRange = (_dateStart, _dateEnd) is (null, null)
+                ? null
+                : new { Start = _dateStart, End = _dateEnd },
+            Name = _filterName,
+            Amount = (_amountMin, _amountMax) is (null, null)
+                ? null
+                : new { Min = _amountMin, Max = _amountMax },
+            Methods = _selectedMethods.Count > 0 ? _selectedMethods : null,
+            Funds = _selectedFunds.Count > 0 ? _selectedFunds : null,
+            Campuses = _selectedCampuses.Count > 0 ? _selectedCampuses : null,
+            CurrencyTypes = _selectedCurrencyTypes.Count > 0 ? _selectedCurrencyTypes : null,
+        });
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/savedqueries", new
+            {
+                EMAOrganizationID = OrgID,
+                Name = _newQueryName.Trim(),
+                Filters = filtersJson,
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _newQueryName = "";
+                await LoadCatalogAsync();
+            }
+            else
+            {
+                _saveQueryError = $"Save failed ({(int)response.StatusCode}).";
+            }
+        }
+        catch (Exception)
+        {
+            _saveQueryError = "Could not reach the API.";
+        }
+        finally
+        {
+            _saveQueryLoading = false;
+        }
+    }
+
+    private async Task DeleteSavedQueryAsync(string name)
+    {
+        _deletingQueryName = name;
+        StateHasChanged();
+
+        try
+        {
+            var encoded = Uri.EscapeDataString(name);
+            var response = await Http.DeleteAsync($"/api/savedqueries/{OrgID}/{encoded}");
+
+            if (response.IsSuccessStatusCode)
+                _savedQueries = _savedQueries?.Where(q => q.Name != name).ToList();
+        }
+        catch (Exception)
+        {
+        }
+        finally
+        {
+            _deletingQueryName = null;
+        }
+    }
+
+    // ── Lookup fetch helpers ──────────────────────────────────────────────────
+
+    private async Task LoadMethodItemsAsync()
+    {
+        _methodItemsLoading = true;
+        _methodItemsError = null;
+
+        try
+        {
+            _methodItems = await Http.GetFromJsonAsync<List<MethodItem>>(
+                $"/api/dashboard/methods/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch (Exception)
+        {
+            _methodItemsError = "Could not load methods.";
+            _methodItems = [];
+        }
+        finally
+        {
+            _methodItemsLoading = false;
+        }
+    }
+
+    private async Task LoadCampusItemsAsync()
+    {
+        _campusItemsLoading = true;
+        _campusItemsError = null;
+
+        try
+        {
+            _campusItems = await Http.GetFromJsonAsync<List<CampusItem>>(
+                $"/api/dashboard/campuses/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch (Exception)
+        {
+            _campusItemsError = "Could not load campuses.";
+            _campusItems = [];
+        }
+        finally
+        {
+            _campusItemsLoading = false;
+        }
+    }
+
+    private async Task LoadFundItemsAsync()
+    {
+        _fundItemsLoading = true;
+        _fundItemsError = null;
+
+        try
+        {
+            _fundItems = await Http.GetFromJsonAsync<List<FundItem>>(
+                $"/api/dashboard/funds/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch (Exception)
+        {
+            _fundItemsError = "Could not load funds.";
+            _fundItems = [];
+        }
+        finally
+        {
+            _fundItemsLoading = false;
+        }
+    }
+
+    private async Task LoadCurrencyTypeItemsAsync()
+    {
+        _currencyTypeItemsLoading = true;
+        _currencyTypeItemsError = null;
+
+        try
+        {
+            _currencyTypeItems = await Http.GetFromJsonAsync<List<CurrencyTypeItem>>(
+                $"/api/dashboard/currencytypes/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
+        }
+        catch (Exception)
+        {
+            _currencyTypeItemsError = "Could not load currency types.";
+            _currencyTypeItems = [];
+        }
+        finally
+        {
+            _currencyTypeItemsLoading = false;
+        }
+    }
+
+    private async Task FetchOrgSettingsAsync()
+    {
+        try
+        {
+            _orgSettings = await Http.GetFromJsonAsync<OrgSettings>(
+                $"/api/dashboard/orgsettings/{OrgID}",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (Exception)
+        {
+            // Non-blocking — if org settings can't be fetched, all filter buttons remain visible.
+        }
+    }
+
+    private void TogglePending(List<int> list, int id, bool selected)
+    {
+        if (selected)
+        {
+            if (!list.Contains(id))
+                list.Add(id);
+        }
+        else
+        {
+            list.Remove(id);
+        }
+    }
+
+    // ── Report display state ──────────────────────────────────────────────────
+    private bool _reportDisplayed = false;
+    private bool _reportLoading = false;
+    private string? _reportError;
+    private List<Dictionary<string, JsonElement>>? _reportRows;
+
+    private async Task DisplayReport()
+    {
+        _reportDisplayed = true;
+        _reportLoading = true;
+        _reportError = null;
+        _reportRows = null;
+
+        StateHasChanged();
+
+        try
+        {
+            var filter = new
+            {
+                EMAOrganizationID = OrgID,
+                Summarize = _summarizeLevel,
+                Name = _filterName,
+                Methods = _selectedMethods.Count > 0 ? _selectedMethods : null,
+                Funds = _selectedFunds.Count > 0 ? _selectedFunds : null,
+                Campuses = _selectedCampuses.Count > 0 ? _selectedCampuses : null,
+                CurrencyTypes = _selectedCurrencyTypes.Count > 0 ? _selectedCurrencyTypes : null,
+                DateRange = (_dateStart, _dateEnd) is (null, null)
+                    ? null
+                    : new { Start = _dateStart, End = _dateEnd },
+                Amount = (_amountMin, _amountMax) is (null, null)
+                    ? null
+                    : new { Min = _amountMin, Max = _amountMax },
+            };
+
+            var response = await Http.PostAsJsonAsync("/api/reports/run", filter);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ReportResult>(
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                _reportRows = result?.Rows;
+            }
+            else
+            {
+                _reportError = $"Report request failed ({(int)response.StatusCode}).";
+            }
+        }
+        catch (Exception)
+        {
+            _reportError = "Could not reach the API. Ensure the Azure Functions host is running at localhost:7071.";
+        }
+        finally
+        {
+            _reportLoading = false;
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        await JS.InvokeVoidAsync("printPage");
+    }
+
+    private void ClearAllFilters()
+    {
+        _summarizeLevel = "None";
+        _pendingSummarize = "None";
+
+        _dateStart = null;
+        _dateEnd = null;
+        _pendingDateStart = null;
+        _pendingDateEnd = null;
+
+        _amountMin = null;
+        _amountMax = null;
+        _pendingAmountMin = null;
+        _pendingAmountMax = null;
+
+        _filterName = null;
+        _pendingFilterName = null;
+
+        _selectedMethods = [];
+        _pendingMethods = [];
+
+        _selectedFunds = [];
+        _pendingFunds = [];
+
+        _selectedCampuses = [];
+        _pendingCampuses = [];
+
+        _selectedCurrencyTypes = [];
+        _pendingCurrencyTypes = [];
+
+        _reportRows = null;
+        _reportDisplayed = false;
+        _reportError = null;
+    }
+}
