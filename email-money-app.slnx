@@ -7,6 +7,9 @@
   <Folder Name="/src/app/">
     <Project Path="src/app/EMA.App/EMA.App.csproj" />
   </Folder>
+  <Folder Name="/src/ConnectorBuilder/">
+    <Project Path="src/ConnectorBuilder/ConnectorBuilder.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/EMA.Api.Tests/EMA.Api.Tests.csproj" />
     <Project Path="tests/EMA.App.Tests/EMA.App.Tests.csproj" />

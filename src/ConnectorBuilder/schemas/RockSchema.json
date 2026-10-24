@@ -1,0 +1,13 @@
+{
+  "_note": "Starter description of the Rock RMS REST API (ChMS side). Authentication is the header 'Authorization-Token: <api key>' or a login cookie. Replace with the real Rock schema when available.",
+  "BaseUrl": "{ChMSUrl}/api",
+  "Endpoints": {
+    "People": "GET /People?$top=10  -> [{ Id, FirstName, LastName, Email, ... }]",
+    "FinancialTransactions": "GET /FinancialTransactions?$top=10  -> [{ Id, AuthorizedPersonAliasId, TransactionDateTime, TransactionDetails: [{ AccountId, Amount }] }]",
+    "FinancialAccounts": "GET /FinancialAccounts  -> [{ Id, Name, IsActive }]"
+  },
+  "Notes": [
+    "Rock uses OData query options such as $top and $filter.",
+    "Person ids on transactions go through PersonAlias (AuthorizedPersonAliasId)."
+  ]
+}

@@ -28,3 +28,7 @@ src/api/EMA.Api/PowerShellModules/
 ### Local settings backups ###
 **/local.settings.json.backup
 **/local.settings.json.*backup*
+
+### ConnectorBuilder run output ###
+src/ConnectorBuilder/output/
+connector_history_*.json

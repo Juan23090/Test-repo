@@ -1,0 +1,24 @@
+{
+  "_note": "Starter schema: EMA's neutral (agnostic) shape. Every connector must return its data in this shape, whatever the ChMS calls things. Replace with the real schema when available.",
+  "Donor": {
+    "ChMSDonorID": "string",
+    "FirstName": "string",
+    "LastName": "string",
+    "Email": "string or null",
+    "Phone": "string or null"
+  },
+  "Donation": {
+    "ChMSDonationID": "string",
+    "ChMSDonorID": "string",
+    "DonationDate": "ISO 8601 date",
+    "DonationAmount": "decimal",
+    "Distributions": [
+      { "ChMSFundID": "string", "Amount": "decimal" }
+    ]
+  },
+  "Fund": {
+    "ChMSFundID": "string",
+    "Name": "string",
+    "IsActive": "bool"
+  }
+}
